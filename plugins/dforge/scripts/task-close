@@ -9,8 +9,9 @@
 # TEXT goes where `unreviewed` would: `review clean; scores …` or `K parked`.
 # The commit range is the base `task-brief --open` recorded, to HEAD.
 # Prints the line it wrote, then what the plan needs next: an auto run's
-# pending decisions, an Early CI that names this task, and, after the last
-# task, the final budget line.
+# pending decisions, an Early CI that names this task, and the budget line
+# last: in an auto run after every task (none when the run stopped), else
+# after the last task. Writes the task's close marker (scripts/lib/usage-marker.sh).
 # Exit: 0 ok (or the task was already complete); 2 usage, a checkpoint missing
 # one of its five fields or holding a line break, or a ledger (same basename)
 # that names another plan; 3 no such task, or no open line for it; 4 an
@@ -82,8 +83,23 @@ if dforge_darkmem_possible && ! push_out=$(bash "$HERE/darkmem-sync" push 2>&1);
   echo "darkmem-sync push failed: $(tail -n 1 <<<"$push_out")"
 fi
 
-rc=0
+. "$HERE/lib/context.sh"
+. "$HERE/lib/usage-marker.sh"
+mode=$(ctx_plan_mode "$src" "$ledger")
+# budget [ARGS…] — the budget line, carrying this task's close marker
+# (scripts/lib/usage-marker.sh).
+budget() {
+  USAGE_MARK=close USAGE_MARK_PLAN=$plan USAGE_MARK_TASKS=$n USAGE_MARK_CALLER="task-close:$n" \
+    USAGE_MARK_RANGE="$base..$head" USAGE_MARK_DEFERRED="" DFORGE_BUDGET_CALLER="task-close:$n" \
+    bash "$HERE/context-size" "$@" 2>/dev/null
+}
+
+rc=0 auto=0 budget_out=""
 if bash "$HERE/auto-run" status >/dev/null 2>&1; then
+  auto=1
+  # Measured before the completion is recorded, so the close row comes first;
+  # printed last, so a compact verdict is the last thing the session reads.
+  if [ "$mode" = --final ]; then budget_out=$(budget --final); else budget_out=$(budget); fi
   ar_out=$(bash "$HERE/auto-run" task-complete 2>&1); ar_rc=$?
   [ -z "$ar_out" ] || printf '%s\n' "$ar_out"
   if [ "$ar_rc" -eq 5 ]; then
@@ -99,9 +115,11 @@ if [[ $early =~ after\ task\ ([0-9]+) ]] && [ "$((10#${BASH_REMATCH[1]}))" -eq "
   echo "early CI: due after this task (delegated-task.md §Early CI)"
 fi
 
-. "$HERE/lib/context.sh"
-mode=$(ctx_plan_mode "$src" "$ledger")
-if [ "$mode" = --final ]; then
-  DFORGE_BUDGET_CALLER="task-close:$n" bash "$HERE/context-size" --final 2>/dev/null || true
+if [ "$auto" -eq 1 ]; then
+  [ "$rc" -eq 5 ] || [ -z "$budget_out" ] || printf '%s\n' "$budget_out"
+elif [ "$mode" = --final ]; then
+  budget --final || true
+else
+  um_mark close "$plan" "$n" "" "task-close:$n" "$base..$head" ""
 fi
 exit "$rc"

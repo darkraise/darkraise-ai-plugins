@@ -241,6 +241,9 @@ While a run is bound to this session, every budget line but
 - `compact` (`scripts/context-size` exit 6): finish the task in flight through
   its `Task N: complete` line, run
   `scripts/auto-run task-complete`, then end the turn as Ending a turn says.
+  `scripts/task-close` measures before it records the completion and prints
+  the run's line last (exit 0 whatever the verdict): `compact` there means
+  ending the turn on `Auto run: compacting` before the next task opens.
 - `handoff` (exit 5): the last compaction left too much behind. Finish the
   task in flight, then follow Clears.
 

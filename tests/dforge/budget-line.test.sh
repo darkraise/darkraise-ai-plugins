@@ -128,6 +128,31 @@ out=$(CLAUDE_CODE_SESSION_ID=s-2 bash "$P/scripts/task-brief" docs/plan.md 1 2>/
 check "task-brief: another session keeps the task budget" "$(tail -n 1 <<<"$out")" \
   "budget: 500k of 465k (107%) — handoff — source: record"
 rm -f "$HOME/.claude/projects/$KEY/s-2.jsonl"
+
+# --- close_prints_auto_line: task-close prints the run's line last ---
+CP='done: x; verified: y; remaining: none; discovered: none; assumptions: none'
+open2() { printf '# SDD ledger — plan: docs/plan.md\nTask 1: complete (commits a..b, unreviewed) — x\nTask 2: implementer inline (assigned; base %s)\n' \
+  "$(git rev-parse --short HEAD)" > "$L"; }
+usage() { printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-opus-5-5","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":%s}}}\n' "$1" > "$T"; }
+open2; usage 300000
+out=$(CLAUDE_CODE_SESSION_ID=s-1 bash "$P/scripts/task-close" docs/plan.md 2 "$CP" 2>/dev/null); status=$?
+check "close_prints_auto_line: exit 0 under budget" "$status" "0"
+check "close_prints_auto_line: the last line is the run's line" "$(tail -n 1 <<<"$out")" \
+  "budget (auto): 300k of 465k (64%) — ok — source: record"
+open2; usage 500000
+out=$(CLAUDE_CODE_SESSION_ID=s-1 bash "$P/scripts/task-close" docs/plan.md 2 "$CP" 2>/dev/null); status=$?
+check "close_prints_auto_line: exit 0 over the limit" "$status" "0"
+check "close_prints_auto_line: the last line says compact" "$(tail -n 1 <<<"$out")" \
+  "budget (auto): 500k of 465k (107%) — compact — source: record"
+# A run task-complete stops: exit 5 and no budget line.
+KIT="$TMP/kit"; mkdir -p "$KIT"; cp -R "$P/scripts" "$P/.claude-plugin" "$KIT/"
+printf '#!/usr/bin/env bash\nfor a in "$@"; do [ "$a" = task-complete ] && exit 5; done\nexec bash "$(dirname "$0")/auto-run.real" "$@"\n' > "$KIT/scripts/auto-run.stub"
+mv "$KIT/scripts/auto-run" "$KIT/scripts/auto-run.real"; mv "$KIT/scripts/auto-run.stub" "$KIT/scripts/auto-run"
+open2
+out=$(CLAUDE_CODE_SESSION_ID=s-1 bash "$KIT/scripts/task-close" docs/plan.md 2 "$CP" 2>/dev/null); status=$?
+check "close_prints_auto_line: a stopped run exits 5" "$status" "5"
+check "close_prints_auto_line: a stopped run prints no budget line" "$(grep -c '^budget' <<<"$out")" "0"
+rm -f "$L"
 bash "$P/scripts/auto-run" --session s-1 stop >/dev/null
 
 # --- a missing task still fails the way it did ---

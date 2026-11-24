@@ -57,8 +57,9 @@ What changes here:
   the `Task <N>: complete (deferred by the auto run)` line auto-run.md §Rulings
   gives, and a deferred register row for each. Other tasks keep running.
 - **Each task:** `scripts/task-close` runs `scripts/auto-run task-complete`
-  for you right after it writes the `Task N: complete` line, and prints the
-  decisions waiting. After each task, run the Fable batch when it printed any
+  for you right after it writes the `Task N: complete` line, prints the
+  decisions waiting, and ends on the run's budget line: on `compact`, end the
+  turn on `Auto run: compacting` before the next task opens. After each task, run the Fable batch when it printed any
   (`scripts/auto-run decision list` shows the same). When that line leaves every
   task with its `complete` line, run `scripts/auto-run phase final` next, before any budget check and
   before the turn ends, so a compaction from there on never hands off.

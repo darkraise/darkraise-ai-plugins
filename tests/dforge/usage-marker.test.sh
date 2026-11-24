@@ -101,5 +101,49 @@ transcript s1 120000 >/dev/null
 run_pair transcript s1
 run_pair "no transcript" s-none
 
+# --- close_row_before_task_complete / task_complete_sweeps ---
+# An auto run bound to s1, with an auto-run wrapper that copies the marker
+# file at task-complete: the close row must already be there.
+AR="$TMP/ar"
+fixture "$AR"
+printf '# Four\n\n### Task 1: one\n\nB.\n\n### Task 2: two\n\nB.\n\n### Task 3: three\n\nB.\n\n### Task 4: four\n\nB.\n' > "$AR/docs/plans/p4.md"
+git -C "$AR" add docs && git -C "$AR" commit -q -m p4
+KIT="$TMP/kit"; mkdir -p "$KIT"; cp -R "$P/scripts" "$P/.claude-plugin" "$KIT/"
+mv "$KIT/scripts/auto-run" "$KIT/scripts/auto-run.real"
+printf '#!/usr/bin/env bash\nfor a in "$@"; do [ "$a" = task-complete ] && cp "$UM_FILE" "$UM_COPY" 2>/dev/null; done\nexec bash "$(dirname "$0")/auto-run.real" "$@"\n' > "$KIT/scripts/auto-run"
+export UM_FILE="$AR/.dforge/sdd/usage-markers.tsv" UM_COPY="$TMP/at-task-complete.tsv"
+mkdir -p "$HOME/.claude/dforge/sessions/cockpit"
+date +%s > "$HOME/.claude/dforge/sessions/cockpit/s1"
+transcript s1 120000 >/dev/null
+ark() { (cd "$AR" && CLAUDE_CODE_SESSION_ID=s1 bash "$KIT/scripts/$@"); }
+ark auto-run --session s1 start --spec docs/s.md --register docs/r.md >/dev/null 2>&1
+ark auto-run --session s1 attach --plan docs/plans/p4.md >/dev/null 2>&1
+ark task-brief --open docs/plans/p4.md 1 >/dev/null 2>&1
+printf 'x\n' > "$AR/x.txt"; git -C "$AR" add x.txt; git -C "$AR" commit -q -m x
+CP='done: x; verified: y; remaining: none; discovered: none; assumptions: none'
+ark task-close docs/plans/p4.md 1 "$CP" >/dev/null 2>&1
+LEDGER="$AR/.dforge/sdd/p4/progress.md"
+RANGE=$(sed -n 's/^Task 1: complete (commits \([^,]*\),.*/\1/p' "$LEDGER")
+close1() { awk -F'\t' '$2 == "close" && $7 == "1"' "$1" 2>/dev/null; }
+check "close_row_before_task_complete: one close row" "$(close1 "$UM_FILE" | wc -l | tr -d ' ')" "1"
+check "close_row_before_task_complete: range, deferred and caller" "$(close1 "$UM_FILE" | cut -f12-14)" \
+  "$(printf 'task-close:1\t%s\t' "$RANGE")"
+check "close_row_before_task_complete: the range is the complete line's" "$([[ $RANGE =~ ^[0-9a-f]+\.\.[0-9a-f]+$ ]] && echo yes)" "yes"
+check "close_row_before_task_complete: context is measured" "$(close1 "$UM_FILE" | cut -f11)" "120000"
+check "close_row_before_task_complete: written before task-complete" "$(close1 "$UM_COPY" | wc -l | tr -d ' ')" "1"
+ark task-close docs/plans/p4.md 1 "$CP" >/dev/null 2>&1
+check "close_row_before_task_complete: a second close writes nothing" "$(wc -l < "$UM_FILE" | tr -d ' ')" "2"
+
+printf 'Task 2: complete (commits aaa1111..bbb2222, unreviewed) — x\nTask 3: complete (commits bbb2222..ccc3333, 1 parked) — x\nTask 4: complete (deferred by the auto run) — reason\n' >> "$LEDGER"
+ark auto-run --session s1 task-complete >/dev/null 2>&1
+closes() { awk -F'\t' -v t="$1" '$2 == "close" && $7 == t { print $12 "|" $13 "|" $14 }' "$UM_FILE"; }
+check "task_complete_sweeps: task 2" "$(closes 2)" "auto-run:task-complete|aaa1111..bbb2222|"
+check "task_complete_sweeps: task 3" "$(closes 3)" "auto-run:task-complete|bbb2222..ccc3333|"
+check "task_complete_sweeps: a deferred task" "$(closes 4)" "auto-run:task-complete||1"
+check "task_complete_sweeps: task 1 keeps its own row" "$(closes 1 | cut -d'|' -f1)" "task-close:1"
+ark auto-run --session s1 task-complete >/dev/null 2>&1
+check "task_complete_sweeps: a second sweep writes nothing" "$(awk -F'\t' '$2 == "close"' "$UM_FILE" | wc -l | tr -d ' ')" "4"
+ark auto-run --session s1 stop >/dev/null 2>&1
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
