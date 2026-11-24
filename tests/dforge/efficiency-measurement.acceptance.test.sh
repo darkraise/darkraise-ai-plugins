@@ -501,5 +501,186 @@ check "A28: the plan is still reported" "$(jq -c '.plans | length' <<<"$JS")" "1
 check "A28: the quality fields are labelled as of finishing" \
   "$(jq -c '[.plans[0] | .. | strings | select(test("finishing"; "i"))] | length > 0' <<<"$JS" 2>/dev/null)" "true"
 
+# --- the auto-run polish: A11 resume, A12 version, A13 budget at close, A17 api-error, A18 counters ---
+arrun() { # arrun REPO SESSION ARGS… — one auto-run call with a live cockpit in SESSION
+  local d=$1 s=$2; shift 2
+  beat "$s"
+  (cd "$d" && bash "$AR" --session "$s" "$@")
+}
+state() { cat "$1/.dforge/sdd/auto-run.json"; }
+RR="$TMP/rr"; newrepo "$RR"
+git -C "$RR" commit -q --allow-empty -m base
+arrun "$RR" r1 start --spec docs/s.md --register docs/r.md --isolation in-place >/dev/null 2>&1
+arrun "$RR" r1 attach --plan docs/plans/p.md >/dev/null 2>&1
+arrun "$RR" r1 total holds >/dev/null 2>&1; arrun "$RR" r1 total holds >/dev/null 2>&1
+arrun "$RR" r1 compacted --seconds 40 >/dev/null 2>&1
+arrun "$RR" r1 stalled >/dev/null 2>&1
+arrun "$RR" r1 api-error >/dev/null 2>&1
+jq '.failures = 2 | .resumes = 3 | .compactionsSinceTask = 4 | .pending = "compact" | .resumePrompt = "x" | .rebind = true' "$RR/.dforge/sdd/auto-run.json" > "$TMP/st.json" && cp "$TMP/st.json" "$RR/.dforge/sdd/auto-run.json"
+BEFORE=$(state "$RR")
+check "A11: setup — the run's caps are non-zero before the stop" \
+  "$(jq -c '[.stalls, .resumes, .failures, .apiErrors, .compactionsSinceTask] | map(. > 0) | all' <<<"$BEFORE")" "true"
+arrun "$RR" r1 stop --reason "operator stop" >/dev/null 2>&1
+out=$(arrun "$RR" r2 resume 2>"$TMP/resume.err"); st=$?
+AFTER=$(state "$RR")
+check "A11: resume of a stopped spec-phase run exits 0" "$st" "0"
+check "A11: resume prints the status line" "$(head -n 1 <<<"$out" | grep -c '^auto run: spec ')" "1"
+check "A11: the run is active and bound to the calling session" "$(jq -c '[.active, .session]' <<<"$AFTER")" '[true,"r2"]'
+check "A11: phase, base, plan and totals are unchanged" \
+  "$(jq -c '[.phase, .base, .plan, .totals]' <<<"$AFTER")" "$(jq -c '[.phase, .base, .plan, .totals]' <<<"$BEFORE")"
+check "A11: cap counters are 0" "$(jq -c '[.stalls, .resumes, .failures, .apiErrors, .compactionsSinceTask]' <<<"$AFTER")" "[0,0,0,0,0]"
+check "A11: stalledAt, pending, resumePrompt and launch are null and rebind is false" \
+  "$(jq -c '[.stalledAt, .pending, .resumePrompt, .launch, .rebind]' <<<"$AFTER")" "[null,null,null,null,false]"
+check "A11: the stop is in stopHistory with its reason" "$(jq -c '[.stopHistory[0].reason, (.stopHistory[0].at | type), (.stopHistory[0].resumedAt | type)]' <<<"$AFTER")" '["operator stop","string","string"]'
+check "A11: the stopped marker is cleared" "$(jq -c '.stopped' <<<"$AFTER")" "null"
+arrun "$RR" r3 resume >/dev/null 2>&1; st=$?
+check "A11: resume of an active run exits 4" "$st" "4"
+arrun "$RR" r2 stop --reason again >/dev/null 2>&1
+jq '.stoppedKind = "guard"' "$RR/.dforge/sdd/auto-run.json" > "$TMP/st.json" && cp "$TMP/st.json" "$RR/.dforge/sdd/auto-run.json"
+arrun "$RR" r4 resume >"$TMP/g.out" 2>"$TMP/g.err"; st=$?
+check "A11: a guard stop is refused with exit 4, naming the reason" "$st:$([ -s "$TMP/g.err" ] && echo says || echo silent)" "4:says"
+jq '.stoppedKind = "carried"' "$RR/.dforge/sdd/auto-run.json" > "$TMP/st.json" && cp "$TMP/st.json" "$RR/.dforge/sdd/auto-run.json"
+arrun "$RR" r4 resume >/dev/null 2>&1; st=$?
+check "A11: a carried-path stop is refused with exit 4" "$st" "4"
+jq '.stoppedKind = null' "$RR/.dforge/sdd/auto-run.json" > "$TMP/st.json" && cp "$TMP/st.json" "$RR/.dforge/sdd/auto-run.json"
+(cd "$RR" && bash "$AR" --session r5 resume >/dev/null 2>&1); st=$?
+check "A11: resume from a session with no live cockpit exits 2 and leaves the run stopped" "$st:$(jq -c '.active' "$RR/.dforge/sdd/auto-run.json")" "2:false"
+arrun "$RR" r4 resume >/dev/null 2>&1; st=$?
+check "A11: with the stop kind cleared the same run resumes" "$st" "0"
+arrun "$RR" r4 phase plan >/dev/null 2>&1
+arrun "$RR" r4 stop --reason planstop >/dev/null 2>&1
+arrun "$RR" r6 resume >/dev/null 2>&1; st=$?
+check "A11: a run stopped in the plan phase resumes" "$st:$(jq -c '[.phase, .active, .session]' "$RR/.dforge/sdd/auto-run.json")" '0:["plan",true,"r6"]'
+# finished: the finish phase, then stopped
+arrun "$RR" r6 phase execute >/dev/null 2>&1; arrun "$RR" r6 phase final >/dev/null 2>&1; arrun "$RR" r6 phase finish >/dev/null 2>&1
+arrun "$RR" r6 stop >/dev/null 2>&1
+arrun "$RR" r7 resume >/dev/null 2>&1; st=$?
+check "A11: a finished run is refused with exit 4" "$st" "4"
+
+# execute phase, in place: the recorded branch must exist
+RX="$TMP/rx"; newrepo "$RX"
+arrun "$RX" x1 start --spec docs/s.md --register docs/r.md --isolation in-place >/dev/null 2>&1
+arrun "$RX" x1 attach --plan docs/plans/p.md >/dev/null 2>&1
+git -C "$RX" checkout -q -b auto/qa-run
+arrun "$RX" x1 setup-branch auto/qa-run >/dev/null 2>&1
+arrun "$RX" x1 phase execute >/dev/null 2>&1
+check "A11: setup — the run is in the execute phase on its branch" "$(jq -c '[.phase, .branch]' "$RX/.dforge/sdd/auto-run.json")" '["execute","auto/qa-run"]'
+arrun "$RX" x1 stop --reason "manual" >/dev/null 2>&1
+arrun "$RX" x2 resume >/dev/null 2>&1; st=$?
+check "A11: an execute-phase run whose branch exists resumes" "$st:$(jq -c '.active' "$RX/.dforge/sdd/auto-run.json")" "0:true"
+arrun "$RX" x2 stop --reason "manual 2" >/dev/null 2>&1
+git -C "$RX" checkout -q main; git -C "$RX" branch -q -D auto/qa-run
+arrun "$RX" x3 resume >"$TMP/x.out" 2>"$TMP/x.err"; st=$?
+check "A11: an execute-phase run whose branch is gone is refused with exit 4" "$st:$(jq -c '.active' "$RX/.dforge/sdd/auto-run.json")" "4:false"
+check "A11: the refusal names the reason" "$([ -s "$TMP/x.err" ] && echo says || echo silent)" "says"
+
+# --- A17: the api-error command line ---
+RE="$TMP/re"; newrepo "$RE"
+arrun "$RE" e1 start --spec docs/s.md --register docs/r.md >/dev/null 2>&1
+arrun "$RE" e1 api-error >/dev/null 2>&1; arrun "$RE" e1 api-error >/dev/null 2>&1; arrun "$RE" e1 api-error >/dev/null 2>&1
+check "A17: three api-error calls count three" "$(jq -c '[.apiErrors, .stalls, .active]' "$RE/.dforge/sdd/auto-run.json")" "[3,0,true]"
+arrun "$RE" e1 api-error --clear >/dev/null 2>&1
+check "A17: --clear resets the count" "$(jq -c '.apiErrors' "$RE/.dforge/sdd/auto-run.json")" "0"
+arrun "$RE" e1 api-error >/dev/null 2>&1
+arrun "$RE" e1 task-complete >/dev/null 2>&1
+check "A17: task-complete resets the count" "$(jq -c '.apiErrors' "$RE/.dforge/sdd/auto-run.json")" "0"
+sts=""
+for i in 1 2 3 4 5 6 7 8 9 10; do arrun "$RE" e1 api-error >/dev/null 2>&1; sts="$sts$? "; done
+check "A17: nine api-errors exit 0 and the tenth exits 5" "$sts" "0 0 0 0 0 0 0 0 0 5 "
+check "A17: the tenth stops the run with an API-error reason" "$(jq -c '[.active, (.stopped | test("api"; "i"))]' "$RE/.dforge/sdd/auto-run.json")" "[false,true]"
+check "A17: api errors never count as stalls" "$(jq -c '[.stalls, .totals.stalls]' "$RE/.dforge/sdd/auto-run.json")" "[0,0]"
+
+# --- A12: the version warning ---
+RV="$TMP/rv"; newrepo "$RV"; tscript v1 10000 >/dev/null
+arrun "$RV" v1 start --spec docs/s.md --register docs/r.md >/dev/null 2>&1
+arrun "$RV" v1 attach --plan docs/plans/p.md >/dev/null 2>&1
+check "A12: the run records the plugin version and root" "$(jq -c '[.version, .root]' "$RV/.dforge/sdd/auto-run.json")" "[\"$VERSION\",\"$P\"]"
+mkroot() { # mkroot DIR VERSION — a copy of the plugin at another root and version
+  mkdir -p "$1"; cp -R "$P/scripts" "$P/.claude-plugin" "$1/"
+  jq --arg v "$2" '.version = $v' "$P/.claude-plugin/plugin.json" > "$1/.claude-plugin/plugin.json"
+}
+mkroot "$TMP/other-9" 9.9.9
+mkroot "$TMP/other-same" "$VERSION"
+WARN="auto run: plugin version mismatch — run $VERSION at $P, this call 9.9.9 at $TMP/other-9"
+beat v1
+(cd "$RV" && bash "$TMP/other-9/scripts/auto-run" --session v1 status >"$TMP/v.out" 2>"$TMP/v.err")
+check "A12: an auto-run call from another version warns on stderr, naming both versions and roots" "$(grep -cxF "$WARN" "$TMP/v.err")" "1"
+check "A12: the warning is not on stdout" "$(grep -c 'version mismatch' "$TMP/v.out")" "0"
+check "A12: the mismatch is recorded in auto-run.json" "$(state "$RV" | jq -c '[.. | strings | select(test("9\\.9\\.9"))] | length > 0')" "true"
+(cd "$RV" && bash "$TMP/other-same/scripts/auto-run" --session v1 status >/dev/null 2>"$TMP/v2.err")
+check "A12: a call from another root with the same version prints no warning" "$(grep -c 'version mismatch' "$TMP/v2.err")" "0"
+(cd "$RV" && CLAUDE_CODE_SESSION_ID=v1 bash "$TMP/other-9/scripts/task-brief" --open docs/plans/p.md 1 >/dev/null 2>"$TMP/v3.err")
+check "A12: task-brief --open from another version warns exactly once" "$(grep -cxF "$WARN" "$TMP/v3.err")" "1"
+printf 'x\n' > "$RV/x.txt"; git -C "$RV" add x.txt; git -C "$RV" commit -q -m x
+(cd "$RV" && CLAUDE_CODE_SESSION_ID=v1 bash "$TMP/other-9/scripts/task-close" docs/plans/p.md 1 "$CP" >"$TMP/v4.out" 2>"$TMP/v4.err")
+check "A12: task-close from another version warns exactly once" "$(grep -cxF "$WARN" "$TMP/v4.err")" "1"
+check "A12: the warning never appears on task-close's stdout as a pending decision" "$(grep -c 'version mismatch' "$TMP/v4.out")" "0"
+RV0="$TMP/rv0"; newrepo "$RV0"
+arrun "$RV0" w1 start --spec docs/s.md --register docs/r.md >/dev/null 2>&1
+beat w1
+(cd "$RV0" && bash "$P/scripts/auto-run" --session w1 status >/dev/null 2>"$TMP/v5.err")
+check "A12: a call from the run's own version warns nothing" "$(grep -c 'version mismatch' "$TMP/v5.err")" "0"
+
+# --- A13: the budget line after every task-close of an auto run ---
+RW="$TMP/rw"; newrepo "$RW"
+tscript w1 50000 >/dev/null
+arrun "$RW" w1 start --spec docs/s.md --register docs/r.md >/dev/null 2>&1
+arrun "$RW" w1 attach --plan docs/plans/p.md >/dev/null 2>&1
+rw() { (cd "$RW" && CLAUDE_CODE_SESSION_ID=w1 bash "$KIT/scripts/$1" "${@:2}"); }
+rw task-brief --open docs/plans/p.md 1 >/dev/null 2>&1
+printf 'x\n' > "$RW/x.txt"; git -C "$RW" add x.txt; git -C "$RW" commit -q -m x
+out=$(rw task-close docs/plans/p.md 1 "$CP" 2>/dev/null); st=$?
+check "A13: task 1 of 3 closes with exit 0" "$st" "0"
+check "A13: the last line is the auto budget line, ok" "$(tail -n 1 <<<"$out" | grep -Ec '^budget \(auto[^)]*\): 50k of [0-9]+k \([0-9]+%\) — ok — ')" "1"
+rw task-brief --open docs/plans/p.md 2 >/dev/null 2>&1
+printf 'y\n' > "$RW/y.txt"; git -C "$RW" add y.txt; git -C "$RW" commit -q -m y
+tscript w1 3000000 >/dev/null
+out=$(rw task-close docs/plans/p.md 2 "$CP" 2>/dev/null); st=$?
+check "A13: over budget, the line says compact and the exit code is still 0" "$st:$(tail -n 1 <<<"$out" | grep -Ec '^budget \(auto[^)]*\): .* — compact — ')" "0:1"
+tscript w1 50000 >/dev/null
+rw task-brief --open docs/plans/p.md 3 >/dev/null 2>&1
+printf 'z\n' > "$RW/z.txt"; git -C "$RW" add z.txt; git -C "$RW" commit -q -m z
+KST="$TMP/kitstop"; mkdir -p "$KST"; cp -R "$P/scripts" "$P/.claude-plugin" "$KST/"
+mv "$KST/scripts/auto-run" "$KST/scripts/auto-run.real"
+printf '#!/usr/bin/env bash\nfor a in "$@"; do [ "$a" = task-complete ] && exit 5; done\nexec bash "$(dirname "$0")/auto-run.real" "$@"\n' > "$KST/scripts/auto-run"
+out=$(cd "$RW" && CLAUDE_CODE_SESSION_ID=w1 bash "$KST/scripts/task-close" docs/plans/p.md 3 "$CP" 2>/dev/null); st=$?
+check "A13: a task-complete that stopped the run exits 5 and no budget line follows" "$st:$(grep -c '^budget' <<<"$out")" "5:0"
+
+# --- A18: the run counters ---
+RC3="$TMP/rc3"; newrepo "$RC3"
+arrun "$RC3" c1 start --spec docs/s.md --register docs/r.md >/dev/null 2>&1
+arrun "$RC3" c1 attach --plan docs/plans/p.md >/dev/null 2>&1
+arrun "$RC3" c1 compacted --seconds 70 >/dev/null 2>&1
+arrun "$RC3" c1 total holds >/dev/null 2>&1
+arrun "$RC3" c1 stalled >/dev/null 2>&1
+arrun "$RC3" c1 api-error >/dev/null 2>&1
+arrun "$RC3" c1 total reconcilePrompts >/dev/null 2>&1
+arrun "$RC3" c1 total panelFailures >/dev/null 2>&1
+beat c1
+(cd "$RC3" && bash "$TMP/other-9/scripts/auto-run" --session c1 status >/dev/null 2>&1)
+CNT=$(arrun "$RC3" c1 counters 2>&1); st=$?
+check "A18: counters exits 0" "$st" "0"
+check "A18: compactions with their total seconds" "$(grep -Eic 'compactions?.*1.*70' <<<"$CNT")" "1"
+check "A18: holds" "$(grep -Eic '^holds.*1' <<<"$CNT")" "1"
+check "A18: stalls" "$(grep -Eic '^stalls.*1' <<<"$CNT")" "1"
+check "A18: API errors" "$(grep -Eic 'api errors.*1' <<<"$CNT")" "1"
+check "A18: reconcile prompts" "$(grep -Eic 'reconcile prompts.*1' <<<"$CNT")" "1"
+check "A18: panel failures" "$(grep -Eic 'panel failures.*1' <<<"$CNT")" "1"
+check "A18: the first version mismatch, naming both versions" "$(grep -E 'mismatch' <<<"$CNT" | grep -c "9\.9\.9.*$VERSION\|$VERSION.*9\.9\.9")" "1"
+TOT0=$(state "$RC3" | jq -c .totals)
+arrun "$RC3" c1 task-complete >/dev/null 2>&1
+check "A18: task-complete leaves the totals unchanged" "$(state "$RC3" | jq -c .totals)" "$TOT0"
+arrun "$RC3" c1 stop --reason s >/dev/null 2>&1
+arrun "$RC3" c2 resume >/dev/null 2>&1
+check "A18: resume leaves the totals unchanged" "$(state "$RC3" | jq -c .totals)" "$TOT0"
+# the finishing message: the saved report's summary, or one line naming why it is missing
+MISS=$(cd "$RC3" && bash "$REPORT" --plan docs/plans/p.md --save 2>&1 >/dev/null); st=$?
+check "A18: a report that cannot be made exits 0 and names why in one line" "$st:$(grep -c '^usage summary missing: .' <<<"$MISS")" "0:1"
+check "A18: nothing is saved when the report is missing" "$(ls "$RC3/.dforge/sdd"/usage-report-*.json 2>/dev/null | wc -l | tr -d ' ')" "0"
+FIN=$(tr -d '\r' < "$P/reference/auto-run.md" | flat)
+check "A18: the finishing text prints the counters, the per-task summary and the missing line" \
+  "$(has "$FIN" 'auto-run counters')/$(has "$FIN" 'usage summary missing')/$(has "$FIN" 'segment-only')" "yes/yes/yes"
+check "A18: the finishing text names the CLAUDE.md follow-up" "$(has "$FIN" "update each repository's claude.md compact instructions")" "yes"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
