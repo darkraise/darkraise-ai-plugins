@@ -70,9 +70,13 @@ sid=$(tr 'A-F' 'a-f' < /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen | tr 
 printf '%s\n' "$sid" > "$dir/sessions"
 
 wab_env "$dir"
+wab_sandbox_args "$dir"
+bash "$WAB_SANDBOX" --check "${WAB_SANDBOX_ARGS[@]}" 2>"$dir/out/sandbox.log" \
+  || wab_die 1 "cannot sandbox the nested session (log: $dir/out/sandbox.log)"
 {
   printf '#!/usr/bin/env bash\ncd %q || exit 1\nexec env -i' "$clone"
   for kv in "${WAB_ENV[@]}"; do printf ' %q' "$kv"; done
+  printf ' %q' bash "$WAB_SANDBOX" "${WAB_SANDBOX_ARGS[@]}" --
   printf ' %q' "$WAB_CLAUDE" --dangerously-skip-permissions --setting-sources project,local \
     --settings "$dir/claude-settings.json" --plugin-dir "$plugin" --session-id "$sid"
   printf '\n'

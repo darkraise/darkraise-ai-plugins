@@ -37,8 +37,19 @@ chmod +x "$TMP/claude"
 mkdir -p "$TMP/claude-config"
 printf '{"autoCompactWindow": 500000}\n' > "$TMP/claude-config/settings.json"
 printf '{"handoffTokens": 250000}\n' > "$TMP/owner-dforge.json"
+# A stand-in for the mount-namespace sandbox, which CI runners may refuse; the
+# real one is tested on its own below.
+cat > "$TMP/sandbox-rec" <<EOF
+#!/usr/bin/env bash
+printf '%q ' "\$@" >> "$TMP/sandbox.argv"
+printf '\n' >> "$TMP/sandbox.argv"
+if [ "\$1" = --check ]; then [ ! -e "$TMP/sandbox-refuse" ]; exit; fi
+while [ \$# -gt 0 ] && [ "\$1" != -- ]; do shift; done
+shift
+exec "\$@"
+EOF
 export WAB_ROOT="$TMP/root" WAB_CLAUDE="$TMP/claude" WAB_CLAUDE_CONFIG="$TMP/claude-config" \
-  WAB_DFORGE_CONFIG="$TMP/owner-dforge.json" WAB_PLAN="$PLAN"
+  WAB_DFORGE_CONFIG="$TMP/owner-dforge.json" WAB_PLAN="$PLAN" WAB_SANDBOX="$TMP/sandbox-rec"
 
 C14='- This is a replay in a clone with no remote: no push, tag or workflow dispatch; a gate that needs one is recorded as not run.'
 
@@ -176,6 +187,33 @@ cenv="$WAB_ROOT/dforge-3/clone/check-env.txt"
 check "prepare_check_blocks: the check runs under the launch environment" \
   "$(grep -cxE "HOME=$WAB_ROOT/dforge-3/home|GOCACHE=$WAB_ROOT/dforge-3/gocache|GIT_ALLOW_PROTOCOL=file|GIT_SSH_COMMAND=false|GH_CONFIG_DIR=$WAB_ROOT/dforge-3/gh|IS_SANDBOX=1" "$cenv")" "6"
 check "prepare_check_blocks: and none of the caller's tokens or sockets" "$(grep -cE '^(GH_TOKEN|SSH_AUTH_SOCK)=' "$cenv")" "0"
+has "prepare_check_blocks: the check runs in the run's sandbox" "$(cat "$TMP/sandbox.argv")" \
+  "-w $WAB_ROOT/dforge-3 -w $TMP/claude-config "
+
+# --- sandbox: the real mount namespace, where this host allows one ---
+sb="$TMP/sbx"
+mkdir -p "$sb/rw" "$sb/ro" "$sb/secret"
+printf 'key\n' > "$sb/secret/id"
+printf 'token\n' > "$sb/netrc"
+if bash "$WAB/sandbox" --check -w "$sb/rw" >/dev/null 2>&1; then
+  probe="wab-sandbox-probe-$$"
+  got=$(cd "$sb" && bash "$WAB/sandbox" -w "$sb/rw" -h "$sb/secret" -h "$sb/netrc" -h "$sb/absent" -- bash -c "
+    touch rw/a && echo rw
+    touch ro/b 2>/dev/null && echo ro-written || echo ro
+    echo \$(ls secret | wc -l) \$(wc -c < netrc)
+    echo x > /tmp/$probe && echo tmp" 2>&1)
+  check "sandbox: only the -w directory is writable, -h paths are empty, /tmp is writable" \
+    "$(tr '\n' ' ' <<<"$got")" "rw ro 0 0 tmp "
+  check "sandbox: its /tmp is private" "$([ -e "/tmp/$probe" ] && echo shared || echo private)" "private"
+  check "sandbox: the hidden files are untouched outside" "$(cat "$sb/secret/id" "$sb/netrc" | tr '\n' ' ')" "key token "
+  bash "$WAB/sandbox" -w "$sb/secret/x" -h "$sb/secret" -- true 2>/dev/null
+  check "sandbox: a writable directory under a hidden one is refused" "$?" "1"
+  bash "$WAB/sandbox" -w /tmp -- true 2>/dev/null
+  check "sandbox: /tmp cannot be kept writable" "$?" "1"
+else
+  printf 'skip - sandbox: this host refuses a mount namespace\n'
+fi
+
 # --- prepare_source_untouched ---
 printf 'dirty\n' >> "$TMP/src/greet.sh"
 git -C "$TMP/src" stash -q
@@ -266,6 +304,18 @@ check "launch_environment: --session-id is a uuid recorded in sessions" \
 check "launch_environment: tmux only touches wab- sessions" \
   "$(awk '{ for (i = 1; i < NF; i++) if ($i == "-t" || $i == "-s") { n = $(i + 1); sub(/^=/, "", n); if (n !~ /^wab-/) print n } }' "$TMP/tmux.log")" ""
 check "launch_environment: a nested session that exits is stopped, not left to time out" "$(cat "$run1/state")" "stopped"
+sbx=$(grep -v '^--check ' "$TMP/sandbox.argv" | tail -n 1)
+has "launch_sandbox: the run directory is writable" "$sbx" "-w $run1 "
+has "launch_sandbox: the owner's config directory is writable" "$sbx" "-w $TMP/claude-config "
+has "launch_sandbox: the owner's ssh keys are hidden" "$sbx" "-h $HOME/.ssh "
+has "launch_sandbox: claude runs inside it" "$sbx" "-- $TMP/claude-rec --dangerously-skip-permissions"
+touch "$TMP/sandbox-refuse"
+rm -f "$TMP/claude.argv"
+prep dforge nosandbox
+launch dforge nosandbox
+check "launch_sandbox: no sandbox refuses the launch before claude runs" \
+  "$status $(grep -c 'cannot sandbox the nested session' <<<"$out") $([ -e "$TMP/claude.argv" ] && echo ran || echo not-run) $(cat "$WAB_ROOT/dforge-nosandbox/state" 2>/dev/null)" "1 1 not-run "
+rm -f "$TMP/sandbox-refuse"
 
 # --- launch_push_blocked ---
 pushed=$( (. "$WAB/lib.sh"; wab_env "$run1"; cd "$run1/clone" && env -i "${WAB_ENV[@]}" git push ssh://example.invalid/x HEAD) >/dev/null 2>&1; echo $?)

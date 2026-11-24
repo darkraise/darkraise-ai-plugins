@@ -12,6 +12,8 @@ WAB_CLAUDE_CONFIG=${WAB_CLAUDE_CONFIG:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}
 WAB_DFORGE_CONFIG=${WAB_DFORGE_CONFIG:-$HOME/.dforge/config.json}
 WAB_CLAUDE=${WAB_CLAUDE:-/root/.local/bin/claude}
 WAB_TMUX=${WAB_TMUX:-tmux}
+WAB_SANDBOX=${WAB_SANDBOX:-$WAB_HERE/sandbox}
+WAB_WRITABLE=${WAB_WRITABLE:-}
 
 WAB_C14='- This is a replay in a clone with no remote: no push, tag or workflow dispatch; a gate that needs one is recorded as not run.'
 
@@ -53,8 +55,22 @@ wab_env() {
     "IS_SANDBOX=1" "CLAUDE_CONFIG_DIR=$WAB_CLAUDE_CONFIG"
     "GIT_ALLOW_PROTOCOL=file" "GIT_SSH_COMMAND=false" "GIT_TERMINAL_PROMPT=0"
     "GH_CONFIG_DIR=$dir/gh" "WORKFLOW_GUARD_CLAUDE_DIR=$dir/guard"
-    "GOCACHE=$dir/gocache"
+    "GOCACHE=$dir/gocache" "DISABLE_AUTOUPDATER=1"
   )
+}
+
+# wab_sandbox_args RUN_DIR — set WAB_SANDBOX_ARGS to the sandbox options for
+# a run: writable only the run directory, the owner's config directory (the
+# login and transcripts) and each WAB_WRITABLE directory; the owner's
+# credentials hidden.
+wab_sandbox_args() {
+  local extra h parts=()
+  WAB_SANDBOX_ARGS=(-w "$1" -w "$WAB_CLAUDE_CONFIG")
+  [ -z "$WAB_WRITABLE" ] || IFS=: read -ra parts <<<"$WAB_WRITABLE"
+  for extra in "${parts[@]}"; do [ -n "$extra" ] && WAB_SANDBOX_ARGS+=(-w "$extra"); done
+  for h in .ssh .gnupg .config/gh .aws .docker .kube .dforge .netrc .git-credentials; do
+    WAB_SANDBOX_ARGS+=(-h "$HOME/$h")
+  done
 }
 
 # Accepting the bypass prompt writes skipDangerousModePermissionPrompt into the

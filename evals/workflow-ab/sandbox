@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# sandbox [--check] [-w DIR]... [-h PATH]... -- COMMAND [ARGS...] — run COMMAND
+# in a private mount namespace: every mount read-only except each -w DIR, a
+# fresh /tmp and /run, and each -h PATH that exists covered by an empty one.
+# The network is shared: the nested session needs the API. --check only probes
+# that the namespace can be made. Exit: COMMAND's status; 1 when the sandbox
+# cannot be made; 2 usage.
+set -uo pipefail
+
+die() { printf 'workflow-ab sandbox: %s\n' "$2" >&2; exit "$1"; }
+
+if [ "${WAB_SANDBOX_INSIDE:-}" != 1 ]; then
+  flags=(--mount --propagation private)
+  # Without root, a user namespace grants the mount rights; files written
+  # stay owned by the caller.
+  [ "$(id -u)" -eq 0 ] || flags=(--user --map-root-user "${flags[@]}")
+  command -v unshare >/dev/null 2>&1 || die 1 "unshare is required"
+  WAB_SANDBOX_INSIDE=1 exec unshare "${flags[@]}" -- bash "${BASH_SOURCE[0]}" "$@"
+fi
+unset WAB_SANDBOX_INSIDE
+
+check=0 writable=() hidden=()
+while [ $# -gt 0 ]; do
+  case $1 in
+    --check) check=1; shift ;;
+    -w) [ $# -ge 2 ] || die 2 "-w needs a directory"; writable+=("$(readlink -f -- "$2")"); shift 2 ;;
+    -h) [ $# -ge 2 ] || die 2 "-h needs a path"; hidden+=("$2"); shift 2 ;;
+    --) shift; break ;;
+    *) die 2 "usage: sandbox [--check] [-w DIR]... [-h PATH]... -- COMMAND [ARGS...]" ;;
+  esac
+done
+[ "$check" -eq 1 ] || [ $# -gt 0 ] || die 2 "no command"
+
+for w in "${writable[@]}"; do
+  [ -d "$w" ] || die 1 "not a directory: $w"
+  case $w in /|/tmp|/tmp/*|/run|/run/*) die 1 "cannot keep $w writable" ;; esac
+  for h in "${hidden[@]}"; do
+    case $w/ in "$h"/*) die 1 "$w lies under the hidden $h" ;; esac
+  done
+done
+
+# /etc/resolv.conf often links into /run, which is replaced below.
+resolv=$(readlink -f /etc/resolv.conf)
+resolv_copy=""
+case $resolv in
+  /run/*) [ -f "$resolv" ] && resolv_copy=$(cat "$resolv") ;;
+esac
+
+mount --make-rprivate / || die 1 "cannot make the mounts private"
+for w in "${writable[@]}"; do
+  mount --bind "$w" "$w" || die 1 "cannot bind $w"
+done
+mount -o remount,bind,ro=recursive / || die 1 "cannot remount / read-only"
+for w in "${writable[@]}"; do
+  mount -o remount,bind,rw "$w" || die 1 "cannot keep $w writable"
+done
+# The fresh /run also drops the sockets under it (docker.sock among them).
+mount -t tmpfs -o mode=1777,nosuid,nodev tmpfs /tmp || die 1 "cannot mount a private /tmp"
+mount -t tmpfs -o mode=755,nosuid,nodev tmpfs /run || die 1 "cannot mount a private /run"
+if [ -n "$resolv_copy" ]; then
+  mkdir -p "$(dirname "$resolv")" && printf '%s\n' "$resolv_copy" > "$resolv" || die 1 "cannot restore $resolv"
+fi
+for h in "${hidden[@]}"; do
+  if [ -d "$h" ]; then
+    mount -t tmpfs -o ro,mode=700 tmpfs "$h" || die 1 "cannot hide $h"
+  elif [ -e "$h" ]; then
+    mount --bind /dev/null "$h" || die 1 "cannot hide $h"
+  fi
+done
+mount -o remount,bind,ro /run || die 1 "cannot remount /run read-only"
+
+[ "$check" -eq 0 ] || exit 0
+exec "$@"

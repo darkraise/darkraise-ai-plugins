@@ -233,10 +233,13 @@ command_of() { # command_of LABEL — the plan's command for LABEL, or nothing f
 }
 # timeout signals only the process it starts, so the command gets its own
 # process group and the whole group is killed at the limit.
+# The commands run in the nested session's sandbox, so a write it would refuse
+# fails here, before any model spend.
 wab_env "$dir"
+wab_sandbox_args "$dir"
 bounded() { # bounded SECONDS COMMAND
   local waited=0 pid
-  (cd "$clone" && exec env -i "${WAB_ENV[@]}" setsid bash -c "$2") &
+  (cd "$clone" && exec env -i "${WAB_ENV[@]}" setsid bash "$WAB_SANDBOX" "${WAB_SANDBOX_ARGS[@]}" -- bash -c "$2") &
   pid=$!
   while kill -0 "$pid" 2>/dev/null; do
     if [ "$waited" -ge "$1" ]; then

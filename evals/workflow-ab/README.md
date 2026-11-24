@@ -45,7 +45,8 @@ creates `<WAB_ROOT>/<ARM>-<RUN>/` and refuses an existing one.
 - **`--check`** runs the plan's `**Worktree setup:**` and `**Integration
   check:**` commands in the clone under the launch environment (`env -i`
   with the variables `launch` sets, `HOME` and `GOCACHE` in the run
-  directory), each in its own process group and killed at two hours. A failure
+  directory) and in the run's sandbox (below), each in its own process group
+  and killed at two hours. A failure
   writes `check-failed` to `state` and exits 1. Run it before any model
   spend on a large plan.
 
@@ -56,13 +57,14 @@ evals/workflow-ab/launch ARM RUN [--max-minutes N]
 Runs a prepared replay. Exactly the arm's plugin may load: `launch` exits 1
 when the clone's project settings enable any other. It starts the tmux
 session `wab-<ARM>-<RUN>` (the only tmux session it touches) running Claude
-Code in the clone under `env -i` with:
+Code in the clone, in the run's sandbox, under `env -i` with:
 
 - `HOME=<run>/home`, `IS_SANDBOX=1`, and `CLAUDE_CONFIG_DIR` set to the
   owner's config directory for the login only (credentials are never copied);
 - `GIT_ALLOW_PROTOCOL=file`, `GIT_SSH_COMMAND=false`, `GIT_TERMINAL_PROMPT=0`,
   an empty `GH_CONFIG_DIR`, an empty `WORKFLOW_GUARD_CLAUDE_DIR`, and no
   token, ssh agent or API key;
+- `DISABLE_AUTOUPDATER=1`, since the `claude` install is read-only there;
 - `--setting-sources project,local`, `--settings` holding
   `{"skipDangerousModePermissionPrompt":true}`,
   `--plugin-dir <WAB_PLUGINS>/plugins/<ARM>` and a known `--session-id`.
@@ -77,6 +79,18 @@ when it has one or when the session ends before the run finishes. At `--max-minu
 it) it stops the bound run, kills its tmux session and the session's process
 tree, and writes `timed-out`. A launch killed by a signal stops the run the
 same way and writes `stopped`.
+
+**The sandbox** (`sandbox`, a private mount namespace made with `unshare`)
+leaves writable only the run directory, the owner's Claude config directory
+and each `WAB_WRITABLE` directory; every other mount is read-only. `/tmp` and
+`/run` are fresh and private (so no host socket under `/run`, `docker.sock`
+among them, is reachable), and `.ssh`, `.gnupg`, `.config/gh`, `.aws`,
+`.docker`, `.kube`, `.dforge`, `.netrc` and `.git-credentials` under the
+owner's home read as empty. The network is shared: the session needs the API,
+and git and gh reach no remote only through the variables above. Without
+root, `sandbox` uses a user namespace; a host that refuses both makes
+`launch` exit 1 before Claude starts. The seeding commands `launch` runs
+itself (`auto-run`, `next-step`) run outside it.
 
 ```
 evals/workflow-ab/collect ARM RUN
@@ -105,8 +119,11 @@ runs only, a group row counted once and divided by its task count),
 
 ```
 export WAB_SOURCE=/root/repositories/darkpanel WAB_BASE=33bc6da6 \
-  WAB_PLAN=docs/dforge/plans/2026-11-04-v1-w8-panel-exposure.md
+  WAB_PLAN=docs/dforge/plans/2026-11-04-v1-w8-panel-exposure.md \
+  WAB_WRITABLE=/root/.cache/w8-tmp
 ```
+
+The w8 plan keeps its scratch in `/root/.cache/w8-tmp`; create it first.
 
 Then, for runs 1 and 2 of each arm, `prepare ARM RUN --check` (it prepares
 the run and runs the plan's setup and Integration check before any model
@@ -126,22 +143,25 @@ spend), `launch ARM RUN` and `collect ARM RUN`, and finally `compare`; the note 
 | `WAB_DFORGE_CONFIG` | `~/.dforge/config.json` | owner's dforge config (read only) |
 | `WAB_CLAUDE` | `/root/.local/bin/claude` | the `claude` binary |
 | `WAB_TMUX` | `tmux` | the `tmux` binary |
+| `WAB_SANDBOX` | `sandbox` beside these scripts | the sandbox program (tests stub it) |
+| `WAB_WRITABLE` | (none) | more directories the sandbox keeps writable, `:`-separated |
 | `WAB_MAX_SECONDS` | `--max-minutes` × 60 | the launch's wall-clock limit (tests) |
 
 ## Run directory
 
 `<WAB_ROOT>/<ARM>-<RUN>/` holds `clone/`, `home/`, `arm.json`,
 `plan.orig.md` (the plan as the source holds it), `out/` (`plan-lint.txt`,
-the check logs, `seed.log`), `launcher.sh`, `claude-settings.json`,
+the check logs, `sandbox.log`, `seed.log`), `launcher.sh`, `claude-settings.json`,
 `sessions`, `settings-key` and, once a check fails or a launch starts,
 `state` (`check-failed`, `running`, `finished`, `stopped` or `timed-out`).
 
 ## Writes outside scratch
 
 `prepare` writes nothing outside `WAB_ROOT`; it only reads the source, the
-owner's dforge config and the owner's Claude settings and `.claude.json`. A launch writes the
-nested sessions' transcripts and project entry under the owner's config
-directory. Accepting the bypass prompt would write
+owner's dforge config and the owner's Claude settings and `.claude.json`. The
+sandbox lets a launch write only its run directory, each `WAB_WRITABLE`
+directory and the owner's config directory, where it writes the nested
+sessions' transcripts and project entry. Accepting the bypass prompt would write
 `skipDangerousModePermissionPrompt` into the owner's `settings.json`: `launch`
 records in `<run>/settings-repair` whether the key was there before, and
 when it was not, its exit, or the start of the next `prepare`, `launch`,
@@ -153,7 +173,7 @@ A marker whose launch is still running is left to that launch.
 
 `tests/dforge/workflow-ab.test.sh` builds a source from `fixture/`, a
 two-task plan in one wave with `dforge:impl-*` Implementer lines and an
-unqualified `**Items:**` citation. It runs on Linux only.
+unqualified `**Items:**` citation. It runs on Linux only; its real-sandbox cases print `skip` on a host that refuses a mount namespace.
 
 ## Verified
 
