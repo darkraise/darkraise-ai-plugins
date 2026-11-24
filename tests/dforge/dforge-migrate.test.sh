@@ -22,14 +22,18 @@ TMP_FORMS=()
 if command -v cygpath >/dev/null 2>&1; then
   TMP_FORMS=("$(cygpath -m -l "$TMP")" "$(cygpath -m "$TMP")" "$(cygpath -u -l "$TMP")")
 fi
-migrate() { # migrate SCRIPT [ARGS…] — run SCRIPT; its output, stderr included, in TMP's spelling
-  local text status form
-  text=$(bash "$@" 2>&1); status=$?
+tmp_spelled() { # tmp_spelled TEXT — TEXT with each Windows form of TMP in TMP's spelling
+  local text=$1 form
   if [ "${#TMP_FORMS[@]}" -gt 0 ]; then
     text=${text//\\//}
     for form in "${TMP_FORMS[@]}"; do text=${text//"$form"/$TMP}; done
   fi
   printf '%s\n' "$text"
+}
+migrate() { # migrate SCRIPT [ARGS…] — run SCRIPT; its output, stderr included, in TMP's spelling
+  local text status
+  text=$(bash "$@" 2>&1); status=$?
+  tmp_spelled "$text"
   return "$status"
 }
 export HOME="$TMP/home"; mkdir -p "$HOME"
@@ -612,9 +616,9 @@ L="$TMP/lrepo"
 repo "$L"
 LW="$TMP/lwt"
 git -C "$L" worktree add -q -b lside "$LW"
-LT=$(git -C "$L" rev-parse --show-toplevel)
-LWT=$(git -C "$LW" rev-parse --show-toplevel)
-LM=$(stores_home "$LH" "$L" lproj local darkmem)
+LT=$(tmp_spelled "$(git -C "$L" rev-parse --show-toplevel)")
+LWT=$(tmp_spelled "$(git -C "$LW" rev-parse --show-toplevel)")
+LM=$(tmp_spelled "$(stores_home "$LH" "$L" lproj local darkmem)")
 marked() { # marked KIND SUBJECT AT — a handoff whose last marker carries them
   printf '# Handoff\n\n<!-- next-step: kind=%s session=- done=0 closed=0 subject=%s at=%s -->\n' "$1" "$2" "$3"
 }
@@ -686,7 +690,7 @@ check "renamed Codex handoff names its key: in the prompt" "$(grep -cF "enter it
 
 
 # A dry run lists the rename of a latest.md the state move would bring along.
-DL="$TMP/dlrepo"; repo "$DL"; DLT=$(git -C "$DL" rev-parse --show-toplevel)
+DL="$TMP/dlrepo"; repo "$DL"; DLT=$(tmp_spelled "$(git -C "$DL" rev-parse --show-toplevel)")
 mkdir -p "$DL/.forge/handoff"
 marked plan docs/dforge/plans/p3.md 1700001200 > "$DL/.forge/handoff/latest.md"
 out=$(HOME="$TMP/rh-home" migrate "$FM" --dry-run "$DL")
@@ -695,7 +699,7 @@ check "dry: that latest.md is not moved" "$(exists "$DL/.forge/handoff/latest.md
 out=$(HOME="$TMP/rh-home" migrate "$FM" "$DL")
 check "the real run renames it as the dry run said" "$(grep -cxF "moved $DLT/.dforge/handoff/latest.md -> $DLT/.dforge/handoff/p3.md" <<<"$out")" "1"
 # The dry run refuses the rename the real run refuses: the older directory already holds the key.
-DK="$TMP/dkrepo"; repo "$DK"; DKT=$(git -C "$DK" rev-parse --show-toplevel)
+DK="$TMP/dkrepo"; repo "$DK"; DKT=$(tmp_spelled "$(git -C "$DK" rev-parse --show-toplevel)")
 mkdir -p "$DK/.forge/handoff"
 marked plan docs/dforge/plans/p3.md 1700001300 > "$DK/.forge/handoff/latest.md"
 printf '# Handoff p3\n' > "$DK/.forge/handoff/p3.md"

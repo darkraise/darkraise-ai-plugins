@@ -58,7 +58,7 @@ for (const mode of ["--complete", "--project"]) {
     const target = await nextStep(["--target", ...args], { cwd: repo, env: home.env });
     assert.equal(target.code, 0, target.stdout + target.stderr);
     const keyed = target.stdout.trim();
-    assert.equal(path.dirname(keyed), path.join(home.workRoot, "handoff"), "the handoff is the mirror's");
+    assert.equal(path.resolve(path.dirname(keyed)), path.resolve(home.workRoot, "handoff"), "the handoff is the mirror's");
     const wrote = await nextStep(args, { cwd: repo, env: home.env });
     assert.equal(wrote.code, 0, wrote.stdout + wrote.stderr);
     assert.ok(fs.existsSync(keyed), "next-step wrote its keyed handoff into the mirror");
