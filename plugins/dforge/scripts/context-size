@@ -14,8 +14,9 @@
 #   --plan          the check after a committed spec: the plan is written in
 #                   this session below 150% of the task budget, capped at the
 #                   final-phase limit.
-#   --observations  print the per-task growth recorded on Codex hosts
-#                   (reference/session-budget.md) and exit 0.
+#   --observations  print the per-task growth each measurement recorded, on
+#                   Codex and Claude hosts (reference/session-budget.md), and
+#                   exit 0.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"

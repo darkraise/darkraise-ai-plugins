@@ -69,7 +69,7 @@ The verdict stays `unknown` because no Codex budget has been set yet, so the
 count rule below still decides when a Codex session hands off.
 `DAGENTS_BUDGET` does not apply to a rollout measurement.
 
-Each Codex measurement appends a row to
+Each measurement, on a Codex or a Claude host, appends a row to
 `<primary checkout>/<state>/sdd/budget-log.tsv`, and
 `scripts/context-size --observations` prints it back as the growth between
 consecutive task briefs within each session, followed by one `span` line per

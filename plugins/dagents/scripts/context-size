@@ -16,8 +16,9 @@
 #                   final-phase limit.
 #   --wave W        the check before W parallel tasks start: the task budget
 #                   less one task's worst growth for each task beyond the first.
-#   --observations  print the per-task growth recorded on Codex hosts
-#                   (reference/session-budget.md) and exit 0.
+#   --observations  print the per-task growth each measurement recorded, on
+#                   Codex and Claude hosts (reference/session-budget.md), and
+#                   exit 0.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
