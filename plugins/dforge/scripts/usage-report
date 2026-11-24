@@ -91,6 +91,8 @@ if [ -n "$plan" ]; then
     fi
   fi
   record="$(dforge_docs_root "$top")/reviews/$slug.md"
+  # A worktree does not hold a record the primary checkout keeps uncommitted.
+  [ -f "$record" ] || record="$(dforge_docs_root "$(plan_primary_root "$top")")/reviews/$slug.md"
   [ ! -f "$record" ] || args+=(--review-record "$(dr_native_path "$record")")
   saved="$(dforge_dir state "$(plan_primary_root "$top")")/sdd/usage-report-$slug.json"
   [ ! -f "$saved" ] || args+=(--saved "$(dr_native_path "$saved")")

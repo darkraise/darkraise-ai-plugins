@@ -43,11 +43,19 @@ const emptyUsage = () => ({ turns: 0, input: 0, cacheRead: 0, cacheWrite5m: 0, c
 const round6 = (x) => Math.round(x * 1e6) / 1e6;
 const num = (s) => (s === undefined || s === '' || Number.isNaN(Number(s)) ? null : Number(s));
 
+// Set when the prices file cannot be read: every model is then unpriced, and
+// the report says why instead of showing a cost of $0.00 as measured.
+let pricesError = null;
+
 export function loadPrices(file = PRICES) {
   try {
     const models = JSON.parse(fs.readFileSync(file, 'utf8')).models || {};
+    pricesError = null;
     return Object.fromEntries(Object.entries(models).filter(([, r]) => r.provider === 'anthropic'));
-  } catch { return {}; }
+  } catch (e) {
+    pricesError = `${file}: ${e.message}`;
+    return {};
+  }
 }
 
 // The usage of one assistant message, in report fields.
@@ -168,16 +176,15 @@ function segments(opens, close, dirs) {
   const segs = [];
   for (const [session, o] of bySession) {
     const file = resolveTranscript(o || close, dirs);
-    if (!file) continue;
     const same = session === close.session;
-    segs.push({
-      file,
-      start: o ? num(o.bytes) || 0 : 0,
-      end: same ? num(close.bytes) ?? Infinity : Infinity,
-      from: o ? ms(o.time) : -Infinity,
-      to: same ? ms(close.time) : Infinity,
-    });
+    const start = o ? num(o.bytes) : 0;
+    const end = same ? num(close.bytes) : Infinity;
+    // A mark written while no transcript was found carries no byte offset, so
+    // the slice it bounds is unknown, not the whole transcript.
+    if (!file || start === null || end === null) { segs.unresolved = true; continue; }
+    segs.push({ file, start, end, from: o ? ms(o.time) : -Infinity, to: same ? ms(close.time) : Infinity });
   }
+  if (!segs.length) segs.unresolved = true;
   return segs;
 }
 
@@ -225,8 +232,8 @@ export function inferBounds(entries) {
         const as = /^([A-Za-z_]\w*)=("[^"]*"|'[^']*'|\S*)\s*$/.exec(cmd);
         if (as) { vars[as[1]] = as[2].replace(/^["']|["']$/g, ''); continue; }
         const unq = (x) => x.replace(/^["']|["']$/g, '');
-        let m = /task-brief(?:\s+--open)?\s+("[^"]+"|'[^']+'|[^\s-]\S*)\s+(\d+)\b/.exec(cmd);
-        if (m) opens.push({ plan: unq(m[1]), task: Number(m[2]), start: offset });
+        let m = /task-brief(\s+--open)?\s+("[^"]+"|'[^']+'|[^\s-]\S*)\s+(\d+)\b/.exec(cmd);
+        if (m) opens.push({ plan: unq(m[2]), task: Number(m[3]), start: offset, explicit: Boolean(m[1]) });
         m = /task-step\s+start\s+("[^"]+"|'[^']+'|\S+)((?:\s+\d+)+)/.exec(cmd);
         if (m) for (const n of m[2].trim().split(/\s+/)) opens.push({ plan: unq(m[1]), task: Number(n), start: offset });
         m = /task-close\s+("[^"]+"|'[^']+'|\S+)\s+(\d+)\b/.exec(cmd);
@@ -235,9 +242,13 @@ export function inferBounds(entries) {
     }
   }
   const size = entries.size ?? (entries.length ? entries[entries.length - 1].offset + 1 : 0);
-  return opens.map((o) => {
+  // A plain task-brief only reads a brief once --open exists: it opens a task
+  // only in sessions that never call --open for that task.
+  const kept = opens.filter((o) => o.explicit !== false
+    || !opens.some((x) => x.explicit && x.plan === o.plan && x.task === o.task));
+  return kept.map((o) => {
     const close = closes.find((c) => c.plan === o.plan && c.task === o.task && c.at >= o.start);
-    const next = opens.find((x) => x.start > o.start);
+    const next = kept.find((x) => x.start > o.start);
     return { plan: o.plan, task: o.task, start: o.start, end: close ? close.at + 1 : next ? next.start : size };
   });
 }
@@ -364,8 +375,9 @@ function lookupMetrics(entries, files) {
     }
     const text = e && e.type === 'user' && e.message ? textOf(e.message.content) : '';
     if (text.includes('<task-notification>')) {
+      const ids = [...text.matchAll(/<task-id>([^<]+)<\/task-id>/g)].map((x) => x[1]);
       for (const [k, w] of bg) {
-        if (w.task === null ? true : text.includes(`<task-id>${w.task}</task-id>`)) {
+        if (ids.length ? ids.includes(w.task) : w.task === null) {
           const at = ms(e.timestamp);
           if (Number.isFinite(at) && Number.isFinite(w.at)) waitSeconds += Math.round((at - w.at) / 1000);
           bg.delete(k);
@@ -395,7 +407,7 @@ function taskSpans(rows, dirs) {
   const spans = new Map();
   for (const t of tasks.values()) {
     if (!t.close) continue;
-    for (const x of segments(t.opens, t.close, dirs)) spans.set(x.file, [...(spans.get(x.file) || []), { start: x.start, end: x.end }]);
+    for (const x of segments(t.opens, t.close, dirs)) spans.set(x.file, [...(spans.get(x.file) || []), { start: x.start, end: x.end, from: x.from, to: x.to }]);
   }
   return spans;
 }
@@ -423,7 +435,9 @@ function ledgerUnmarked(ledger, marked, plan, dirs) {
   let bounds = null;
   for (const line of text.split(/\r?\n/)) {
     const m = /^Task (\d+): complete \((.*)/.exec(line);
-    if (!m || marked.has(m[1]) || /^deferred by the auto run\)/.test(m[2])) continue;
+    if (!m || marked.get(m[1])?.close || /^deferred by the auto run\)/.test(m[2])) continue;
+    // Open rows with no close (an attended dagents run): measured by inference.
+    const opened = marked.get(m[1]);
     if (!bounds) {
       bounds = [];
       for (const f of transcriptFiles(dirs)) for (const b of inferBounds(readEntries(f) || [])) bounds.push({ ...b, file: f });
@@ -434,7 +448,8 @@ function ledgerUnmarked(ledger, marked, plan, dirs) {
       return { file: b.file, start: b.start, end: b.end, from: inside.length ? ms(inside[0].entry.timestamp) : NaN, to: inside.length ? ms(inside[inside.length - 1].entry.timestamp) : NaN };
     });
     const range = /^commits ([^,)]+)/.exec(m[2]);
-    out.push({ n, opens: [], close: { range: range ? range[1] : '', context: '', time: '' }, segs, unmarked: true });
+    if (opened && !segs.length) segs.unresolved = true;
+    out.push({ n, opens: opened ? opened.opens : [], close: { range: range ? range[1] : '', context: '', time: '', inferred: Boolean(opened) }, segs, unmarked: !opened });
   }
   return out;
 }
@@ -445,7 +460,13 @@ function quality(opts, rowsOut, closeRows, planText) {
   const q = { findings: {}, fixRounds: rowsOut.reduce((s, r) => s + r.fixRounds, 0), breakerItems: 0, deferredRows: 0, followUpTasks: 0, fixCommits: 0 };
   const read = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return null; } };
   const record = opts.reviewRecord && read(opts.reviewRecord);
-  if (record) for (const m of record.matchAll(/\[(Critical|Important|Minor)\]/g)) q.findings[m[1]] = (q.findings[m[1]] || 0) + 1;
+  if (opts.reviewRecord && record === null) q.findings = null;
+  // A review record keeps the findings as its retained lens lines; bracketed
+  // tags are read only from a record that has none.
+  const lens = record ? [...record.matchAll(/^final review lens \S+ — (\d+) Critical, (\d+) Important, (\d+) Minor/gm)] : [];
+  if (lens.length) {
+    for (const m of lens) ['Critical', 'Important', 'Minor'].forEach((k, i) => { q.findings[k] = (q.findings[k] || 0) + Number(m[i + 1]); });
+  } else if (record) for (const m of record.matchAll(/\[(Critical|Important|Minor)\]/g)) q.findings[m[1]] = (q.findings[m[1]] || 0) + 1;
   const progress = opts.workspace && read(path.join(opts.workspace, 'progress.md'));
   if (progress) q.breakerItems = (progress.match(/^Task \d+: fix round 3\/3 \(.*still failing\)/gm) || []).length;
   const register = opts.register && read(opts.register);
@@ -469,13 +490,15 @@ function quality(opts, rowsOut, closeRows, planText) {
   const files = [...new Set([...planText.matchAll(/^### Task (\d+):/gm)].flatMap((m) => planFiles(planText, m[1])))];
   for (const repo of opts.repo) {
     if (!Number.isFinite(finish) || !files.length) break;
+    const inRange = new Set();
+    for (const r of closeRows) {
+      if (!/^[0-9a-f]+\.\.[0-9a-f]+$/.test(r.range || '')) continue;
+      try {
+        for (const h of execFileSync('git', ['-C', repo, 'rev-list', r.range], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n')) if (h) inRange.add(h);
+      } catch { /* a range whose commits are gone excludes nothing */ }
+    }
     try {
-      const inRange = new Set();
-      for (const r of closeRows) {
-        if (!/^[0-9a-f]+\.\.[0-9a-f]+$/.test(r.range || '')) continue;
-        for (const h of execFileSync('git', ['-C', repo, 'rev-list', r.range], { encoding: 'utf8' }).split('\n')) if (h) inRange.add(h);
-      }
-      const log = execFileSync('git', ['-C', repo, 'log', '--format=%x00%H %s', '--name-only',
+      const log = execFileSync('git', ['-C', repo, 'log', baseBranch(repo), '--format=%x00%H %s', '--name-only',
         `--since=@${Math.floor(finish / 1000)}`, `--until=@${Math.floor(finish / 1000) + 7 * 86400}`], { encoding: 'utf8' });
       for (const chunk of log.split('\0').slice(1)) {
         const [head, ...paths] = chunk.split('\n').filter(Boolean);
@@ -483,9 +506,18 @@ function quality(opts, rowsOut, closeRows, planText) {
         if (inRange.has(hash) || !/^fix(\(|:|!)/.test(subject.join(' '))) continue;
         if (paths.some((p) => files.some((f) => p === f || p.endsWith(`/${f}`)))) q.fixCommits++;
       }
-    } catch { /* not a repository */ }
+    } catch { q.fixCommits = null; }
   }
   return q;
+}
+
+// The branch fix commits land on: the remote's default branch when its local
+// copy exists, else main or master, else HEAD.
+function baseBranch(repo) {
+  const git = (...a) => { try { return execFileSync('git', ['-C', repo, ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return ''; } };
+  const remote = git('symbolic-ref', '--short', 'refs/remotes/origin/HEAD').replace(/^origin\//, '');
+  for (const b of [remote, 'main', 'master']) if (b && git('rev-parse', '--verify', '--quiet', `refs/heads/${b}`)) return b;
+  return 'HEAD';
 }
 
 export function reportPlan(plan, rows, opts, prices, foreign = new Map()) {
@@ -513,10 +545,19 @@ export function reportPlan(plan, rows, opts, prices, foreign = new Map()) {
     t.segs = segments(t.opens, t.close, dirs);
     closed.push(t);
   }
+  const unresolved = (t) => t.segs.unresolved;
   // A ledger complete line with no markers: bounded by the transcripts' own
   // task-brief / task-step start / task-close calls.
   let unmarked = 0;
-  for (const u of ledgerUnmarked(opts.ledger, tasks, plan, dirs)) { closed.push(u); unmarked++; }
+  for (const u of ledgerUnmarked(opts.ledger, tasks, plan, dirs)) {
+    closed.push(u);
+    if (u.close.inferred) unclosed--; else unmarked++;
+  }
+  for (const t of closed) {
+    if (!unresolved(t)) continue;
+    excluded.push(`Task ${t.n}: no transcript bounds its slice`);
+    t.segs = Object.assign([], { unresolved: true });
+  }
   closed.sort((a, b) => a.n - b.n);
   // Tasks whose segments overlap in one transcript form one group.
   const parent = new Map(closed.map((t) => [t.n, t.n]));
@@ -583,7 +624,7 @@ export function reportPlan(plan, rows, opts, prices, foreign = new Map()) {
     const lastClose = members.map((t) => t.close).sort((a, b) => (a.time < b.time ? 1 : -1))[0];
     outRows.push({
       tasks: members.map((t) => t.n).sort((a, b) => a - b),
-      label: members.some((t) => t.unmarked) ? 'unmarked' : members.some((t) => t.close.inferred) ? 'inferred' : 'marked',
+      label: members.some(unresolved) ? 'unresolved' : members.some((t) => t.unmarked) ? 'unmarked' : members.some((t) => t.close.inferred) ? 'inferred' : 'marked',
       group: members.length > 1,
       range: members.map((t) => t.close.range).filter(Boolean).join(', '),
       turns: main.turns,
@@ -631,7 +672,11 @@ export function reportPlan(plan, rows, opts, prices, foreign = new Map()) {
   // A deferred task's slice is neither a task's nor outside.
   for (const x of deferredSegs) inTasks.set(x.file, [...(inTasks.get(x.file) || []), { start: x.start, end: x.end }]);
   const firstOpen = new Map();
-  for (const x of [...closed.flatMap((t) => t.segs), ...deferredSegs]) firstOpen.set(x.file, Math.min(firstOpen.get(x.file) ?? Infinity, x.start));
+  const firstOpenAt = new Map();
+  for (const x of [...closed.flatMap((t) => t.segs), ...deferredSegs]) {
+    firstOpen.set(x.file, Math.min(firstOpen.get(x.file) ?? Infinity, x.start));
+    firstOpenAt.set(x.file, Math.min(firstOpenAt.get(x.file) ?? Infinity, x.from));
+  }
   const outsideMsgs = [];
   const outsideUnpriced = new Set();
   let before = 0;
@@ -641,18 +686,26 @@ export function reportPlan(plan, rows, opts, prices, foreign = new Map()) {
     before += messages(all.filter((x) => x.offset < from), false).length;
     outsideMsgs.push(...messages(all.filter((x) => x.offset >= from && !spans.some((s) => x.offset >= s.start && x.offset < s.end)), false));
   }
-  if (before) excluded.push('before first open');
   const outside = total(outsideMsgs, prices, outsideUnpriced, byModel);
-  for (const list of subs.values()) {
+  // A subagent no slice took is outside only when it started after the
+  // transcript's first open and inside none of another plan's slices.
+  for (const [f, list] of subs) {
+    const others = foreign.get(f) || [];
     for (const sa of list) {
       if (sa.taken) continue;
-      const u = total(messages(sa.entries, true), prices, outsideUnpriced, null);
+      if (!(sa.first >= (firstOpenAt.get(f) ?? Infinity)) || others.some((s) => sa.first >= s.from && sa.first <= s.to)) {
+        if (!(sa.first >= (firstOpenAt.get(f) ?? Infinity))) before++;
+        continue;
+      }
+      const u = total(messages(sa.entries, true), prices, outsideUnpriced, byModel);
       for (const k of Object.keys(outside)) outside[k] += u[k];
     }
   }
+  if (before) excluded.push('before first open');
+  excluded.push('finishing session');
   outside.cost = round6(outside.cost);
   for (const u of Object.values(byModel)) u.cost = round6(u.cost);
-  const completed = outRows.reduce((s, r) => s + r.tasks.length, 0);
+  const completed = outRows.filter((r) => r.label !== 'unresolved').reduce((s, r) => s + r.tasks.length, 0);
   const segCost = outRows.reduce((s, r) => s + r.cost, 0);
   const planTotal = emptyUsage();
   for (const u of Object.values(byModel)) for (const k of Object.keys(planTotal)) planTotal[k] += u[k];
@@ -707,6 +760,7 @@ export function report(opts) {
       if (kept && kept.quality) Object.assign(rep, { quality: kept.quality, asOf: 'finishing' });
       return rep;
     }),
+    ...(pricesError ? { pricesError } : {}),
   };
 }
 
@@ -725,6 +779,7 @@ const usd = (n) => (n === null ? '-' : `$${n.toFixed(2)}`);
 
 export function markdown(rep) {
   const out = [];
+  if (rep.pricesError) out.push(`Prices unreadable, every cost is unpriced: ${rep.pricesError}`, '');
   for (const p of rep.plans) {
     out.push(`## ${p.plan}`, '');
     out.push('| Task | Label | Turns | Input | Cache read | Write 5m | Write 1h | Output | Cost |');

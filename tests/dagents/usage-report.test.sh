@@ -19,8 +19,8 @@ check() { # check <name> <got> <want>
 
 # rows PLUGIN TASK — an open and a close row for TASK of the plan.
 rows() {
-  printf '2026-01-01T00:00:00Z\topen\t%s\t1.0.0\t/plugin\tdocs/dagents/plans/p.md\t%s\ts1\t\t\t\ttask-brief:%s\t\t\n' "$1" "$2" "$2"
-  printf '2026-01-01T00:01:00Z\tclose\t%s\t1.0.0\t/plugin\tdocs/dagents/plans/p.md\t%s\ts1\t\t\t\ttask-close:%s\ta..b\t\n' "$1" "$2" "$2"
+  printf '2026-01-01T00:00:00Z\topen\t%s\t1.0.0\t/plugin\tdocs/dagents/plans/p.md\t%s\ts1\t\t0\t\ttask-brief:%s\t\t\n' "$1" "$2" "$2"
+  printf '2026-01-01T00:01:00Z\tclose\t%s\t1.0.0\t/plugin\tdocs/dagents/plans/p.md\t%s\ts1\t\t3\t\ttask-close:%s\ta..b\t\n' "$1" "$2" "$2"
 }
 
 # --- wrapper_reads_own_stores ---

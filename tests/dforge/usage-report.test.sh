@@ -49,7 +49,7 @@ check "per_task_fields: md has a row per task" \
 # --- deferred_excluded, unpriced_model, open_after_close_ignored ---
 J=$(rep misc)
 check "deferred_excluded: not completed" "$(q "$J" '.plans[0] | [.completed, (.tasks | map(.tasks[]))]')" "[1,[7]]"
-check "deferred_excluded: listed as excluded" "$(q "$J" '.plans[0].excluded')" '["Task 6: deferred by the auto run","before first open"]'
+check "deferred_excluded: listed as excluded" "$(q "$J" '.plans[0].excluded')" '["Task 6: deferred by the auto run","before first open","finishing session"]'
 check "deferred_excluded: not in the cost per task" "$(q "$J" '.plans[0] | .costPerTaskSegments == .tasks[0].cost')" "true"
 # k4 and k5 after task 7 are outside (577*4); task 6's slice is neither.
 check "deferred_excluded: its slice is not outside" "$(q "$J" '.plans[0].outside | [.turns, .cost]')" "[2,0.002308]"
@@ -89,7 +89,7 @@ check "growth_and_outside: growth sums the rises" "$(q "$J" '.plans[0].tasks[] |
 # Task 1: 420000 cache read * 0.2; task 2: 10 * 4; outside (between tasks): 1000 * 4.
 check "growth_and_outside: the usage between tasks is outside" "$(q "$J" '.plans[0].outside | [.turns, .input]')" "[1,1000]"
 check "growth_and_outside: both cost figures" "$(q "$J" '.plans[0] | [.costPerTask, .costPerTaskSegments]')" "[0.04402,0.04202]"
-check "growth_and_outside: the usage before the first open is excluded" "$(q "$J" '.plans[0].excluded')" '["before first open"]'
+check "growth_and_outside: the usage before the first open is excluded" "$(q "$J" '.plans[0].excluded')" '["before first open","finishing session"]'
 
 # --- splits_and_all_plans ---
 J=$(node "$REPORT" --markers "$FX/splits/repo/state/sdd/usage-markers.tsv" --transcripts "$FX/splits/proj" --format json 2>/dev/null)
