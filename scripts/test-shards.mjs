@@ -94,7 +94,7 @@ export const windowsSeconds = {
   'tests/dforge/roots.test.sh': 84,
   'tests/dforge/handoff.test.sh': 30,
   'tests/dforge/parallel-session-handoff.acceptance.test.sh': 15,
-  'tests/dforge/parallel-session-handoff-qa.acceptance.test.sh': 400,
+  'tests/dforge/parallel-session-handoff-qa.acceptance.test.sh': 700,
   'tests/dforge/session-live.test.sh': 10,
   'tests/dforge/route.test.sh': 120,
   'tests/dforge/seats.test.sh': 10,
@@ -199,7 +199,7 @@ export const windowsSeconds = {
   'tests/dagents/roots.test.sh': 84,
   'tests/dagents/handoff.test.sh': 30,
   'tests/dagents/parallel-session-handoff.acceptance.test.sh': 15,
-  'tests/dagents/parallel-session-handoff-qa.acceptance.test.sh': 400,
+  'tests/dagents/parallel-session-handoff-qa.acceptance.test.sh': 700,
   'tests/dagents/session-live.test.sh': 10,
   'tests/dagents/route.test.sh': 175,
   'tests/dagents/run-agy-task.test.sh': 465,
@@ -246,8 +246,11 @@ export const windowsSeconds = {
 // its limit. auto-run took 479 s on one runner and over 1000 s on another, so
 // its limit is 1600 s. task-step's limit applies to each of its parts.
 // dforge's efficiency-measurement passed 600 s at about two thirds of its cases.
+// Both parallel-session-handoff-qa suites took 560 s to over 600 s there.
 export const suiteSeconds = {
   'tests/dforge/efficiency-measurement.acceptance.test.sh': 1200,
+  'tests/dforge/parallel-session-handoff-qa.acceptance.test.sh': 900,
+  'tests/dagents/parallel-session-handoff-qa.acceptance.test.sh': 900,
   'tests/dforge/plan-lint.test.sh': 1200,
   'tests/dforge/speed-and-cost-followups.acceptance.test.sh': 1200,
   'tests/dforge/task-loop-steps.acceptance.test.sh': 1200,
