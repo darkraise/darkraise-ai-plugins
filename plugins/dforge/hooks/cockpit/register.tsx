@@ -3107,9 +3107,10 @@ async function readAutoRun($: EngineInterface): Promise<CockpitAutoRun | null> {
 }
 
 // Whether a session's cockpit still beats, by the heartbeat beat() writes,
-// as ar_is_stale judges it (scripts/lib/auto-run.sh, AR_BEAT_SECONDS). The
-// engine gives a mod no process id or signal API, so the beat's age is all
-// there is. A beat up to BEAT_SECONDS ahead is clock skew and reads as now.
+// as ar_is_stale judges it (session_gone in scripts/lib/session-live.sh,
+// AR_BEAT_SECONDS). The engine gives a mod no process id or signal API, so the
+// beat's age is all there is. A beat up to BEAT_SECONDS ahead is clock skew
+// and reads as now.
 // No beat file is a dead session; null, unknown, is a beat that reads as no
 // time (a write caught midway), a beat file that exists but cannot be read,
 // or a check that failed, which callers must not act on as a death.
