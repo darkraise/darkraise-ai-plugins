@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync, existsSync, mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { join, resolve, sep } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import test from 'node:test';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -238,7 +238,7 @@ test('a namespaced plugin resolves references within its own tree', async t => {
   const { validateRepository } = await import('../scripts/validate-repository.mjs');
   const dir = mkdtempSync(resolve(tmpdir(), 'ns-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  cpSync(root, dir, { recursive: true, filter: src => !/[\\/](\.git|node_modules|\.dforge|\.worktrees)([\\/]|$)/.test(src) });
+  cpSync(root, dir, { recursive: true, filter: src => !/(^|[\\/])(\.git|node_modules|\.dforge|\.worktrees)([\\/]|$)/.test(relative(root, src)) });
   writeFileSync(resolve(dir, 'plugins/dagents/reference/stray.md'), 'see dagents:no-such-skill and dagents:brainstorming\n');
   const names = ['darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge', 'dagents'];
   const errors = validateRepository(dir, { names });
@@ -250,7 +250,7 @@ test('the .dagents scratch directory is not swept', async t => {
   const { validateRepository } = await import('../scripts/validate-repository.mjs');
   const dir = mkdtempSync(resolve(tmpdir(), 'sweep-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  cpSync(root, dir, { recursive: true, filter: src => !/[\\/](\.git|node_modules|\.dforge|\.worktrees)([\\/]|$)/.test(src) });
+  cpSync(root, dir, { recursive: true, filter: src => !/(^|[\\/])(\.git|node_modules|\.dforge|\.worktrees)([\\/]|$)/.test(relative(root, src)) });
   mkdirSync(resolve(dir, '.dagents'), { recursive: true });
   writeFileSync(resolve(dir, '.dagents/x.md'), 'dcc-darkraise\n');
   assert.ok(!validateRepository(dir).some(e => e.startsWith('.dagents/')));
@@ -273,7 +273,7 @@ test('dagents spells dforge only where it must, and names only its 1.x version',
   const { validateRepository } = await import('../scripts/validate-repository.mjs');
   const dir = mkdtempSync(resolve(tmpdir(), 'dagents-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  cpSync(root, dir, { recursive: true, filter: src => !/[\\/](\.git|node_modules|\.dforge|\.worktrees)([\\/]|$)/.test(src) });
+  cpSync(root, dir, { recursive: true, filter: src => !/(^|[\\/])(\.git|node_modules|\.dforge|\.worktrees)([\\/]|$)/.test(relative(root, src)) });
   assert.deepEqual(validateRepository(dir), []);
   writeFileSync(resolve(dir, 'plugins/dagents/reference/stray.md'), 'see docs/dforge/plans\nsince dagents 3.0\nsince dforge 3.0\n');
   const errors = validateRepository(dir);
@@ -288,7 +288,7 @@ test('the three workflow-guard copies are byte-identical', async t => {
   assert.ok(copies.every(c => c === copies[0]));
   const dir = mkdtempSync(resolve(tmpdir(), 'guard-copy-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  cpSync(root, dir, { recursive: true, filter: src => !/[\\/](\.git|node_modules|\.dforge|\.worktrees)([\\/]|$)/.test(src) });
+  cpSync(root, dir, { recursive: true, filter: src => !/(^|[\\/])(\.git|node_modules|\.dforge|\.worktrees)([\\/]|$)/.test(relative(root, src)) });
   writeFileSync(resolve(dir, 'plugins/dflow/scripts/workflow-guard.mjs'), copies[0] + '\n// drift\n');
   assert.ok(validateRepository(dir).includes('plugins/dflow/scripts/workflow-guard.mjs: differs from plugins/dforge/scripts/workflow-guard.mjs'));
 });
@@ -297,7 +297,7 @@ test('usage report identity', async t => {
   const { validateRepository } = await import('../scripts/validate-repository.mjs');
   const dir = mkdtempSync(resolve(tmpdir(), 'usage-identity-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  cpSync(root, dir, { recursive: true, filter: src => !/[\\/](\.git|node_modules|\.dforge|\.worktrees)([\\/]|$)/.test(src) });
+  cpSync(root, dir, { recursive: true, filter: src => !/(^|[\\/])(\.git|node_modules|\.dforge|\.worktrees)([\\/]|$)/.test(relative(root, src)) });
   const identity = e => /usage-report|api-prices|usage-marker/.test(e);
   assert.deepEqual(validateRepository(dir).filter(identity), []);
   const cases = [
