@@ -839,6 +839,16 @@ printf '{\n  "model": "opus",\n  "theme": "dark"\n}\n' > "$WT/owner-config/setti
 printf '{"handoffTokens": 275000}\n' > "$WT/owner-dforge.json"
 export WAB_CLAUDE_CONFIG="$WT/owner-config" WAB_DFORGE_CONFIG="$WT/owner-dforge.json"
 printf '#!/bin/sh\necho "9.9.9 (Claude Code)"\n' > "$WT/claude-version"; chmod +x "$WT/claude-version"
+# A pass-through stand-in for the mount-namespace sandbox, which CI runners
+# refuse; workflow-ab.test.sh tests the real one where the host allows it.
+cat > "$WT/sandbox-pass" <<'EOF'
+#!/usr/bin/env bash
+[ "$1" = --check ] && exit 0
+while [ $# -gt 0 ] && [ "$1" != -- ]; do shift; done
+shift
+exec "$@"
+EOF
+export WAB_SANDBOX="$WT/sandbox-pass"
 
 # make_src DIR [SED] — a source repository holding the fixture, with a later commit past the base and an origin
 make_src() {
