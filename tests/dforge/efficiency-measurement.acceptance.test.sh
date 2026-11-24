@@ -157,10 +157,10 @@ tscript sess-a4 50000 >/dev/null
 pair "marker path is a directory" sess-a4 dir
 pair "no transcript for the session" sess-nothing none
 RO="$TMP/ro"; newrepo "$RO"
-o_ok=$(cd "$RO" && CLAUDE_CODE_SESSION_ID=sess-a4 bash "$BRIEF" --open docs/plans/p.md 1 2>/dev/null | sed "s#$RO#R#g"); s_ok=$?
+o_ok=$(cd "$RO" && CLAUDE_CODE_SESSION_ID=sess-a4 bash "$BRIEF" --open docs/plans/p.md 1 2>/dev/null | sed -e "s#$(git -C "$RO" rev-parse --show-toplevel | tr -d '\r')#R#g" -e "s#$RO#R#g"); s_ok=$?
 RO2="$TMP/ro2"; newrepo "$RO2"; mkdir -p "$RO2/.dforge/sdd"
 ln -s "$TMP/no/such/dir/m.tsv" "$RO2/.dforge/sdd/usage-markers.tsv"
-o_bad=$(cd "$RO2" && CLAUDE_CODE_SESSION_ID=sess-a4 bash "$BRIEF" --open docs/plans/p.md 1 2>/dev/null | sed "s#$RO2#R#g"); s_bad=$?
+o_bad=$(cd "$RO2" && CLAUDE_CODE_SESSION_ID=sess-a4 bash "$BRIEF" --open docs/plans/p.md 1 2>/dev/null | sed -e "s#$(git -C "$RO2" rev-parse --show-toplevel | tr -d '\r')#R#g" -e "s#$RO2#R#g"); s_bad=$?
 check "A4 (dangling marker path): same exit code" "$s_bad" "$s_ok"
 check "A4 (dangling marker path): same stdout" "$o_bad" "$o_ok"
 RC="$TMP/rc"; newrepo "$RC"; tscript sess-a4c 40000 >/dev/null
