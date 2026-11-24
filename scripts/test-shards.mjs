@@ -125,6 +125,7 @@ export const windowsSeconds = {
   'tests/dforge/working-directory.test.sh': 82,
   'tests/dforge/worktree-instructions.test.sh': 10,
   'tests/dforge/wording-pin-deletion.acceptance.test.sh': 20,
+  'tests/dforge/workflow-ab.test.sh': 10,
   'tests/dforge/worktree-snapshot.test.sh': 20,
   'tests/dagents/agy-gate.test.sh': 65,
   'tests/dagents/agy-gemini-first.acceptance.test.sh': 145,

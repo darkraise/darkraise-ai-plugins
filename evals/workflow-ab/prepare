@@ -1,0 +1,251 @@
+#!/usr/bin/env bash
+# prepare ARM RUN [--check] — clone the source into a replay run directory,
+# convert the plan for the arm, pin the arm's configuration and record it in
+# arm.json. --check then runs the plan's Worktree setup and Integration check
+# in the clone; a failure writes check-failed to the run's state and blocks
+# launch. Parameters: README.md.
+# Exit: 0 prepared; 1 failed; 2 usage.
+set -uo pipefail
+
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
+usage() { wab_die 2 "usage: prepare ARM RUN [--check]"; }
+[ $# -ge 2 ] || usage
+arm=$1 run=$2
+shift 2
+check=0
+while [ $# -gt 0 ]; do
+  case $1 in
+    --check) check=1; shift ;;
+    *) usage ;;
+  esac
+done
+wab_check_arm "$arm"
+case $run in ''|*/*|.|..) usage ;; esac
+wab_check_root
+[ -n "$WAB_SOURCE" ] && [ -n "$WAB_BASE" ] && [ -n "$WAB_PLAN" ] \
+  || wab_die 2 "WAB_SOURCE, WAB_BASE and WAB_PLAN are required"
+command -v jq >/dev/null 2>&1 || wab_die 1 "jq is required"
+
+dir=$(wab_run_dir "$arm" "$run")
+[ ! -e "$dir" ] || wab_die 1 "$dir exists: remove it to prepare this run again"
+mkdir -p "$dir/home" "$dir/out" || wab_die 1 "cannot create $dir"
+clone="$dir/clone"
+plugin=$(wab_plugin_dir "$arm")
+g() { git -C "$clone" "$@"; }
+
+# --- the clone: its own objects, the base only, no remote ---
+git clone -q --no-hardlinks -- "$WAB_SOURCE" "$clone" || wab_die 1 "git clone of $WAB_SOURCE failed"
+base=$(g rev-parse -q --verify "$WAB_BASE^{commit}") || wab_die 1 "the source has no commit $WAB_BASE"
+
+# Held outside the work tree: the base checkout below removes a plan the
+# source tracks at its HEAD.
+plan_text="$dir/plan.orig.md"
+if g cat-file -e "$base:$WAB_PLAN" 2>/dev/null; then
+  g show "$base:$WAB_PLAN" > "$plan_text"
+else
+  holder=""
+  while IFS= read -r c; do
+    if g cat-file -e "$c:$WAB_PLAN" 2>/dev/null; then holder=$c; break; fi
+  done < <(g rev-list HEAD -- "$WAB_PLAN")
+  [ -n "$holder" ] || wab_die 1 "no commit in the source's history holds $WAB_PLAN"
+  g show "$holder:$WAB_PLAN" > "$plan_text"
+fi
+
+g checkout -q -B replay-base "$base" || wab_die 1 "cannot check out $base"
+g remote remove origin || wab_die 1 "cannot remove the clone's remote"
+while IFS= read -r ref; do
+  [ "$ref" = refs/heads/replay-base ] || g update-ref -d "$ref"
+done < <(g for-each-ref --format='%(refname)')
+{ g reflog expire --expire=now --all && g gc -q --prune=now; } || wab_die 1 "cannot prune the clone"
+[ "$(g rev-list --all | sort)" = "$(g rev-list "$base" | sort)" ] || wab_die 1 "the clone holds commits outside the base's ancestry"
+[ -z "$(g remote)" ] || wab_die 1 "the clone still has a remote"
+[ ! -e "$clone/.git/objects/info/alternates" ] || wab_die 1 "the clone borrows objects from another repository"
+# A hooks path set anywhere would bypass the refusing hook below.
+[ -z "$(g config --get core.hooksPath)" ] || wab_die 1 "core.hooksPath is set: the refusing pre-push hook would not run"
+printf '#!/bin/sh\necho "workflow-ab: a replay clone never pushes" >&2\nexit 1\n' > "$clone/.git/hooks/pre-push"
+chmod +x "$clone/.git/hooks/pre-push"
+g config user.name Replay
+g config user.email replay@localhost
+
+# --- the plan, converted for the arm ---
+plan=$WAB_PLAN
+if [ "$arm" = dagents ]; then
+  # dagents reads only docs/dagents; its own migration moves docs/dforge there.
+  case $plan in docs/dforge/*) plan="docs/dagents/${plan#docs/dforge/}" ;; esac
+  if [ -d "$clone/docs/dforge" ] && [ ! -e "$clone/docs/dagents" ]; then
+    g mv docs/dforge docs/dagents || wab_die 1 "cannot move docs/dforge to docs/dagents"
+  fi
+fi
+
+header_value() { # header_value LABEL FILE — the first **LABEL:** line's value, trimmed
+  awk -v p="**$1:**" 'index($0, p) == 1 { v = substr($0, length(p) + 1); sub(/^[ \t]+/, "", v); print v; exit }' "$2"
+}
+path_value() { # path_value LABEL FILE — the path a **LABEL:** line names
+  header_value "$1" "$2" | sed -E 's/^(`([^`]+)`|([^ \t]+)).*/\2\3/'
+}
+rank() { case $1 in low) echo 0 ;; medium) echo 1 ;; high) echo 2 ;; xhigh) echo 3 ;; max) echo 4 ;; *) echo -1 ;; esac; }
+
+model="" effort="" register=""
+if [ "$arm" = dforge ]; then
+  tiers=$(grep -oE '^\*\*Implementer:\*\*[[:space:]]*`?dforge:impl-[a-z]+-[a-z]+' "$plan_text" | sed -E 's/.*impl-//')
+  [ -n "$tiers" ] || wab_die 1 "the plan has no dforge:impl-* Implementer line to choose the inline tier from"
+  model=sonnet
+  grep -q '^opus-' <<<"$tiers" && model=opus
+  family_re='^(sonnet|haiku)-'
+  [ "$model" = opus ] && family_re='^opus-'
+  effort=low
+  while IFS= read -r t; do
+    e=${t#*-}
+    [ "$(rank "$e")" -le "$(rank "$effort")" ] || effort=$e
+  done < <(grep -E "$family_re" <<<"$tiers")
+  if grep -qE '^\*\*Evaluation:\*\*.*risk[ =]+3([^0-9]|$)' "$plan_text" && [ "$(rank "$effort")" -lt 2 ]; then
+    effort=high
+  fi
+  spec=$(path_value Spec "$plan_text")
+  if [ -n "$spec" ] && [ -f "$clone/$spec" ]; then
+    register=$(path_value Register "$clone/$spec")
+    [ -z "$register" ] || register=$(basename "$register" .md)
+  fi
+else
+  exec_line=$(header_value Execution "$plan_text")
+  if [[ "$exec_line" =~ --model\ ([A-Za-z0-9.-]+)\ --effort\ ([a-z]+) ]]; then
+    model=${BASH_REMATCH[1]} effort=${BASH_REMATCH[2]}
+  fi
+fi
+
+mkdir -p "$clone/$(dirname "$plan")"
+ARM=$arm MODEL=$model EFFORT=$effort REG=$register C14=$WAB_C14 awk '
+  function qualify(s,   out, tok) {
+    out = ""
+    while (match(s, /[A-Za-z0-9._#-]+/)) {
+      tok = substr(s, RSTART, RLENGTH)
+      out = out substr(s, 1, RSTART - 1)
+      if (tok ~ /^[0-9]+$/) {
+        if (ENVIRON["REG"] == "") bare = 1
+        tok = ENVIRON["REG"] "#" tok
+      }
+      out = out tok
+      s = substr(s, RSTART + RLENGTH)
+    }
+    return out s
+  }
+  /^(```|~~~)/ { fence = !fence }
+  !fence && ENVIRON["ARM"] == "dforge" && !exec_done && index($0, "**Execution:**") == 1 {
+    $0 = "**Execution:** inline — `claude --model " ENVIRON["MODEL"] " --effort " ENVIRON["EFFORT"] "` — replay of a subagent plan"
+    exec_done = 1
+  }
+  !fence && ENVIRON["ARM"] == "dforge" && index($0, "**Items:**") == 1 { $0 = "**Items:**" qualify(substr($0, 11)) }
+  ENVIRON["ARM"] == "dagents" { gsub(/dforge:impl-/, "dagents:impl-") }
+  $0 == ENVIRON["C14"] { seen = 1 }
+  { line[NR] = $0 }
+  END {
+    if (bare) { print "workflow-ab: the plan cites bare **Items:** numbers but its spec names no **Register:**" > "/dev/stderr"; exit 3 }
+    for (i = 1; i <= NR; i++) if (line[i] == "## Global Constraints") { gc = i; break }
+    if (!gc) { print "workflow-ab: the plan has no ## Global Constraints section" > "/dev/stderr"; exit 3 }
+    last = NR
+    for (j = gc + 1; j <= NR; j++) if (line[j] ~ /^## /) { last = j - 1; break }
+    while (last > gc && line[last] ~ /^[ \t]*$/) last--
+    for (i = 1; i <= NR; i++) {
+      print line[i]
+      if (i == last && !seen) print ENVIRON["C14"]
+    }
+  }
+' "$plan_text" > "$clone/$plan" || wab_die 1 "cannot convert the plan"
+g add -A || wab_die 1 "cannot stage the replay plan"
+g -c commit.gpgsign=false commit -q -m "chore: replay plan" || wab_die 1 "cannot commit the replay plan"
+
+# --- the arm's pins, in the scratch home ---
+handoff=""
+if [ -r "$WAB_DFORGE_CONFIG" ]; then
+  handoff=$(jq -r '.handoffTokens // empty' < "$WAB_DFORGE_CONFIG" 2>/dev/null | tr -d '\r')
+fi
+[[ "$handoff" =~ ^[0-9]+$ ]] || handoff=${DFORGE_BUDGET:-}
+[[ "$handoff" =~ ^[0-9]+$ ]] || handoff=300000
+if [ "$arm" = dforge ]; then
+  pins=$(jq -n --argjson h "$handoff" '{handoffTokens: $h, finishAction: "keep", decisionApi: "off",
+    apiBudgetAnthropic: 0, apiBudgetOpenai: 0, apiBudgetAgentRouter: 0, codexReview: false, agyReview: false}')
+else
+  pins=$(jq -n --argjson h "$handoff" '{handoffTokens: $h, finishAction: "keep", codexReview: false, codexLane: false, agyLane: false}')
+fi
+mkdir -p "$dir/home/.$arm"
+printf '%s\n' "$pins" > "$dir/home/.$arm/config.json"
+
+# Plugins the clone's project settings enable stay off: only the arm's loads.
+mkdir -p "$clone/.claude"
+enabled='{}'
+[ -f "$clone/.claude/settings.json" ] && enabled=$(jq -c '.enabledPlugins // {}' < "$clone/.claude/settings.json")
+local_settings='{}'
+[ -f "$clone/.claude/settings.local.json" ] && local_settings=$(cat "$clone/.claude/settings.local.json")
+jq -n --argjson e "$enabled" --argjson s "$local_settings" \
+  '$s | .enabledPlugins = ((.enabledPlugins // {}) + ($e | with_entries(select(.value == true) | .value = false)))' \
+  > "$clone/.claude/settings.local.json.new" && mv "$clone/.claude/settings.local.json.new" "$clone/.claude/settings.local.json"
+printf '.claude/settings.local.json\n' >> "$clone/.git/info/exclude"
+
+# --- plan-lint under the arm's home ---
+if ! (cd "$clone" && HOME="$dir/home" timeout 120 bash "$plugin/scripts/plan-lint" "$plan") > "$dir/out/plan-lint.txt" 2>&1; then
+  cat "$dir/out/plan-lint.txt" >&2
+  wab_die 1 "the $arm plan-lint failed on $plan"
+fi
+
+# --- the arm's record ---
+claude_version=$(timeout 30 "$WAB_CLAUDE" --version 2>/dev/null | head -n 1 | tr -d '\r')
+acw=null
+for f in "$WAB_CLAUDE_CONFIG/settings.json" "$clone/.claude/settings.json" "$clone/.claude/settings.local.json"; do
+  [ -f "$f" ] || continue
+  v=$(jq -r '.autoCompactWindow | numbers | floor' < "$f" 2>/dev/null | tr -d '\r')
+  [ -z "$v" ] || acw=$v
+done
+if [ "$arm" = dforge ]; then
+  parallelism=sequential
+else
+  parallelism=$(header_value Parallelism "$clone/$plan")
+  parallelism=${parallelism:-sequential}
+fi
+jq -n --arg arm "$arm" --arg run "$run" --arg plan "$plan" --arg source "$WAB_SOURCE" --arg base "$base" \
+  --arg pluginCommit "$(git -C "$WAB_PLUGINS" rev-parse HEAD 2>/dev/null)" --arg pluginRoot "$plugin" \
+  --argjson pins "$pins" --arg model "$model" --arg effort "$effort" --arg parallelism "$parallelism" \
+  --arg claudeVersion "$claude_version" --argjson autoCompactWindow "$acw" \
+  --arg preparedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  '{arm: $arm, run: $run, plan: $plan, source: $source, base: $base, pluginCommit: $pluginCommit,
+    pluginRoot: $pluginRoot, pins: $pins, model: $model, effort: $effort, parallelism: $parallelism,
+    claudeVersion: (if $claudeVersion == "" then null else $claudeVersion end),
+    autoCompactWindow: $autoCompactWindow, darkmem: false, preparedAt: $preparedAt}' > "$dir/arm.json"
+
+[ "$check" -eq 1 ] || { wab_log "prepared $dir"; exit 0; }
+
+# --- --check: the plan's own setup and integration commands ---
+command_of() { # command_of LABEL — the plan's command for LABEL, or nothing for none
+  local v
+  v=$(header_value "$1" "$clone/$plan")
+  case $v in '`'*) v=$(sed -E 's/^`([^`]*)`.*/\1/' <<<"$v") ;; esac
+  case $v in ''|none|none\ *) ;; *) printf '%s' "$v" ;; esac
+}
+# timeout signals only the process it starts, so the command gets its own
+# process group and the whole group is killed at the limit.
+bounded() { # bounded SECONDS COMMAND
+  local waited=0 pid
+  (cd "$clone" && exec env HOME="$dir/home" GOCACHE="$dir/gocache" setsid bash -c "$2") &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$waited" -ge "$1" ]; then
+      kill -TERM -- "-$pid" 2>/dev/null
+      sleep 5
+      kill -KILL -- "-$pid" 2>/dev/null
+      break
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  wait "$pid"
+}
+for label in 'Worktree setup' 'Integration check'; do
+  cmd=$(command_of "$label")
+  [ -n "$cmd" ] || continue
+  wab_log "check: $label: $cmd"
+  if ! bounded 7200 "$cmd" > "$dir/out/check-${label// /-}.log" 2>&1; then
+    printf 'check-failed\n' > "$dir/state"
+    wab_die 1 "check failed: $label (log: $dir/out/check-${label// /-}.log)"
+  fi
+done
+wab_log "prepared and checked $dir"
