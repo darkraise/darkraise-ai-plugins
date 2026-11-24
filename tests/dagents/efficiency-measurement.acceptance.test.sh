@@ -60,12 +60,16 @@ for item in 1 2 3 4 5 7 8 9 10 markers report; do
   missing=""
   while IFS= read -r c; do
     [ -n "$c" ] || continue
-    grep -qF -- "${c#*::}" "$ROOT/${c%%::*}" 2>/dev/null || missing="$missing ${c}"
+    # A case counts where it is defined: `# --- name` in a shell suite, `test('name'` in a mod suite.
+    case $c in *.ts::*) def="test('${c#*::}'" ;; *) def="# --- ${c#*::}" ;; esac
+    grep -qF -- "$def" "$ROOT/${c%%::*}" 2>/dev/null || missing="$missing ${c}"
   done <<<"$cases"
-  if [ -n "$cases" ] && [ -z "$missing" ]; then got=mirrored
+  # Every mapped case must exist; an n/a row stands in only for an item with none.
+  if [ -n "$missing" ]; then got="missing:$missing"
+  elif [ -n "$cases" ]; then got=mirrored
   elif tr -d '\r' 2>/dev/null < "$NA" | awk -F'\t' -v i="$item" '$1 == i && $2 != "" { f = 1 } END { exit !f }'; then got="n/a"
-  else got="neither:${missing:- no case}"; fi
-  check "mirror_audit: polish $item is mirrored or n/a" "$( [ "${got#neither}" = "$got" ] && echo ok || echo "$got")" "ok"
+  else got="neither: no case"; fi
+  check "mirror_audit: polish $item is mirrored or n/a" "$(case $got in mirrored|n/a) echo ok ;; *) echo "$got" ;; esac)" "ok"
 done
 # Polish 5 is mirrored for the Codex family only: the rest must be recorded n/a.
 check "mirror_audit: polish 5's panel and agy runner are recorded n/a" \
