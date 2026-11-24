@@ -176,7 +176,6 @@ cenv="$WAB_ROOT/dforge-3/clone/check-env.txt"
 check "prepare_check_blocks: the check runs under the launch environment" \
   "$(grep -cxE "HOME=$WAB_ROOT/dforge-3/home|GOCACHE=$WAB_ROOT/dforge-3/gocache|GIT_ALLOW_PROTOCOL=file|GIT_SSH_COMMAND=false|GH_CONFIG_DIR=$WAB_ROOT/dforge-3/gh|IS_SANDBOX=1" "$cenv")" "6"
 check "prepare_check_blocks: and none of the caller's tokens or sockets" "$(grep -cE '^(GH_TOKEN|SSH_AUTH_SOCK)=' "$cenv")" "0"
-
 # --- prepare_source_untouched ---
 printf 'dirty\n' >> "$TMP/src/greet.sh"
 git -C "$TMP/src" stash -q
@@ -218,12 +217,24 @@ if [ "\${1:-}" = --version ]; then echo "9.9.9 (Claude Code)"; exit 0; fi
 printf '%s\n' "\$@" > "\$T/claude.argv"
 env > "\$T/claude.env"
 echo \$\$ > "\$T/claude.pid"
+if [ -e "\$T/orphan" ]; then setsid sleep 300 & echo \$! > "\$T/orphan.pid"; fi
+if [ -e "\$T/beat" ] || [ -e "\$T/finish-then-exit" ]; then
+  sid=\$(awk 'p { print; exit } \$0 == "--session-id" { p = 1 }' "\$T/claude.argv")
+  mkdir -p "\$HOME/.claude/dforge/sessions/cockpit" .dforge/sdd
+  : > "\$HOME/.claude/dforge/sessions/cockpit/\$sid"
+fi
+if [ -e "\$T/finish-then-exit" ]; then
+  sleep 1
+  printf '{"active":false,"phase":"finish"}\\n' > .dforge/sdd/auto-run.json
+  exit 0
+fi
 [ -e "\$T/hang" ] && exec sleep 300
 exit 0
 EOF
 STUB_PLUGINS="$TMP/stub-plugins"
 mkdir -p "$STUB_PLUGINS/plugins/dforge/scripts"
 printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> %q\n' "$TMP/auto-run.log" > "$STUB_PLUGINS/plugins/dforge/scripts/auto-run"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$STUB_PLUGINS/plugins/dforge/scripts/next-step"
 chmod +x "$TMP/tmux" "$TMP/claude-rec"
 export WAB_TMUX="$TMP/tmux"
 launch() { # launch ARM RUN [ARGS...] — out and status, with every stub and WAB_MAX_SECONDS ${MAXS:-3}
@@ -285,14 +296,40 @@ check "launch_timeout: kills its own tmux session" "$(grep -c '^kill-session -t 
 sleep 1
 check "launch_timeout: the nested session is gone" "$(kill -0 "$(cat "$TMP/claude.pid")" 2>/dev/null && echo alive || echo gone)" "gone"
 
+# --- launch_tree_before_session: a process that left the session's group still dies ---
+touch "$TMP/orphan"
+prep dforge tree
+MAXS=2 launch dforge tree
+sleep 1
+check "launch_tree_before_session: a setsid child of the nested session is killed" \
+  "$(kill -0 "$(cat "$TMP/orphan.pid")" 2>/dev/null && echo alive || echo gone)" "gone"
+kill -KILL "$(cat "$TMP/orphan.pid")" 2>/dev/null
+rm -f "$TMP/orphan"
+
+# --- launch_finish_then_exit: a run that finishes as its session ends ---
+touch "$TMP/finish-then-exit"
+prep dforge finish
+MAXS=20 launch dforge finish
+check "launch_finish_then_exit: recorded finished, not stopped" "$(cat "$WAB_ROOT/dforge-finish/state")" "finished"
+rm -f "$TMP/finish-then-exit"
+
 # --- a launch stopped by a signal ---
 : > "$TMP/auto-run.log"
 prep dforge 11
-(MAXS=60 launch dforge 11) &
+mkdir -p "$TMP/sleepbin"
+printf '#!/bin/sh\necho "$$ $*" >> %q\nexec %q "$@"\n' "$TMP/sleep.pids" "$(command -v sleep)" > "$TMP/sleepbin/sleep"
+chmod +x "$TMP/sleepbin/sleep"
+touch "$TMP/beat"
+(PATH="$TMP/sleepbin:$PATH" MAXS=120 launch dforge 11) &
 lpid=$!
-for _ in $(seq 50); do [ -f "$TMP/tmux-wab-dforge-11.pid" ] && break; sleep 0.2; done
+for _ in $(seq 100); do [ -f "$TMP/tmux-wab-dforge-11.pid" ] && grep -q ' 30$' "$TMP/sleep.pids" 2>/dev/null && break; sleep 0.2; done
 kill -TERM $(pgrep -f "evals/workflow-ab/launch dforge 11$")
+t0=$(date +%s)
 wait "$lpid" 2>/dev/null
+# A sleep left running holds the launch's output open until it ends.
+check "launch_interrupted: the watch loop's 30 s sleep ends with the launch" \
+  "$(grep -c ' 30$' "$TMP/sleep.pids") $(($(date +%s) - t0 < 15))" "1 1"
+rm -f "$TMP/beat"
 check "launch_interrupted: a signalled launch writes stopped and stops its run" \
   "$(cat "$WAB_ROOT/dforge-11/state") $(grep -c ' stop --reason workflow-ab: stopped$' "$TMP/auto-run.log") $([ -f "$TMP/tmux-wab-dforge-11.pid" ] && echo left || echo killed)" "stopped 1 killed"
 
@@ -327,6 +364,9 @@ prep dforge 12
 lpid=$!
 for _ in $(seq 50); do [ -f "$WAB_ROOT/dforge-12/settings-repair" ] && [ -f "$TMP/tmux-wab-dforge-12.pid" ] && break; sleep 0.2; done
 jq '. + {"skipDangerousModePermissionPrompt": true}' < "$TMP/dotfiles/settings.json" > "$TMP/dotfiles/s.new" && mv "$TMP/dotfiles/s.new" "$TMP/dotfiles/settings.json"
+prep dforge concurrent
+check "settings_repair_live_launch: another command leaves a running launch's key and marker" \
+  "$(jq .skipDangerousModePermissionPrompt "$TMP/dotfiles/settings.json") $([ -f "$WAB_ROOT/dforge-12/settings-repair" ] && echo kept)" "true kept"
 kill -TERM $(pgrep -f "evals/workflow-ab/launch dforge 12$")
 wait "$lpid" 2>/dev/null
 check "settings_repair_after_kill: a symlinked settings.json keeps its link, the key removed at its target" \

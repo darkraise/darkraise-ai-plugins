@@ -81,7 +81,7 @@ wab_env "$dir"
 tm() { "$WAB_TMUX" "$@"; }
 "$WAB_TMUX" has-session -t "=$name" 2>/dev/null && wab_die 1 "tmux session $name already exists"
 
-pane_pid=""
+pane_pid="" sleep_pid=""
 kill_tree() { # kill_tree PID — the process and every descendant, children first
   local child
   for child in $(pgrep -P "$1" 2>/dev/null); do kill_tree "$child"; done
@@ -89,12 +89,13 @@ kill_tree() { # kill_tree PID — the process and every descendant, children fir
 }
 outcome="" launched=0
 cleanup() {
+  [ -z "$sleep_pid" ] || kill "$sleep_pid" 2>/dev/null
   if [ -n "$pane_pid" ]; then
     # The tree first: once kill-session ends the pane process, its children
     # are reparented and pgrep -P no longer finds them.
     kill_tree "$pane_pid"
     tm kill-session -t "=$name" 2>/dev/null
-    pane_pid=""
+    pane_pid="" sleep_pid=""
   fi
   wab_settings_repair
 }
@@ -146,6 +147,13 @@ seed() {
   } >> "$dir/out/seed.log" 2>&1
 }
 
+run_state() { # run_state — finished, stopped or nothing, from the arm's auto-run.json
+  [ -f "$state_file" ] || return 0
+  if [ -n "$(jq -r '.stopped // empty' < "$state_file" 2>/dev/null)" ]; then echo stopped
+  elif [ "$(jq -r '[.active, .phase] | map(tostring) | join(" ")' < "$state_file" 2>/dev/null)" = "false finish" ]; then echo finished
+  fi
+}
+
 beat="$dir/home/.claude/$arm/sessions/cockpit/$sid"
 started=$(date +%s)
 stage=startup trusted=0 bypassed=0
@@ -153,6 +161,8 @@ while :; do
   now=$(date +%s)
   if [ $((now - started)) -ge "$max_seconds" ]; then outcome=timed-out; break; fi
   if ! tm has-session -t "=$name" 2>/dev/null; then
+    # The run may have finished between the last poll and the session's end.
+    if [ "$stage" = watch ] && [ "$(run_state)" = finished ]; then outcome=finished; break; fi
     wab_log "the nested session ended before the run did"
     outcome=stopped
     break
@@ -187,11 +197,8 @@ while :; do
         if [[ $current =~ ^[A-Za-z0-9-]+$ ]] && ! grep -qxF "$current" "$dir/sessions"; then
           printf '%s\n' "$current" >> "$dir/sessions"
         fi
-        if [ -n "$(jq -r '.stopped // empty' < "$state_file" 2>/dev/null)" ]; then outcome=stopped; break; fi
-        if [ "$(jq -r '[.active, .phase] | map(tostring) | join(" ")' < "$state_file" 2>/dev/null)" = "false finish" ]; then
-          outcome=finished
-          break
-        fi
+        outcome=$(run_state)
+        [ -z "$outcome" ] || break
       fi
       wait_for=30
       ;;
@@ -200,7 +207,9 @@ while :; do
   [ "$left" -lt "$wait_for" ] && wait_for=$((left > 0 ? left : 1))
   # In the background, so a signal's trap runs at once rather than after it.
   sleep "$wait_for" &
-  wait $!
+  sleep_pid=$!
+  wait "$sleep_pid"
+  sleep_pid=""
 done
 
 end_run "$outcome"

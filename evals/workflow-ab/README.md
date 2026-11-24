@@ -73,7 +73,7 @@ plan`, `attach --plan`, `next-step`, `switch`, and a first prompt answered
 `Auto run: switching`). Every session id the run binds is appended to
 `sessions`. Every 30 seconds it reads the run's `auto-run.json`: `finished`
 once the run is inactive in its finish phase with no stop reason, `stopped`
-when it has one. At `--max-minutes` (default 720; `WAB_MAX_SECONDS` overrides
+when it has one or when the session ends before the run finishes. At `--max-minutes` (default 720; `WAB_MAX_SECONDS` overrides
 it) it stops the bound run, kills its tmux session and the session's process
 tree, and writes `timed-out`. A launch killed by a signal stops the run the
 same way and writes `stopped`.
@@ -147,6 +147,7 @@ records in `<run>/settings-repair` whether the key was there before, and
 when it was not, its exit, or the start of the next `prepare`, `launch`,
 `collect` or `compare` after a killed one, removes the key with an atomic rewrite (at the link's target when
 `settings.json` is a symbolic link) that leaves every other byte as it was.
+A marker whose launch is still running is left to that launch.
 
 ## Tests
 

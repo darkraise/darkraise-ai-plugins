@@ -66,6 +66,8 @@ wab_settings_repair() {
   local marker file before tmp status=0
   for marker in "$WAB_ROOT"/*/settings-repair; do
     [ -f "$marker" ] || continue
+    # A launch still running owns its marker: its own exit repairs it.
+    "$WAB_TMUX" has-session -t "=wab-$(basename "$(dirname "$marker")")" 2>/dev/null && continue
     before=$(sed -n 's/^keyBefore=//p' "$marker")
     file=$(sed -n 's/^file=//p' "$marker")
     # A symlinked settings.json is rewritten at its target, so the link stays.
