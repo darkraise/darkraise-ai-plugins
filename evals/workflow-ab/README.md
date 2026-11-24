@@ -193,3 +193,11 @@ sessions each (seeding, execution, finishing), and ended `finished`: dforge in
 5 minutes, dagents in 9. The owner's `settings.json` hashed the same before
 and after both runs (it already held `skipDangerousModePermissionPrompt`, so
 the repair had nothing to remove), and neither clone gained a remote.
+
+Again on 2026-11-24 at 721e6b1d, under real tmux and the sandbox with the
+run's own config directory: `prepare --check`, `launch --max-minutes 60`,
+`collect` and `compare` ran the fixture under each arm, one after the other.
+Both were seeded through the switch path and ended `finished` (dforge in
+4 minutes, dagents in 7); `collect` found three transcripts per run in the
+run's config directory, and the owner's `settings.json` hashed the same
+before and after.
