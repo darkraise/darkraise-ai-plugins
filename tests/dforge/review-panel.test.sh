@@ -260,5 +260,23 @@ check "no_run_no_record: outside an auto run a quota failure writes no state fil
 PANEL_CODEX_RUNNER="$TMP/codex-quota-runner" qpanel
 check "no_run_no_record: and the next panel runs codex" "$(calls codex)" "2"
 
+# --- failures_book_total ---
+cat > "$TMP/codex-denied-runner" <<EOF
+#!/usr/bin/env bash
+printf 'codex-judge m/high status=FAILED exit=1 out=- evidence=none reason=denied\n'
+EOF
+chmod +x "$TMP/codex-denied-runner"
+runrepo "$RUN"
+CODEX_STATUS=FAILED PANEL_BOUND_SECONDS=3 PANEL_AGY_RUNNER="$TMP/hang-runner" qpanel
+check "failures_book_total: a FAILED and a TIMEOUT line add 2 panel failures" \
+  "$(grep -c -e ' status=FAILED ' -e ' status=TIMEOUT ' <<<"$out"):$(jq -r .totals.panelFailures "$QS")" "2:2"
+PANEL_CODEX_RUNNER="$TMP/codex-denied-runner" qpanel
+check "failures_book_total: a reason=denied line counts too" "$(jq -r .totals.panelFailures "$QS")" "3"
+qpanel
+check "failures_book_total: OK lines add nothing" "$(jq -r .totals.panelFailures "$QS")" "3"
+runrepo '{"active":true,"session":"s2","phase":"execute","decisions":[],"rulings":[]}'
+CODEX_STATUS=FAILED qpanel
+check "failures_book_total: a run bound to another session books nothing" "$(jq -r '.totals.panelFailures // 0' "$QS")" "0"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

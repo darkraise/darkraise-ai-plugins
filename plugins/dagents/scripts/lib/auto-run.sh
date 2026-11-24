@@ -172,6 +172,7 @@ ar_start() {
     phase: "spec", regime: "normal", pending: null, resumePrompt: null, launch: null,
     failures: 0, compactions: 0, resumes: 0, decisions: [], rulings: [],
     setupDue: false, stalls: 0, stalledAt: null, compactionsSinceTask: 0,
+    totals: {compactionSeconds: 0, holds: 0, stalls: 0, apiErrors: 0, reconcilePrompts: 0, panelFailures: 0},
     isolation: $iso, branch: null, branchBase: null, carried: null,
     version: $version, root: $root
   }' --arg version "$(ar_plugin_version)" --arg root "$AR_PLUGIN_ROOT" || return $?
@@ -300,6 +301,30 @@ ar_review_skip() {
 ar_review_skipped() {
   ar_state | ar_jq -e --arg f "$1" --argjson now "$(date +%s)" \
     'any((.reviewSkips // [])[]; .family == $f and (.until == null or .until > $now))' >/dev/null 2>&1
+}
+
+# ar_total NAME [N] — add N (default 1) to the run's totals.NAME. No binding
+# check, so a hook of the owning session books even while the binding moves;
+# a stopped or finished run is left as it is.
+ar_total() {
+  local path
+  path=$(ar_path) || return 1
+  [ -f "$path" ] || return 1
+  dr_locked "$path" ar_put "$path" 'if .active == true then .totals[$n] = ((.totals[$n] // 0) + $k) else . end' \
+    --arg n "$1" --argjson k "${2:-1}"
+}
+
+# ar_counters — the run's totals, one per line (reference/auto-run.md); the
+# version line only when a mismatch was recorded.
+ar_counters() {
+  ar_state | ar_jq -r '(.totals // {}) as $t
+    | "compactions: \(.compactions // 0) (\($t.compactionSeconds // 0) s)",
+      "holds: \($t.holds // 0)",
+      "stalls: \($t.stalls // 0)",
+      "API errors: \($t.apiErrors // 0)",
+      "reconcile prompts: \($t.reconcilePrompts // 0)",
+      "panel failures: \($t.panelFailures // 0)",
+      (.mismatch | select(. != null) | "version mismatch: \(.run) at \(.root) vs \(.call) at \(.callRoot)")'
 }
 
 ar_status() {
@@ -690,13 +715,16 @@ ar_resumed() {
 # finalCompacted, after which every budget line of the run says ok. An
 # execute-phase compaction counts toward AR_COMPACTION_CAP, reached without a
 # completed task, which stops the run (return 5): a task that cannot fit in a
-# window would otherwise loop.
+# window would otherwise loop. --seconds N adds the compaction's duration to
+# totals.compactionSeconds.
 ar_compacted() {
-  local n
+  local n secs=0
+  [ "${1:-}" = --seconds ] && secs=$2
   ar_update '.compactions += 1 | .failures = 0 | .pending = "after-compact"
+    | .totals.compactionSeconds = ((.totals.compactionSeconds // 0) + $secs)
     | .finalCompacted = ((.finalCompacted // false) or .phase == "final" or .phase == "finish")
     | if .phase == "execute"
-      then .compactionsSinceTask = ((.compactionsSinceTask // 0) + 1) else . end' || return $?
+      then .compactionsSinceTask = ((.compactionsSinceTask // 0) + 1) else . end' --argjson secs "$secs" || return $?
   n=$(ar_get compactionsSinceTask)
   if [ "${n:-0}" -ge "$AR_COMPACTION_CAP" ]; then
     ar_stop "$AR_COMPACTION_CAP compactions without a completed task" || return $?
@@ -719,7 +747,8 @@ ar_failure() { # ar_failure [REASON] — return 5 when this failure stops the ru
 # (return 5).
 ar_stalled() {
   local n
-  ar_update '.stalls = ((.stalls // 0) + 1) | .stalledAt = $now' --argjson now "$(date +%s)" || return $?
+  ar_update '.stalls = ((.stalls // 0) + 1) | .stalledAt = $now | .totals.stalls = ((.totals.stalls // 0) + 1)' \
+    --argjson now "$(date +%s)" || return $?
   n=$(ar_get stalls)
   if [ "${n:-0}" -ge "$AR_STALL_CAP" ]; then
     ar_stop "$AR_STALL_CAP stalls without a completed task" || return $?
@@ -735,7 +764,7 @@ ar_api_error() {
     ar_update '.apiErrors = 0'
     return
   fi
-  ar_update '.apiErrors = ((.apiErrors // 0) + 1)' || return $?
+  ar_update '.apiErrors = ((.apiErrors // 0) + 1) | .totals.apiErrors = ((.totals.apiErrors // 0) + 1)' || return $?
   n=$(ar_get apiErrors)
   if [ "${n:-0}" -ge "$AR_API_ERROR_CAP" ]; then
     ar_stop "$AR_API_ERROR_CAP API errors in a row" || return $?

@@ -329,5 +329,22 @@ STUB_PROMPT_LOG="$TMP/sent-final" seat final --out "$TMP/o.md" --base main >/dev
 check "prompt_says_headless: a composed final prompt opens with it too" "$(head -n 1 "$TMP/sent-final" 2>/dev/null)" \
   "headless mode denies shell commands; review from the files given"
 
+# --- failures_book_total: a seat that ran and failed books the run's total ---
+mkdir -p "$(dirname "$RUNSTATE")"
+jq -n '{active: true, session: "s1", phase: "execute", decisions: [], rulings: []}' > "$RUNSTATE"
+pf() { jq -r '.totals.panelFailures // 0' "$RUNSTATE"; }
+open_session
+CLAUDE_CODE_SESSION_ID=s1 STUB_EMPTY=1 seat final --out "$TMP/o.md" --base main >/dev/null
+check "failures_book_total: a FAILED seat adds one" "$(pf)" "1"
+CLAUDE_CODE_SESSION_ID=s1 STUB_MODE=hang seat final --out "$TMP/o.md" --base main >/dev/null
+check "failures_book_total: a TIMEOUT seat adds one" "$(pf)" "2"
+CLAUDE_CODE_SESSION_ID=s1 seat final --out "$TMP/o.md" --base main >/dev/null
+check "failures_book_total: an OK seat adds nothing" "$(pf)" "2"
+CLAUDE_CODE_SESSION_ID=s1 GATE_STUB_LINE="$OFF" seat final --out "$TMP/o.md" --base main >/dev/null
+check "failures_book_total: a gate-off seat ran nothing and adds nothing" "$(pf)" "2"
+CLAUDE_CODE_SESSION_ID=s2 STUB_EMPTY=1 seat final --out "$TMP/o.md" --base main >/dev/null
+check "failures_book_total: another session's failure adds nothing" "$(pf)" "2"
+rm -rf "$TMP/work/.dagents"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

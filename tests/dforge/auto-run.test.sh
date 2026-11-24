@@ -1075,5 +1075,34 @@ rs_state "$D" '.pending = null | .apiErrors = 4'
 rs "$D" --session s1 task-complete >/dev/null 2>&1
 check "api_error_counts_apart: task-complete resets the count" "$(jq -r .apiErrors "$AES")" "0"
 
+# --- counters_after_events ---
+D="$TMP/ct1"; rs_repo "$D"
+rs_state "$D" '.pending = null | .compactions = 0 | .stalls = 0 | .apiErrors = 0 | .compactionsSinceTask = 0 | del(.totals)'
+CTS="$D/.dforge/sdd/auto-run.json"
+rs "$D" --session s1 compacted --seconds 120 >/dev/null 2>&1
+rs "$D" --session s1 stalled >/dev/null 2>&1
+rs "$D" --session s1 api-error >/dev/null 2>&1
+for t in holds reconcilePrompts panelFailures; do rs "$D" --session s1 total "$t" >/dev/null 2>&1; done
+rs "$D" --session s1 task-complete >/dev/null 2>&1
+rs "$D" --session s1 stop --reason x >/dev/null 2>&1
+rs_resume "$D"
+check "counters_after_events: resumed" "$status" "0"
+out=$(rs "$D" --session s2 counters 2>&1); status=$?
+check "counters_after_events: task-complete and resume keep the totals" "$status:$out" "0:compactions: 1 (120 s)
+holds: 1
+stalls: 1
+API errors: 1
+reconcile prompts: 1
+panel failures: 1"
+jq '.mismatch = {run: "5.1.1", root: "R1", call: "5.2.0", callRoot: "R2", at: "2026-01-01T00:00:00Z"}' "$CTS" > "$TMP/st" && mv "$TMP/st" "$CTS"
+check "counters_after_events: a recorded mismatch adds the version line" \
+  "$(rs "$D" --session s2 counters 2>&1 | sed -n '7,$p')" "version mismatch: 5.1.1 at R1 vs 5.2.0 at R2"
+check "counters_after_events: counters reads a run bound to another session" "$(rs "$D" --session s9 counters 2>/dev/null | wc -l | tr -d ' ')" "7"
+rs "$D" --session s2 stop --reason y >/dev/null 2>&1
+rs "$D" --session s2 total holds >/dev/null 2>&1
+check "counters_after_events: total leaves a stopped run as it is" "$(jq -r .totals.holds "$CTS")" "1"
+rs "$D" --session s2 total bogus >/dev/null 2>&1; status=$?
+check "counters_after_events: an unknown total is a usage error" "$status" "2"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

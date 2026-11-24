@@ -97,6 +97,11 @@ if (cd "$cwd" && bash "$HERE/auto-run" review-skipped codex) >/dev/null 2>&1; th
   exit 1
 fi
 quota_skip() { (cd "$cwd" && bash "$HERE/auto-run" review-skip codex) >/dev/null 2>&1 || true; }
+# A seat that ran and failed or timed out adds to the run's panelFailures total
+# when the run is bound to this session; a gate-off seat ran nothing.
+panel_failure() {
+  (cd "$cwd" && bash "$HERE/auto-run" pending >/dev/null 2>&1 && bash "$HERE/auto-run" total panelFailures) >/dev/null 2>&1 || true
+}
 
 # The session gate is the usability guard, on every kind and on a dry run: a
 # Codex this session may not use is never selected or run. Only `usable` is
@@ -169,6 +174,7 @@ valid_output() {
 # locate and version failures to the status line, and exiting 2 here would make
 # a caller that reads the line see nothing at all.
 if ! plugin_line=$(bash "$HERE/codex-plugin"); then
+  panel_failure
   printf 'codex-judge none/none status=FAILED exit=0 out=%s evidence=none\n' "$out"
   printf 'run-codex-review: %s\n' "$plugin_line" >&2
   exit 1
@@ -228,6 +234,7 @@ write_out() { # write_out <result-json>
 }
 
 status() { # status <model> <effort> <state> <exit>
+  case $3 in FAILED | TIMEOUT) panel_failure ;; esac
   printf 'codex-judge %s/%s status=%s exit=%s out=%s evidence=%s\n' \
     "$1" "$2" "$3" "$4" "$out" "$evidence"
 }
@@ -237,6 +244,7 @@ status() { # status <model> <effort> <state> <exit>
 # caller reads the status line and would otherwise see nothing at all.
 if [ "$kind" = final ]; then
   if ! prompt=$(compose_final_prompt); then
+    panel_failure
     printf 'codex-judge none/none status=FAILED exit=0 out=%s evidence=none\n' "$out"
     printf 'run-codex-review: cannot diff %s...HEAD in %s\n' "$base" "$cwd" >&2
     exit 1

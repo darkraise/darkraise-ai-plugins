@@ -405,6 +405,20 @@ out=$(HOME="$H2" stop s-5 'Done.' true)
 check "a hold count that cannot be written: the run stops" "$(jq -r .active "$STATE"):$(jq -r .stopped "$STATE" | grep -c 'without its sentinel')" "false:1"
 check "a hold count that cannot be written: one hold asks for the attended ending" "$(jq -r .reason <<<"$out" | grep -c '§Stopping')" "1"
 
+# --- hold_books_total ---
+date +%s > "$HOME/.claude/dforge/sessions/cockpit/s-6"
+(cd "$REPO" && bash "$AR" --session s-6 start --spec docs/s.md --register docs/r.md --force >/dev/null)
+check "hold_books_total: a new run starts with no holds" "$(jq -r .totals.holds "$STATE")" "0"
+stop s-6 'Done.' >/dev/null
+check "hold_books_total: a Stop hold adds one" "$(jq -r .totals.holds "$STATE")" "1"
+stop s-6 'Done.' true >/dev/null
+check "hold_books_total: a held retry adds another" "$(jq -r .totals.holds "$STATE")" "2"
+pend compact
+stop s-6 $'Done.\n\nAuto run: compacting' >/dev/null
+check "hold_books_total: a sentinel ending books nothing" "$(jq -r .totals.holds "$STATE")" "2"
+stop s-other 'Done.' >/dev/null
+check "hold_books_total: another session's stop books nothing" "$(jq -r .totals.holds "$STATE")" "2"
+
 # --- progress kept in darkmem: the mirror's ledgers are the ones read ---
 # --- a running service does not pass a plain stop (row 12) ---
 SVC="$TMP/service.jsonl"

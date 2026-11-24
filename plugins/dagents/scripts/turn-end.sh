@@ -163,6 +163,7 @@ if [ -n "$auto_pending" ]; then
   if ! { mkdir -p "$(dirname "$stamp")" && printf '%s\n' "$holds" > "$stamp.holds"; } 2>/dev/null; then
     holds=$((AUTO_HOLD_CAP + 1))
   fi
+  (cd "$root" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" total holds >/dev/null 2>&1) || true
   if [ "$holds" -gt "$AUTO_HOLD_CAP" ]; then
     rm -f "$stamp.holds" 2>/dev/null
     why="the turn ended ${AUTO_HOLD_CAP} times in a row without its sentinel line"
