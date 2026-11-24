@@ -180,6 +180,8 @@ function autoContinuePrompt(root: string, plan: string | null): string {
 const WATCHDOG_MS = 60_000
 const DEFER_CAP_MS = 1_800_000
 const STALL_MS = 180_000
+// An API-error ending is prompted again after this long.
+const API_ERROR_RETRY_MS = 30_000
 // How long a bound run may go with no live turn while only background work
 // holds it before the watchdog asks the session to look at that work, and how
 // many such prompts in a row may find the same launches running before the
@@ -210,6 +212,9 @@ const MOVES_DIR = /\b(?:cd|pushd|popd)\b|worktree/
 // The pending actions whose stage the watchdog arms again when no timer holds
 // it; a pending resume resubmits the run's first prompt.
 const WATCHED_STAGES: Readonly<Record<string, AutoStage>> = { compact: 'compact', clear: 'clear', resume: 'resume', switch: 'switch' }
+function apiErrorPrompt(root: string): string {
+  return `The last turn ended on an API error. Run \`bash "${root}/scripts/auto-run" status\`, continue the phase it names, and end the turn as reference/auto-run.md §Ending a turn says.`
+}
 function stallPrompt(root: string): string {
   return `The auto run stalled: the last turn ended without its sentinel line. Run \`bash "${root}/scripts/auto-run" status\`, continue the phase it names, and end the turn as reference/auto-run.md §Ending a turn says.`
 }
@@ -831,6 +836,11 @@ export const register: Register = on => {
         detail: why,
       }))
       await trackAutoRun($)
+      if (e.reason === 'error' && !isKeptWarm) await bookApiError($)
+      else if (e.reason === 'answer' && S.isApiErrorBooked) {
+        S.isApiErrorBooked = false
+        await autoRunCall($, await $.session.id(), ['api-error', '--clear'])
+      }
       S.compactWindow = await readCompactWindow($)
       await readStyle($)
       await readRun($)
@@ -2792,6 +2802,10 @@ const S = {
   autoDeferredSince: null as number | null,
   // When the last stalled call failed: the watchdog waits STALL_MS before the next.
   stallFailedAt: null as number | null,
+  // A main turn of the bound run ended on an API error the run booked: the next
+  // turn that answers clears the count. The timer sends the re-prompt.
+  isApiErrorBooked: false,
+  apiErrorTimer: null as Timer | null,
   // When the watchdog last submitted a reconcile prompt, and how many in a row
   // found the same launches running under the same pending action.
   reconciledAt: null as number | null,
@@ -3502,6 +3516,54 @@ async function markPartial($: EngineInterface) {
 // while a turn, background work, a stage or an Esc holds the session, and
 // never within STALL_MS of the latest of this session's start, its last
 // turn's end, the last stage and the last nudge.
+// A main turn of the bound run that ended on an API error (the transcript's last
+// model record says isApiErrorMessage) is booked apart from stalls, and the
+// session is prompted again from a timer, never inside the turn's hook. The
+// tenth in a row stops the run, as the stall cap does.
+async function bookApiError($: EngineInterface) {
+  const auto = await readAutoRun($)
+  if (auto === null || !auto.active || !(await endedOnApiError($))) return
+  const code = await autoRunCall($, await $.session.id(), ['api-error'])
+  if (code !== 0 && code !== 5) return
+  S.autoActedAt = await $.clock.now()
+  S.isApiErrorBooked = code === 0
+  S.apiErrorTimer?.cancel()
+  S.apiErrorTimer = $.clock.after(code === 5 ? 0 : API_ERROR_RETRY_MS, () => {
+    S.apiErrorTimer = null
+    if (code === 5) void endStoppedRun($).catch(() => undefined)
+    else if (!S.isTurnLive) void $.prompt.submit({ text: apiErrorPrompt($.plugin.root), asUser: true }).catch(() => undefined)
+  })
+}
+
+// Whether the session transcript's last model record is an API error; only
+// the file's tail is read. The transcript is the one the session-start hook
+// recorded for this session.
+async function endedOnApiError($: EngineInterface): Promise<boolean> {
+  const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
+  if (!home) return false
+  const session = await $.session.id()
+  const record = await $.fs.read(`${home.replace(/[\\/]+$/, '')}/.claude/dforge/sessions/by-id/${session.replace(/[^A-Za-z0-9]/g, '-')}.json`).catch(() => null)
+  let path: unknown = null
+  try {
+    path = record === null ? null : (JSON.parse(String(record)) as { transcript_path?: unknown }).transcript_path
+  } catch {
+    return false
+  }
+  if (typeof path !== 'string' || path === '') return false
+  const ran = await $.process.run(['bash', '-c', 'tail -c 262144 -- "$1"', 'tail', path], { timeoutMs: 10_000 }).catch(() => null)
+  if (ran === null || ran.exitCode !== 0) return false
+  for (const line of ran.stdout.split('\n').reverse()) {
+    let entry: { type?: unknown; isApiErrorMessage?: unknown }
+    try {
+      entry = JSON.parse(line) as typeof entry
+    } catch {
+      continue
+    }
+    if (entry.type === 'assistant') return entry.isApiErrorMessage === true
+  }
+  return false
+}
+
 async function watchdogTick($: EngineInterface) {
   await beat($)
   if (S.heldDone !== null && !S.isMainTurn && (await $.clock.now()) - S.heldDone.heldAt > DEFER_CAP_MS) {

@@ -109,6 +109,7 @@ import { drawSettings } from '../hooks/cockpit/settings-view'
 import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from '../hooks/cockpit/svg'
 import SERVICE_COMMANDS from './fixtures/service-commands.mjs'
 import fastModeCases from './fixtures/fast-mode/cases.mjs'
+import API_ERROR_RECORDS from './fixtures/api-error-transcript.mjs'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const runsText = (runs: Run[]) => runs.map(one => one.text).join('')
@@ -312,6 +313,8 @@ type World = {
   submitFailures?: number
   /** Each scripts/auto-run call, after the script's path. */
   autoRuns?: string[]
+  /** The session transcript's text, which the cockpit reads the tail of. */
+  transcript?: string
   /** The exit code of an auto-run command, by its command word; 0 unless said. */
   autoRunExits?: Record<string, number>
   /** The auto-run state file the fake script updates, as the real one would. */
@@ -535,6 +538,10 @@ function world(on: On, w: World) {
       if (out === 'timeout') return { deny: 'dforge: $.process.run(bash) aborted: still running after 20000ms' }
       const { exitCode, stdout } = out ?? storedBlock(w, handoff)
       return { value: { exitCode, stdout, stderr: exitCode === 0 ? '' : 'next-step: failed\n', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
+    if (argv.includes('tail -c 262144 -- ')) {
+      const text = w.transcript
+      return { value: { exitCode: text === undefined ? 1 : 0, stdout: text ?? '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
     const script = '/scripts/auto-run '
     if (argv.includes(script)) {
@@ -7923,6 +7930,48 @@ describe('auto run', () => {
     await clock.advance(240_000)
     expect(w.autoRuns).toContain('--session sess-1 stalled')
     expect(w.prompts).toHaveLength(1)
+  })
+
+  // The session-start record that names the transcript, and the transcript.
+  const API_ERROR_TEXT = API_ERROR_RECORDS.map(one => JSON.stringify(one)).join('\n') + '\n'
+  const byId = () => ({ '/home/me/.claude/dforge/sessions/by-id/sess-1.json': { text: JSON.stringify({ session_id: 'sess-1', transcript_path: '/home/me/.claude/projects/p/sess-1.jsonl' }) } })
+
+  test('api-error ending re-prompts', async ($, on) => {
+    const files = { ...autoFiles({ pending: null }), ...byId() }
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], transcript: API_ERROR_TEXT }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'error' })
+    await clock.advance(60_000)
+    expect(w.autoRuns?.filter(call => call === '--session sess-1 api-error')).toHaveLength(1)
+    expect(w.prompts).toEqual([expect.stringMatching(/^The last turn ended on an API error\. Run `bash "[^"]*\/scripts\/auto-run" status`/)])
+    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
+  })
+
+  test('empty answer stays a stall', async ($, on) => {
+    const files = { ...autoFiles({ pending: null }), ...byId() }
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], transcript: `${JSON.stringify(API_ERROR_RECORDS[0])}\n` }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await clock.advance(240_000)
+    expect(w.autoRuns).toContain('--session sess-1 stalled')
+    expect(w.autoRuns?.filter(call => call.includes(' api-error'))).toEqual([])
+  })
+
+  test('answer clears api errors', async ($, on) => {
+    const files = { ...autoFiles({ pending: null }), ...byId() }
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], transcript: API_ERROR_TEXT }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'error' })
+    await clock.advance(60_000)
+    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    await $.turn.complete({ answer: 'Task 4: complete.', durationMs: 1, isAborted: false, turnId: 't3', reason: 'answer' })
+    expect(w.autoRuns?.filter(call => call === '--session sess-1 api-error --clear')).toHaveLength(1)
   })
 
   test("a subagent's approval after a failed turn leaves the turn ended", async ($, on) => {
