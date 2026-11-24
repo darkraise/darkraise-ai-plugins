@@ -75,6 +75,40 @@ it) it stops the bound run, kills its tmux session and the session's process
 tree, and writes `timed-out`. A launch killed by a signal stops the run the
 same way and writes `stopped`.
 
+```
+evals/workflow-ab/collect ARM RUN
+```
+
+After a launch, copies the transcripts of the sessions listed in `sessions`
+(with their `subagents/`) from the owner's project directory for the clone
+into `out/transcripts/`, runs this repository's dforge copy of the usage
+report core over that run alone (the clone's marker file, ledger, plan and
+register), and writes `out/report.json` and `out/dispatches.json` (dispatch
+counts per family).
+
+```
+evals/workflow-ab/compare [--out FILE]
+```
+
+Writes the comparison note (default `<WAB_ROOT>/comparison.md`) over every
+run under `WAB_ROOT`: `## Runs` (each `arm.json`, runs that did not finish
+marked and listed), `## Per-task distributions` (min, median and max of
+turns, lookups, growth, cache writes and subagent share per arm, finished
+runs only, a group row counted once and divided by its task count),
+`## Groups`, and `## What this replay cannot decide`.
+
+### The w8 replay (run after merge)
+
+```
+export WAB_SOURCE=/root/repositories/darkpanel WAB_BASE=33bc6da6 \
+  WAB_PLAN=docs/dforge/plans/2026-11-04-v1-w8-panel-exposure.md
+evals/workflow-ab/prepare ARM RUN --check
+```
+
+Then, for runs 1 and 2 of each arm, `prepare ARM RUN`, `launch ARM RUN` and
+`collect ARM RUN`, and finally `compare`; the note is copied to
+`docs/dforge/notes/<date>-dforge-vs-dagents-replay.md`.
+
 ## Parameters (environment)
 
 | Name | Default | Meaning |

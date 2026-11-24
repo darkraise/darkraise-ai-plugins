@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# compare [--out FILE] — the comparison note over every run under WAB_ROOT:
+# each run's arm.json, per-task distributions per arm from the finished runs'
+# out/report.json (collect writes it), the group rows, and what the replay
+# cannot decide. Runs that did not finish are listed and left out of the
+# figures. Default FILE: <WAB_ROOT>/comparison.md. Parameters: README.md.
+# Exit: 0 written; 1 failed; 2 usage.
+set -uo pipefail
+
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
+usage() { wab_die 2 "usage: compare [--out FILE]"; }
+note="$WAB_ROOT/comparison.md"
+while [ $# -gt 0 ]; do
+  case $1 in
+    --out) [ $# -ge 2 ] && [ -n "$2" ] || usage; note=$2; shift 2 ;;
+    *) usage ;;
+  esac
+done
+wab_check_root
+command -v jq >/dev/null 2>&1 || wab_die 1 "jq is required"
+wab_settings_repair || wab_die 1 "cannot remove skipDangerousModePermissionPrompt left by an earlier launch"
+command -v node >/dev/null 2>&1 || wab_die 1 "node is required"
+
+runs=$(
+  for d in "$WAB_ROOT"/*/; do
+    d=${d%/}
+    [ -f "$d/arm.json" ] || continue
+    report=null
+    [ -f "$d/out/report.json" ] && report=$(cat "$d/out/report.json")
+    jq -n --arg name "$(basename "$d")" --arg state "$(tr -d '\r\n' < "$d/state" 2>/dev/null)" \
+      --slurpfile arm "$d/arm.json" --argjson report "$report" \
+      '{name: $name, state: (if $state == "" then "not launched" else $state end), arm: $arm[0], report: $report}' \
+      || exit 1
+  done | jq -s .
+) || wab_die 1 "cannot read the runs under $WAB_ROOT"
+[ "$(jq length <<<"$runs")" -gt 0 ] || wab_die 1 "no prepared run under $WAB_ROOT"
+
+mkdir -p "$(dirname "$note")" || wab_die 1 "cannot create the directory of $note"
+node -e '
+const runs = JSON.parse(require("fs").readFileSync(0, "utf8"));
+const out = ["# dforge vs dagents replay", "", "## Runs", ""];
+const kept = runs.filter((r) => r.state === "finished" && r.report);
+const left = runs.filter((r) => !kept.includes(r));
+for (const r of runs) {
+  const mark = kept.includes(r) ? "" : " — excluded from the figures";
+  out.push(`### ${r.name}: ${r.state}${mark}`, "", "```json", JSON.stringify(r.arm, null, 2), "```", "");
+}
+out.push(`Excluded runs: ${left.length ? left.map((r) => `${r.name} (${r.state}${r.report ? "" : ", no report"})`).join(", ") : "none"}.`, "");
+const sum = (o, k) => Object.values(o || {}).reduce((s, u) => s + (u[k] || 0), 0);
+const METRICS = [
+  ["turns", (t) => t.turns || 0],
+  ["lookups", (t) => t.lookups || 0],
+  ["growth", (t) => t.growth || 0],
+  ["cache writes", (t) => (t.cacheWrite5m || 0) + (t.cacheWrite1h || 0)],
+];
+const rows = (r) => (r.report.plans || []).flatMap((p) => p.tasks || []);
+const median = (xs) => { const s = [...xs].sort((a, b) => a - b), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+const fmt = (x) => (Number.isInteger(x) ? String(x) : x.toFixed(3).replace(/0+$/, ""));
+out.push("## Per-task distributions", "",
+  "Finished runs only. A group row is one observation, each figure divided by its task count; subagent share is subagent turns over all turns.", "",
+  "| Arm | Metric | n | Min | Median | Max |", "|---|---|---|---|---|---|");
+const arms = [...new Set(kept.map((r) => r.arm.arm))].sort();
+for (const arm of arms) {
+  const obs = kept.filter((r) => r.arm.arm === arm).flatMap(rows);
+  const per = (f) => obs.map((t) => f(t) / Math.max(1, (t.tasks || []).length));
+  const series = METRICS.map(([name, f]) => [name, per(f)]);
+  series.push(["subagent share", obs.map((t) => { const s = sum(t.subagents, "turns"), all = (t.turns || 0) + s; return all ? s / all : 0; })]);
+  for (const [name, xs] of series) {
+    if (!xs.length) continue;
+    out.push(`| ${arm} | ${name} | ${xs.length} | ${fmt(Math.min(...xs))} | ${fmt(median(xs))} | ${fmt(Math.max(...xs))} |`);
+  }
+}
+out.push("", "## Groups", "");
+let groups = 0;
+for (const r of kept) for (const t of rows(r)) {
+  if (!t.group) continue;
+  groups++;
+  const k = t.tasks.length;
+  out.push(`- ${r.name} tasks ${t.tasks.join(", ")}: turns ${t.turns || 0} (${fmt((t.turns || 0) / k)} per task), lookups ${t.lookups || 0} (${fmt((t.lookups || 0) / k)} per task)`);
+}
+if (!groups) out.push("No group rows in the finished runs.");
+out.push("", "Per-task spread inside a group is not measurable.", "",
+  "## What this replay cannot decide", "",
+  "- A plan-level cost gap between the arms: two runs per arm on one plan show per-task mechanism metrics and their spread, not a plan-level difference.",
+  "- P1.1'"'"'s effect (fewer turns per task): both dforge runs already carry it, so no run here lacks it.", "");
+process.stdout.write(out.join("\n"));
+' <<<"$runs" > "$note.tmp" && [ -s "$note.tmp" ] || { rm -f "$note.tmp"; wab_die 1 "cannot write $note"; }
+mv -f "$note.tmp" "$note"
+wab_log "wrote $note"

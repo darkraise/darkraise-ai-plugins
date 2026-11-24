@@ -320,5 +320,93 @@ check "settings_repair_after_kill: a symlinked settings.json keeps its link, the
 check "settings_repair_after_kill: a key present before is kept" "$(cat "$WAB_ROOT/dforge-5/settings-key") $(cmp -s "$cfg/settings.json" "$TMP/settings.orig" && echo equal || echo differs)" "keyBefore=present equal"
 rm -f "$TMP/hang"
 
+# --- collect_runs_report ---
+UFX="$HERE/fixtures/usage/basic"
+CR="$WAB_ROOT/dforge-20"
+mkdir -p "$CR/clone/docs/plans" "$CR/clone/.dforge/sdd/p"
+git init -q "$CR/clone"
+printf '{"arm": "dforge", "plan": "docs/plans/p.md"}\n' > "$CR/arm.json"
+printf '# P\n\n### Task 1: one\n\n### Task 2: two\n\n### Task 3: three\n' > "$CR/clone/docs/plans/p.md"
+printf '# SDD ledger — plan: docs/plans/p.md\nTask 1: complete (commits a..b, unreviewed)\n' > "$CR/clone/.dforge/sdd/p/progress.md"
+CPROJ="$WAB_CLAUDE_CONFIG/projects/$(printf '%s' "$CR/clone" | tr -c 'A-Za-z0-9' '-')"
+mkdir -p "$CPROJ"
+cp -R "$UFX/proj/." "$CPROJ/"
+printf '%s\n' '{"type": "assistant", "isSidechain": false, "timestamp": "2026-01-01T00:03:00Z", "message": {"id": "m9", "model": "claude-opus-5-5", "content": [{"type": "tool_use", "id": "tu9", "name": "Agent", "input": {"subagent_type": "dforge:judge-opus", "prompt": "review"}}], "usage": {"input_tokens": 1, "cache_read_input_tokens": 10, "cache_creation_input_tokens": 0, "output_tokens": 5}}}' > "$CPROJ/s2.jsonl"
+printf '{}\n' > "$CPROJ/s9.jsonl"
+{
+  cat "$UFX/markers.tsv"
+  printf '2026-01-01T00:02:50Z\topen\tdforge\t5.1.1\t/plugin\tdocs/plans/p.md\t3\ts2\t\t0\t\ttask-brief:3\t\t\n'
+  printf '2026-01-01T00:03:10Z\tclose\tdforge\t5.1.1\t/plugin\tdocs/plans/p.md\t3\ts2\t\t%s\t\ttask-close:3\tc..d\t\n' "$(wc -c < "$CPROJ/s2.jsonl" | tr -d ' ')"
+} > "$CR/clone/.dforge/sdd/usage-markers.tsv"
+printf 's1\ns2\n' > "$CR/sessions"
+bash "$WAB/collect" dforge 20 2>"$TMP/collect.err"; status=$?
+check "collect_runs_report: exit 0" "$status" "0"
+check "collect_runs_report: the listed sessions' transcripts and subagents are copied, no other" \
+  "$(cd "$CR/out/transcripts" && find . -type f | sort | tr '\n' ' ')" \
+  "./s1.jsonl ./s1/subagents/agent-a1.jsonl ./s1/subagents/agent-a1.meta.json ./s2.jsonl "
+check "collect_runs_report: report.json slices the run's three marked tasks, the second session's from its copy" \
+  "$(jq -c '.plans[0] | [.tasks[] | [.tasks, .label, .turns]]' "$CR/out/report.json")" '[[[1],"marked",2],[[2],"marked",1],[[3],"marked",1]]'
+check "collect_runs_report: report.json is the dforge core's json report" \
+  "$(jq -c '.plans | length' "$CR/out/report.json")" "1"
+check "collect_runs_report: dispatches.json counts per family" "$(jq -c . "$CR/out/dispatches.json")" '{"dforge:judge-opus":1}'
+bash "$WAB/collect" dforge 21 >/dev/null 2>&1; status=$?
+check "collect_runs_report: an unprepared run exits 1" "$status" "1"
+
+# --- compare_note ---
+CMP="$TMP/root-compare"
+cmp_run() { # cmp_run NAME STATE ROWS — a run directory with arm.json, state and out/report.json holding ROWS
+  local d="$CMP/$1"
+  mkdir -p "$d/out"
+  jq -n --arg arm "${1%%-*}" '{arm: $arm, plan: "docs/p.md", model: "opus", effort: "high"}' > "$d/arm.json"
+  printf '%s\n' "$2" > "$d/state"
+  jq -n --argjson rows "$3" '{plans: [{plan: "p.md", tasks: $rows}]}' > "$d/out/report.json"
+}
+row() { # row TASKS GROUP TURNS LOOKUPS GROWTH WRITES SUBTURNS
+  jq -nc --argjson t "$1" --argjson g "$2" --argjson n "$3" --argjson l "$4" --argjson gr "$5" --argjson w "$6" --argjson s "$7" \
+    '{tasks: $t, group: $g, turns: $n, lookups: $l, growth: $gr, cacheWrite5m: $w, cacheWrite1h: 0, subagents: (if $s > 0 then {"x:impl": {turns: $s}} else {} end)}'
+}
+cmp_run dforge-1 finished "[$(row '[1]' false 4 2 1000 10 0),$(row '[2]' false 2 1 500 20 0)]"
+cmp_run dforge-2 finished "[$(row '[1]' false 3 3 800 30 0)]"
+cmp_run dagents-1 finished "[$(row '[1,2]' true 10 4 4000 40 10)]"
+cmp_run dagents-2 finished "[$(row '[1]' false 6 2 900 5 0),$(row '[2]' false 4 6 700 15 0)]"
+cmp_run dagents-3 timed-out "[$(row '[1]' false 999 999 999 999 0)]"
+WAB_ROOT="$CMP" bash "$WAB/compare" 2>"$TMP/compare.err"; status=$?
+NOTE="$CMP/comparison.md"
+check "compare_note: exit 0, the note at its default path" "$status:$([ -s "$NOTE" ] && echo written)" "0:written"
+check "compare_note: the sections in order" "$(grep '^## ' "$NOTE" | tr '\n' '|')" \
+  "## Runs|## Per-task distributions|## Groups|## What this replay cannot decide|"
+section() { awk -v h="## $1" '$0 == h { f = 1; next } /^## / { f = 0 } f' "$NOTE"; }
+check "compare_note: every run's arm.json is reproduced" "$(section Runs | grep -c '"model": "opus"')" "5"
+has "compare_note: the timed-out run is marked" "$(section Runs)" "### dagents-3: timed-out — excluded from the figures"
+has "compare_note: and listed" "$(section Runs)" "Excluded runs: dagents-3 (timed-out)."
+DIST=$(section 'Per-task distributions')
+has "compare_note: dforge turns over three tasks" "$DIST" "| dforge | turns | 3 | 2 | 3 | 4 |"
+has "compare_note: a dagents group is one observation divided by its task count" "$DIST" "| dagents | turns | 3 | 4 | 5 | 6 |"
+has "compare_note: cache writes per arm" "$DIST" "| dagents | cache writes | 3 | 5 | 15 | 20 |"
+has "compare_note: subagent share per arm" "$DIST" "| dagents | subagent share | 3 | 0 | 0 | 0.5 |"
+has "compare_note: lookups and growth too" "$DIST" "| dforge | growth | 3 | 500 | 800 | 1000 |"
+check "compare_note: the timed-out run's figures are absent from the distributions" "$(grep -c 999 <<<"$DIST")" "0"
+has "compare_note: the group row" "$(section Groups)" "- dagents-1 tasks 1, 2: turns 10 (5 per task), lookups 4 (2 per task)"
+has "compare_note: the group sentence" "$(section Groups)" "Per-task spread inside a group is not measurable."
+has "compare_note: the plan-level cost gap" "$(section 'What this replay cannot decide')" "plan-level cost gap"
+has "compare_note: P1.1's effect" "$(section 'What this replay cannot decide')" "P1.1's effect"
+WAB_ROOT="$CMP" bash "$WAB/compare" --out "$TMP/elsewhere/note.md" 2>/dev/null
+check "compare_note: --out writes the note there" "$(cmp -s "$TMP/elsewhere/note.md" "$NOTE" && echo same)" "same"
+
+# --- collect and compare finish a removal a killed launch left undone ---
+rcfg="$TMP/repair-config-2"
+mkdir -p "$rcfg"
+printf '{\n  "model": "opus",\n  "theme": "dark"\n}\n' > "$rcfg/settings.json"
+cp "$rcfg/settings.json" "$TMP/settings2.orig"
+for cmd in collect compare; do
+  mkdir -p "$CMP/rep-$cmd"
+  printf 'keyBefore=absent\nfile=%s\n' "$rcfg/settings.json" > "$CMP/rep-$cmd/settings-repair"
+  jq '. + {"skipDangerousModePermissionPrompt": true}' < "$rcfg/settings.json" > "$rcfg/s.new" && mv "$rcfg/s.new" "$rcfg/settings.json"
+  if [ "$cmd" = collect ]; then WAB_ROOT="$CMP" bash "$WAB/collect" dforge 99 >/dev/null 2>&1
+  else WAB_ROOT="$CMP" bash "$WAB/compare" --out "$TMP/repair-note.md" >/dev/null 2>&1; fi
+  check "settings_repair_after_kill: $cmd removes the key, every other byte equal" \
+    "$(cmp -s "$rcfg/settings.json" "$TMP/settings2.orig" && echo equal || echo differs)" "equal"
+done
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
