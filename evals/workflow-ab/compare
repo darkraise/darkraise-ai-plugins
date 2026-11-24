@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # compare [--out FILE] — the comparison note over every run under WAB_ROOT:
 # each run's arm.json, per-task distributions per arm from the finished runs'
-# out/report.json (collect writes it), each run's medians, the group rows, and what the replay
-# cannot decide. Runs that did not finish are listed and left out of the
-# figures. Default FILE: <WAB_ROOT>/comparison.md. Parameters: README.md.
+# out/report.json (collect writes it), each run's medians, each run's whole
+# totals from out/run.json, the group rows, and what the replay cannot
+# decide. Runs that did not finish are listed and left out of the figures.
+# Default FILE: <WAB_ROOT>/comparison.md. Parameters: README.md.
 # Exit: 0 written; 1 failed; 2 usage.
 set -uo pipefail
 
@@ -27,9 +28,11 @@ runs=$(
     [ -f "$d/arm.json" ] || continue
     report=/dev/null
     [ -f "$d/out/report.json" ] && report=$d/out/report.json
+    totals=/dev/null
+    [ -f "$d/out/run.json" ] && totals=$d/out/run.json
     jq -n --arg name "$(basename "$d")" --arg state "$(tr -d '\r\n' < "$d/state" 2>/dev/null)" \
-      --slurpfile arm "$d/arm.json" --slurpfile report "$report" \
-      '{name: $name, state: (if $state == "" then "not launched" else $state end), arm: $arm[0], report: $report[0]}' \
+      --slurpfile arm "$d/arm.json" --slurpfile report "$report" --slurpfile totals "$totals" \
+      '{name: $name, state: (if $state == "" then "not launched" else $state end), arm: $arm[0], report: $report[0], totals: $totals[0]}' \
       || exit 1
   done | jq -s .
 ) || wab_die 1 "cannot read the runs under $WAB_ROOT"
@@ -84,6 +87,25 @@ for (const arm of arms) {
     }
   }
 }
+out.push("", "## Whole runs", "",
+  "Each finished run'"'"'s whole usage from out/run.json: every session and subagent, inside a task or not, so the work before the first task and after the last counts too. Outside tasks is the report'"'"'s bucket between and after the task slices; cost per task spreads it over the completed tasks.", "",
+  "| Arm | Run | Turns | Cost | Dispatches | Outside-task turns | Outside-task cost | Cost per task |", "|---|---|---|---|---|---|---|---|");
+const dash = (x) => (x === null || x === undefined ? "-" : fmt(x));
+const plan0 = (r) => (r.report.plans || [])[0] || {};
+const dispatched = (r) => (r.totals ? Object.values(r.totals.dispatches || {}).reduce((s, n) => s + n, 0) : null);
+for (const arm of arms) for (const r of kept.filter((x) => x.arm.arm === arm)) {
+  const t = r.totals ? r.totals.total : {}, o = plan0(r).outside || {};
+  out.push(`| ${arm} | ${r.name} | ${dash(t.turns)} | ${dash(t.cost)} | ${dash(dispatched(r))} | ${dash(o.turns)} | ${dash(o.cost)} | ${dash(plan0(r).costPerTask)} |`);
+}
+out.push("", "| Arm | Metric | n | Min | Median | Max |", "|---|---|---|---|---|---|");
+for (const arm of arms) {
+  const mine = kept.filter((r) => r.arm.arm === arm && r.totals);
+  for (const [name, f] of [["turns", (r) => r.totals.total.turns || 0], ["cost", (r) => r.totals.total.cost || 0], ["dispatches", dispatched]]) {
+    const xs = mine.map(f);
+    if (xs.length) out.push(`| ${arm} | ${name} | ${xs.length} | ${fmt(Math.min(...xs))} | ${fmt(median(xs))} | ${fmt(Math.max(...xs))} |`);
+  }
+}
+if (kept.some((r) => !r.totals)) out.push("", `No out/run.json (collected before it existed): ${kept.filter((r) => !r.totals).map((r) => r.name).join(", ")}.`);
 out.push("", "## Groups", "");
 let groups = 0;
 for (const r of kept) for (const t of rows(r)) {
@@ -95,7 +117,7 @@ for (const r of kept) for (const t of rows(r)) {
 if (!groups) out.push("No group rows in the finished runs.");
 out.push("", "Per-task spread inside a group is not measurable.", "",
   "## What this replay cannot decide", "",
-  "- A plan-level cost gap between the arms: two runs per arm on one plan show per-task mechanism metrics and their spread, not a plan-level difference.",
+  "- A plan-level cost gap between the arms: the whole-run totals are two runs per arm on one plan, so they show what these runs cost, not a measured difference.",
   "- P1.1'"'"'s effect (fewer turns per task): both dforge runs already carry it, so no run here lacks it.", "");
 process.stdout.write(out.join("\n"));
 ' <<<"$runs" > "$note.tmp" && [ -s "$note.tmp" ] || { rm -f "$note.tmp"; wab_die 1 "cannot write $note"; }

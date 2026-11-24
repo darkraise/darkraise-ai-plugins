@@ -99,7 +99,7 @@ export function readEntries(file) {
 
 // Assistant messages, one per message id with the largest value of each field:
 // a streamed message is written several times as its usage grows.
-function messages(entries, sidechain) {
+export function messages(entries, sidechain) {
   const byId = new Map();
   for (const { entry: e } of entries) {
     const m = e && e.type === 'assistant' && e.message;
@@ -115,7 +115,7 @@ function messages(entries, sidechain) {
 }
 
 // Totals of a message list, priced; unpriced models are collected.
-function total(msgs, prices, unpriced, byModel) {
+export function total(msgs, prices, unpriced, byModel) {
   const t = emptyUsage();
   for (const { model, usage } of msgs) {
     t.turns++;
@@ -334,7 +334,7 @@ export function planFiles(planText, n) {
 }
 
 // Lookups, reads, repeat reads and background waits among a row's entries.
-function lookupMetrics(entries, files) {
+export function lookupMetrics(entries, files) {
   const seen = new Set();
   const readIds = new Set();
   const wholeRead = new Set();

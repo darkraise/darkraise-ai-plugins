@@ -2,8 +2,9 @@
 # collect ARM RUN — after a launch: copy the run's session transcripts (with
 # their subagents/) from the run's own project directory for the clone into
 # out/transcripts/, run the usage-report core (the dforge copy) over that run
-# alone, and write out/report.json and out/dispatches.json (the report's
-# dispatch counts summed per family). Parameters: README.md.
+# alone, and write out/report.json, out/run.json (run-totals: the whole run's
+# usage and dispatches, inside tasks or not) and out/dispatches.json (the
+# run's dispatch counts per family). Parameters: README.md.
 # Exit: 0 written; 1 failed; 2 usage.
 set -uo pipefail
 
@@ -67,7 +68,8 @@ core="$WAB_PLUGINS/plugins/dforge/scripts/lib/usage-report.mjs"
 node "$core" "${args[@]}" > "$out/report.json.tmp" && [ -s "$out/report.json.tmp" ] \
   || { rm -f "$out/report.json.tmp"; wab_die 1 "the usage report failed for $dir"; }
 mv -f "$out/report.json.tmp" "$out/report.json"
-jq '[.plans[].tasks[].dispatches // {} | to_entries[]] | group_by(.key)
-  | map({key: .[0].key, value: (map(.value) | add)}) | from_entries' < "$out/report.json" > "$out/dispatches.json" \
-  || wab_die 1 "cannot write $out/dispatches.json"
-wab_log "collected $dir: $copied transcript(s), out/report.json, out/dispatches.json"
+node "$(dirname "${BASH_SOURCE[0]}")/run-totals.mjs" "$core" "$tdir" > "$out/run.json.tmp" && [ -s "$out/run.json.tmp" ] \
+  || { rm -f "$out/run.json.tmp"; wab_die 1 "the run totals failed for $dir"; }
+mv -f "$out/run.json.tmp" "$out/run.json"
+jq .dispatches < "$out/run.json" > "$out/dispatches.json" || wab_die 1 "cannot write $out/dispatches.json"
+wab_log "collected $dir: $copied transcript(s), out/report.json, out/run.json, out/dispatches.json"

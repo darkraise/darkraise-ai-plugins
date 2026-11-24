@@ -107,7 +107,9 @@ After a launch, copies the transcripts of the sessions listed in `sessions`
 (`<run>/claude-config/projects/…`)
 into `out/transcripts/`, runs this repository's dforge copy of the usage
 report core over that run alone (the clone's marker file, ledger, plan and
-register), and writes `out/report.json` and `out/dispatches.json` (dispatch
+register), and writes `out/report.json`, `out/run.json` (`run-totals.mjs`: the
+whole run's usage, main sessions and subagents apart, and its dispatches,
+inside a task's slice or not) and `out/dispatches.json` (the run's dispatch
 counts per family).
 
 ```
@@ -120,6 +122,9 @@ marked and listed), `## Per-task distributions` (min, median and max of
 turns, lookups, growth, cache writes and subagent share per arm, finished
 runs only, a group row counted once and divided by its task count),
 `## Spread across runs` (each finished run's median per metric),
+`## Whole runs` (each finished run's turns, cost and dispatches from
+`out/run.json`, the report's outside-task turns and cost and its cost per
+task, and the per-arm min, median and max of the whole-run figures),
 `## Groups`, and `## What this replay cannot decide`.
 
 ### The w8 replay (run after merge)

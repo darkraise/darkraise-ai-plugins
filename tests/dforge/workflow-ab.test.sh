@@ -421,6 +421,8 @@ printf '{}\n' > "$CPROJ/s9.jsonl"
   printf '2026-01-01T00:02:50Z\topen\tdforge\t5.1.1\t/plugin\tdocs/plans/p.md\t3\ts2\t\t0\t\ttask-brief:3\t\t\n'
   printf '2026-01-01T00:03:10Z\tclose\tdforge\t5.1.1\t/plugin\tdocs/plans/p.md\t3\ts2\t\t%s\t\ttask-close:3\tc..d\t\n' "$(wc -c < "$CPROJ/s2.jsonl" | tr -d ' ')"
 } > "$CR/clone/.dforge/sdd/usage-markers.tsv"
+# A judge dispatched after the last task closes: outside every slice.
+printf '%s\n' '{"type": "assistant", "isSidechain": false, "timestamp": "2026-01-01T00:04:00Z", "message": {"id": "m10", "model": "claude-opus-5-5", "content": [{"type": "tool_use", "id": "tu10", "name": "Agent", "input": {"subagent_type": "dforge:judge-sonnet-high", "prompt": "final"}}], "usage": {"input_tokens": 1, "cache_read_input_tokens": 10, "cache_creation_input_tokens": 0, "output_tokens": 5}}}' >> "$CPROJ/s2.jsonl"
 printf 's1\ns2\n' > "$CR/sessions"
 bash "$WAB/collect" dforge 20 2>"$TMP/collect.err"; status=$?
 check "collect_runs_report: exit 0" "$status" "0"
@@ -431,7 +433,14 @@ check "collect_runs_report: report.json slices the run's three marked tasks, the
   "$(jq -c '.plans[0] | [.tasks[] | [.tasks, .label, .turns]]' "$CR/out/report.json")" '[[[1],"marked",2],[[2],"marked",1],[[3],"marked",1]]'
 check "collect_runs_report: report.json is the dforge core's json report" \
   "$(jq -c '.plans | length' "$CR/out/report.json")" "1"
-check "collect_runs_report: dispatches.json counts per family" "$(jq -c . "$CR/out/dispatches.json")" '{"dforge:judge-opus":1}'
+check "collect_runs_report: the report's task rows hold only the dispatch inside a slice" \
+  "$(jq -c '[.plans[0].tasks[].dispatches // {} | to_entries[]] | map(.key)' "$CR/out/report.json")" '["dforge:judge-opus"]'
+check "collect_runs_report: dispatches.json counts the whole run per family, outside the slices too" \
+  "$(jq -c . "$CR/out/dispatches.json")" '{"dforge:judge-opus":1,"dforge:judge-sonnet-high":1}'
+check "collect_runs_report: run.json counts every session's turns and the subagent's apart" \
+  "$(jq -c '[.main.turns, .subagents.turns, .total.turns]' "$CR/out/run.json")" "[7,1,8]"
+check "collect_runs_report: run.json's total is main plus subagents" \
+  "$(jq '.total.input == .main.input + .subagents.input and .total.output == .main.output + .subagents.output' "$CR/out/run.json")" "true"
 bash "$WAB/collect" dforge 21 >/dev/null 2>&1; status=$?
 check "collect_runs_report: an unprepared run exits 1" "$status" "1"
 CS="$WAB_ROOT/dforge-22"
@@ -487,11 +496,19 @@ cmp_run dforge-3 finished "[]"
 rm -f "$CMP/dforge-3/state" "$CMP/dforge-3/out/report.json"
 cmp_run dforge-4 finished "[]"
 rm -f "$CMP/dforge-4/out/report.json"
+totals() { # totals RUN TURNS COST DISPATCHES — the run's out/run.json
+  jq -n --argjson n "$2" --argjson c "$3" --argjson d "$4" '{total: {turns: $n, cost: $c}, dispatches: $d}' > "$CMP/$1/out/run.json"
+}
+totals dforge-1 20 1.5 '{"dforge:judge-opus": 3}'
+totals dforge-2 10 0.5 '{"dforge:judge-opus": 1, "dforge:impl-sonnet-high": 1}'
+totals dagents-1 40 3 '{}'
+totals dagents-3 999 999 '{}'
+jq '.plans[0] += {outside: {turns: 6, cost: 0.25}, costPerTask: 0.75}' < "$CMP/dforge-1/out/report.json" > "$TMP/r.json" && mv "$TMP/r.json" "$CMP/dforge-1/out/report.json"
 WAB_ROOT="$CMP" bash "$WAB/compare" 2>"$TMP/compare.err"; status=$?
 NOTE="$CMP/comparison.md"
 check "compare_note: exit 0, the note at its default path" "$status:$([ -s "$NOTE" ] && echo written)" "0:written"
 check "compare_note: the sections in order" "$(grep '^## ' "$NOTE" | tr '\n' '|')" \
-  "## Runs|## Per-task distributions|## Spread across runs|## Groups|## What this replay cannot decide|"
+  "## Runs|## Per-task distributions|## Spread across runs|## Whole runs|## Groups|## What this replay cannot decide|"
 section() { awk -v h="## $1" '$0 == h { f = 1; next } /^## / { f = 0 } f' "$NOTE"; }
 check "compare_note: every run's arm.json is reproduced" "$(section Runs | grep -c '"model": "opus"')" "7"
 has "compare_note: the timed-out run is marked" "$(section Runs)" "### dagents-3: timed-out — excluded from the figures"
@@ -510,6 +527,14 @@ has "compare_note: each run's median, run by run" "$SPREAD" "| dforge | lookups 
 | dforge | lookups | dforge-2 | 1 | 3 |"
 has "compare_note: a group is one observation in its run's median" "$SPREAD" "| dagents | turns | dagents-1 | 1 | 5 |"
 check "compare_note: excluded runs are absent from the spread" "$(grep -cE 'dagents-3|dforge-3|dforge-4|999' <<<"$SPREAD")" "0"
+WHOLE=$(section 'Whole runs')
+has "compare_note: a run's whole totals beside the report's outside-task bucket and cost per task" "$WHOLE" "| dforge | dforge-1 | 20 | 1.5 | 3 | 6 | 0.25 | 0.75 |"
+has "compare_note: dispatches summed over families, a report without outside figures dashed" "$WHOLE" "| dforge | dforge-2 | 10 | 0.5 | 2 | - | - | - |"
+has "compare_note: a run collected before run.json is dashed" "$WHOLE" "| dagents | dagents-2 | - | - | - | - | - | - |"
+has "compare_note: whole-run medians per arm" "$WHOLE" "| dforge | turns | 2 | 10 | 15 | 20 |"
+has "compare_note: a run without run.json is not in the medians" "$WHOLE" "| dagents | dispatches | 1 | 0 | 0 | 0 |"
+has "compare_note: and is named" "$WHOLE" "No out/run.json (collected before it existed): dagents-2."
+check "compare_note: excluded runs are absent from the whole runs" "$(grep -cE 'dagents-3|999' <<<"$WHOLE")" "0"
 has "compare_note: the group row" "$(section Groups)" "- dagents-1 tasks 1, 2: turns 10 (5 per task), lookups 4 (2 per task)"
 has "compare_note: the group sentence" "$(section Groups)" "Per-task spread inside a group is not measurable."
 has "compare_note: the plan-level cost gap" "$(section 'What this replay cannot decide')" "plan-level cost gap"
