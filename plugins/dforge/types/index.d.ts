@@ -249,6 +249,8 @@ export type CockpitAutoRun = {
   stalledAt: number | null
   /** The model and effort that session runs on. */
   launch: { model: string; effort: string } | null
+  /** The first plugin version mismatch the run recorded: the run's version and the calling one's; null when none. */
+  mismatch: { run: string; call: string } | null
 }
 
 /** The Discord webhook's state, as the settings view shows it. */

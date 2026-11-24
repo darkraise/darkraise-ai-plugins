@@ -211,6 +211,41 @@ check "saved_report_reused: the saved quality kept the breaker item" "$(q "$J" '
 wrap "$WR" --save >/dev/null 2>&1
 check "saved_report_reused: --save without --plan exits 2" "$?" "2"
 
+# --- summary_missing_reasons ---
+nonode_path() { # PATH with no node: a directory holding it stood in for by links to its other programs
+  local d f m out='' IFS=:
+  for d in $PATH; do
+    if [ -x "$d/node" ]; then
+      m="$TMP/nonode/$(printf '%s' "$d" | tr -c 'A-Za-z0-9' '_')"
+      mkdir -p "$m"
+      for f in "$d"/*; do [ "${f##*/}" = node ] || ln -s "$f" "$m/" 2>/dev/null; done
+      d=$m
+    fi
+    out=${out:+$out:}$d
+  done
+  printf '%s\n' "$out"
+}
+WM="$TMP/wm"
+git init -q "$WM"
+mkdir -p "$WM/docs/dforge/plans" "$WM/.dforge/sdd"
+printf '# P\n\n### Task 1: one\n\nBody.\n' > "$WM/docs/dforge/plans/p.md"
+SAVEDM="$WM/.dforge/sdd/usage-report-p.json"
+missing_case() { # missing_case NAME REASON [PATH] — --plan and --save each print only the reason, exit 0 and save nothing
+  local out rc path=${3:-$PATH}
+  out=$(PATH="$path" wrap "$WM" --plan docs/dforge/plans/p.md 2>"$TMP/merr"); rc=$?
+  check "summary_missing_reasons: $1: exit 0 and nothing on stdout" "$rc:$out" "0:"
+  check "summary_missing_reasons: $1: one stderr line" "$(cat "$TMP/merr")" "usage summary missing: $2"
+  out=$(PATH="$path" wrap "$WM" --plan docs/dforge/plans/p.md --save 2>"$TMP/merr"); rc=$?
+  check "summary_missing_reasons: $1: --save exits 0 with the same line" "$rc:$out:$(cat "$TMP/merr")" "0::usage summary missing: $2"
+  check "summary_missing_reasons: $1: --save leaves no saved report" "$([ -e "$SAVEDM" ] && echo saved || echo none)" "none"
+}
+: > "$WM/.dforge/sdd/usage-markers.tsv"
+missing_case "an empty marker file" "no markers"
+printf '2026-01-01T00:00:00Z\topen\tdforge\t1.0.0\t/plugin\tdocs/dforge/plans/p.md\t1\ts9\t%s\t10\t\ttask-brief:1\t\t\n' "$TMP/gone/s9.jsonl" \
+  > "$WM/.dforge/sdd/usage-markers.tsv"
+missing_case "markers naming a transcript that does not exist" "no transcript"
+missing_case "no node on PATH" "node not found" "$(nonode_path)"
+
 # --- usage errors ---
 node "$REPORT" --format csv >/dev/null 2>&1
 check "usage: a bad format exits 2" "$?" "2"

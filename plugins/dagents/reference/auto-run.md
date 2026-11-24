@@ -423,6 +423,16 @@ named by a `final review lens-skipped <id> reason=<reason>` line in the ledger,
 whatever its reason (final-review.md step 4 writes them; do not run
 `scripts/lens-route --final` here, since after a merge its base..HEAD range is
 empty), and, when the ledger's `Review depth:` line says `light`, every `test`
-statement of the spec under `not verified (depth light)`. It runs
+statement of the spec under `not verified (depth light)`.
+Then the final message prints `scripts/auto-run counters` verbatim, then
+the plan's usage summary from `<state>/sdd/usage-report-<plan>.json` in the
+primary checkout (run `scripts/usage-report --plan PLAN_FILE --save` first when
+the cleanup did not save it): the cost per completed task beside the
+segment-only figure, and per task its turns, lookups, context growth and
+seconds waiting on background work. When the save printed
+`usage summary missing: <reason>` or wrote no file, print that line, or
+`usage summary missing: not saved`, instead. Last comes the owner follow-up:
+`Follow-up: update each repository's CLAUDE.md Compact Instructions to match
+reference/session-budget.md §Compact Instructions for CLAUDE.md.` It runs
 `scripts/auto-run stop` with no `--reason` before the next-step block: a
 reason marks the run as stopped and sends a `blocked` notice.

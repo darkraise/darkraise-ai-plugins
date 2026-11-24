@@ -6664,6 +6664,19 @@ describe('auto run', () => {
   const RECONCILE_PROMPT =
     /^Background work has run 20 minutes since the last turn with no notification\. Run `bash "[^"]*\/scripts\/in-flight"`\. Stop with TaskStop each launch idle 30 minutes or more, and record a `Ruling:` line naming the task it served and that its result is void; leave the others running\. Then continue the run, and end the turn again if only waiting remains\.$/
 
+  test('compaction books seconds', async ($, on) => {
+    const files = autoFiles()
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO], compactMs: 117_000 }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    await clock.advance(117_000)
+    await settle(clock)
+    expect(w.autoRuns?.filter(call => call.includes(' compacted'))).toEqual(['--session sess-1 compacted --seconds 117'])
+  })
+
   test('compacts on the sentinel, books it and submits the continue prompt', async ($, on) => {
     const files = autoFiles()
     const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
@@ -6951,6 +6964,25 @@ describe('auto run', () => {
     await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     await settle(clock)
     expect(await ui.find({ type: 'Text', text: /Auto run · execute · normal/ })).toBeDefined()
+  })
+
+  test('run row shows mismatch', async ($, on) => {
+    const files = autoFiles({ pending: null, mismatch: { run: '5.1.1', root: 'R1', call: '5.2.0', callRoot: 'R2', at: '2026-01-01T00:00:00Z' } })
+    world(on, { ...SIGNED_IN, autoFile: files[AUTO] })
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^version mismatch — run 5\.1\.1, this call 5\.2\.0$/ })).toBeDefined()
+  })
+
+  test('run row has no mismatch line without a recorded mismatch', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    world(on, { ...SIGNED_IN, autoFile: files[AUTO] })
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Auto run · execute/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /version mismatch/ })).toBeUndefined()
   })
 
   test('shows the compaction at once', async ($, on) => {
@@ -7713,6 +7745,23 @@ describe('auto run', () => {
     await clock.advance(2_600_000)
     expect(reconciles()).toBe(4)
     expect(w.autoRuns?.filter(call => call.includes(' failure '))).toEqual([])
+  })
+
+  test('reconcile books total', { timeoutMs: 30_000 }, async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const bash = { Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b9w1' }, text: 'Running in the background' }) }
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], tools: bash }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'npm test', run_in_background: true } as never)
+    await $.turn.complete({ answer: 'Waiting for the tests.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    const booked = () => w.autoRuns?.filter(call => call.includes(' total ')) ?? []
+    await clock.advance(1_200_000)
+    expect(booked()).toEqual([])
+    await clock.advance(60_000)
+    expect(w.prompts).toEqual([expect.stringMatching(RECONCILE_PROMPT)])
+    expect(booked()).toEqual(['--session sess-1 total reconcilePrompts'])
   })
 
   test('submits no reconcile prompt outside an auto run', { timeoutMs: 30_000 }, async ($, on) => {

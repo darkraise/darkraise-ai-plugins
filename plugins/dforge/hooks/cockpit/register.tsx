@@ -603,6 +603,7 @@ export const register: Register = on => {
   // one and re-arm the note, so it does not stay latched.
   on('session.compact', async ($, e, next) => {
     if (await standsDown($)) return next(e)
+    const startedAt = await $.clock.now()
     const done = await next(e)
     if (e.agentId === undefined && e.trigger !== 'precompute' && 'messages' in done && done.messages !== undefined) {
       await update($, budget, () => null)
@@ -612,7 +613,7 @@ export const register: Register = on => {
       // The estimate stands in until the next response; the old one is the window before.
       await readBreakdown($)
       // The engine's or the person's compaction: the run's rule still applies after it.
-      if ((e.trigger === 'auto' || e.trigger === 'manual') && !S.isPaneCompacting) await bookAutoCompaction($)
+      if ((e.trigger === 'auto' || e.trigger === 'manual') && !S.isPaneCompacting) await bookAutoCompaction($, false, await secondsSince($, startedAt))
     }
 
     return done
@@ -1146,6 +1147,11 @@ export const register: Register = on => {
         {autoNow?.active && (
           <Text key="auto-line" color="magenta">
             {`Auto run · ${autoNow.phase} · ${autoNow.regime} · ${autoNow.compactions} ${autoNow.compactions === 1 ? 'compaction' : 'compactions'} · ${autoNow.resumes} ${autoNow.resumes === 1 ? 'resume' : 'resumes'}`}
+          </Text>
+        )}
+        {autoNow?.active && autoNow.mismatch !== null && (
+          <Text key="auto-mismatch" color="warning">
+            {`version mismatch — run ${autoNow.mismatch.run}, this call ${autoNow.mismatch.call}`}
           </Text>
         )}
         {autoNow?.active && button('pane-stop-auto', '■ Stop auto', () => void stopAutoRun($), { isCompact: isDense })}
@@ -3262,6 +3268,7 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
   let at: AutoStage = stage
   try {
     if (at === 'compact') {
+      const startedAt = await $.clock.now()
       const done = await $.session.compact({ instructions: AUTO_COMPACT_INSTRUCTIONS })
       if ('skip' in done && typeof done.skip === 'string') throw new Error(done.skip)
       await update($, budget, () => null)
@@ -3269,7 +3276,7 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
       // The compaction happened: never repeat it. Unbooked, pending stays
       // compact and no later stage would run, so stop the run instead. Exit 5
       // is the script's own stop: the compaction cap was reached.
-      const booked = await autoRunCall($, bound, ['compacted'])
+      const booked = await autoRunCall($, bound, compactedArgs(await secondsSince($, startedAt)))
       if (booked === 5) {
         await endStoppedRun($)
         return
@@ -3654,7 +3661,12 @@ async function reconcileBackground($: EngineInterface, auto: CockpitAutoRun) {
     await bookStageFailure($, stage, `${RECONCILE_CAP} reconcile prompts left the ${stage} waiting on background work`)
     return
   }
-  if (!S.isTurnLive) await $.prompt.submit({ text: reconcilePrompt($.plugin.root), asUser: true }).catch(() => undefined)
+  if (S.isTurnLive) return
+  const isSent = await $.prompt.submit({ text: reconcilePrompt($.plugin.root), asUser: true }).then(
+    () => true,
+    () => false,
+  )
+  if (isSent) await autoRunCall($, await $.session.id(), ['total', 'reconcilePrompts'])
 }
 
 // The run stopped while the session was idle: record it, and give the model a
@@ -3675,28 +3687,38 @@ async function endUnboundRun($: EngineInterface, owner: string, reason: string) 
   await $.prompt.submit({ text: `The auto run stopped: ${reason}. End as reference/auto-run.md §Stopping says.`, asUser: true }).catch(() => undefined)
 }
 
+// auto-run compacted, with the compaction's duration once it reached a second.
+function compactedArgs(seconds: number): string[] {
+  return seconds > 0 ? ['compacted', '--seconds', String(seconds)] : ['compacted']
+}
+
+async function secondsSince($: EngineInterface, startedAt: number): Promise<number> {
+  return Math.max(0, Math.round(((await $.clock.now()) - startedAt) / 1000))
+}
+
 // The person's compaction from the pane, booked as /compact is. The mod's own
 // session.compact hook did not see it under claude plugin test; where it
 // does, it leaves the booking to this.
 async function compactFromPane($: EngineInterface) {
   S.isPaneCompacting = true
   try {
+    const startedAt = await $.clock.now()
     const done = await $.session.compact()
-    if (!('skip' in done)) await bookAutoCompaction($, true)
+    if (!('skip' in done)) await bookAutoCompaction($, true, await secondsSince($, startedAt))
   } finally {
     S.isPaneCompacting = false
   }
 }
 
 // A compaction the cockpit did not make, booked so the run's rule applies after it.
-async function bookAutoCompaction($: EngineInterface, fromPane = false) {
+async function bookAutoCompaction($: EngineInterface, fromPane = false, seconds = 0) {
   const auto = await readAutoRun($)
   // A pending clear or switch supersedes the compaction: booking it would drop
   // that stage. A pending handoff still needs its clear, and a pending compact
   // is the cockpit's own stage, which books itself unless the pane ran it first.
   if (auto === null || !auto.active || ['clear', 'switch', 'handoff'].includes(auto.pending ?? '')) return
   if (auto.pending === 'compact' && !fromPane) return
-  const code = await autoRunCall($, await $.session.id(), ['compacted'])
+  const code = await autoRunCall($, await $.session.id(), compactedArgs(seconds))
   // Exit 5: the compaction cap stopped the run.
   if (code === 5) await endStoppedRun($)
   // The pane did the compact stage's work, so only its continue prompt is left.

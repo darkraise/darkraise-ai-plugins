@@ -20,6 +20,10 @@ It writes `<state>/sdd/usage-report-<plan>.json` in the primary checkout
 `usage-report` with the ledger and workspace gone reports the plan's quality
 fields from it, as of finishing. A non-zero exit writes no file and does not
 stop the cleanup: say in the final message that the report was not saved.
+When it cannot make the report (no Node, no marker row for the plan, or no
+transcript the rows name) it exits 0, saves nothing and prints
+`usage summary missing: <reason>` on stderr: the final message shows that
+line.
 
 A plan's workspace (`<state>/sdd/<plan>/`: briefs, reports, and the ledger
 and `handoff.md` while progress is local) is git-ignored and lives in the

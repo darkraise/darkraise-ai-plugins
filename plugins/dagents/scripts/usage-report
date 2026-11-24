@@ -7,8 +7,12 @@
 # the report finishing saved. Without --plan it reports every plan with
 # markers. --save writes the --format json report of --plan to
 # <primary>/<state>/sdd/usage-report-<plan>.json and prints nothing.
-# Exit: 0 printed or saved, 2 usage, else the core's status (1 when --save
-# got no report).
+# When the report cannot be made (no node; for --plan without --from-archive,
+# no marker row for the plan, or no transcript its rows resolve to) it prints
+# `usage summary missing: <reason>` on stderr, nothing on stdout, saves
+# nothing and exits 0.
+# Exit: 0 printed, saved or missing, 2 usage, else the core's status (1 when
+# --save got no report).
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/lib/plan.sh"
@@ -90,6 +94,25 @@ if [ -n "$plan" ]; then
   [ ! -f "$record" ] || args+=(--review-record "$(dr_native_path "$record")")
   saved="$(dagents_dir state "$(plan_primary_root "$top")")/sdd/usage-report-$slug.json"
   [ ! -f "$saved" ] || args+=(--saved "$(dr_native_path "$saved")")
+fi
+
+missing() { printf 'usage summary missing: %s\n' "$1" >&2; exit 0; }
+command -v node >/dev/null 2>&1 || missing "node not found"
+if [ -n "$plan" ] && [ -z "$archive" ]; then
+  # A row's transcript resolves as the core's resolveTranscript does: the
+  # named file, else <session>.jsonl in a project directory or one below it.
+  rows=$(for f in ${markers[@]+"${markers[@]}"}; do tr -d '\r' < "$f"; done \
+    | WANT="$(basename "$plan_file")" awk -F'\t' 'NF >= 9 { n = split($6, p, "/"); if (p[n] == ENVIRON["WANT"]) print $9 "|" $8 }')
+  [ -n "$rows" ] || missing "no markers"
+  resolved=0
+  while IFS='|' read -r tp sid; do
+    if [ -n "$tp" ] && [ -f "$tp" ]; then resolved=1; break; fi
+    [ -n "$sid" ] || continue
+    for d in ${transcripts[@]+"${transcripts[@]}"}; do
+      if [ -f "$d/$sid.jsonl" ] || compgen -G "$d/*/$sid.jsonl" >/dev/null; then resolved=1; break 2; fi
+    done
+  done <<<"$rows"
+  [ "$resolved" -eq 1 ] || missing "no transcript"
 fi
 
 core=(node "$(dr_native_path "$HERE/lib/usage-report.mjs")" ${args[@]+"${args[@]}"})

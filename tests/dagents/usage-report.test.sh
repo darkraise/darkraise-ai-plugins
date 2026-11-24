@@ -38,8 +38,48 @@ J=$(cd "$R" && bash "$WRAP" --format json 2>/dev/null)
 check "wrapper_reads_own_stores: one plan" "$(jq -c '.plans | length' <<<"$J" 2>/dev/null | tr -d '\r')" "1"
 check "wrapper_reads_own_stores: only the .dagents task" \
   "$(jq -c '[.plans[0].tasks[].tasks[]]' <<<"$J" 2>/dev/null | tr -d '\r')" "[1]"
+# The rows' session s1 resolves to a transcript in the checkout's project directory.
+PROJ="$HOME/.claude/projects/$(printf '%s' "$R" | tr -c 'A-Za-z0-9' '-')"
+mkdir -p "$PROJ"
+printf '{}\n' > "$PROJ/s1.jsonl"
 J=$(cd "$R" && bash "$WRAP" --plan docs/dagents/plans/p.md --format json 2>/dev/null)
 check "wrapper_reads_own_stores: --plan names the plan" "$(jq -c '[.plans[].completed]' <<<"$J" 2>/dev/null | tr -d '\r')" "[1]"
+
+# --- summary_missing_reasons ---
+nonode_path() { # PATH with no node: a directory holding it stood in for by links to its other programs
+  local d f m out='' IFS=:
+  for d in $PATH; do
+    if [ -x "$d/node" ]; then
+      m="$TMP/nonode/$(printf '%s' "$d" | tr -c 'A-Za-z0-9' '_')"
+      mkdir -p "$m"
+      for f in "$d"/*; do [ "${f##*/}" = node ] || ln -s "$f" "$m/" 2>/dev/null; done
+      d=$m
+    fi
+    out=${out:+$out:}$d
+  done
+  printf '%s\n' "$out"
+}
+WM="$TMP/wm"
+git init -q "$WM"
+mkdir -p "$WM/docs/dagents/plans" "$WM/.dagents/sdd"
+printf '# P\n\n### Task 1: one\n\nBody.\n' > "$WM/docs/dagents/plans/p.md"
+SAVEDM="$WM/.dagents/sdd/usage-report-p.json"
+wm() { (cd "$WM" && bash "$WRAP" "$@"); }
+missing_case() { # missing_case NAME REASON [PATH] — --plan and --save each print only the reason, exit 0 and save nothing
+  local out rc path=${3:-$PATH}
+  out=$(PATH="$path" wm --plan docs/dagents/plans/p.md 2>"$TMP/merr"); rc=$?
+  check "summary_missing_reasons: $1: exit 0 and nothing on stdout" "$rc:$out" "0:"
+  check "summary_missing_reasons: $1: one stderr line" "$(cat "$TMP/merr")" "usage summary missing: $2"
+  out=$(PATH="$path" wm --plan docs/dagents/plans/p.md --save 2>"$TMP/merr"); rc=$?
+  check "summary_missing_reasons: $1: --save exits 0 with the same line" "$rc:$out:$(cat "$TMP/merr")" "0::usage summary missing: $2"
+  check "summary_missing_reasons: $1: --save leaves no saved report" "$([ -e "$SAVEDM" ] && echo saved || echo none)" "none"
+}
+: > "$WM/.dagents/sdd/usage-markers.tsv"
+missing_case "an empty marker file" "no markers"
+printf '2026-01-01T00:00:00Z\topen\tdagents\t1.0.0\t/plugin\tdocs/dagents/plans/p.md\t1\ts9\t%s\t10\t\ttask-brief:1\t\t\n' "$TMP/gone/s9.jsonl" \
+  > "$WM/.dagents/sdd/usage-markers.tsv"
+missing_case "markers naming a transcript that does not exist" "no transcript"
+missing_case "no node on PATH" "node not found" "$(nonode_path)"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

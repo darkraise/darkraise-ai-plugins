@@ -1717,6 +1717,7 @@ export function autoRunFor(text: string, sessionId: string): CockpitAutoRun | nu
   const word = (value: unknown) => (typeof value === 'string' ? value : null)
   const count = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
   const launch = (typeof s.launch === 'object' && s.launch !== null ? s.launch : {}) as Record<string, unknown>
+  const mismatch = (typeof s.mismatch === 'object' && s.mismatch !== null ? s.mismatch : {}) as Record<string, unknown>
   return {
     active: s.active === true,
     phase: word(s.phase) ?? 'spec',
@@ -1729,6 +1730,7 @@ export function autoRunFor(text: string, sessionId: string): CockpitAutoRun | nu
     resumePrompt: word(s.resumePrompt),
     stalledAt: typeof s.stalledAt === 'number' && Number.isFinite(s.stalledAt) ? s.stalledAt : null,
     launch: typeof launch.model === 'string' && typeof launch.effort === 'string' ? { model: launch.model, effort: launch.effort } : null,
+    mismatch: typeof mismatch.run === 'string' && typeof mismatch.call === 'string' ? { run: mismatch.run, call: mismatch.call } : null,
   }
 }
 
