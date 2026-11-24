@@ -17,6 +17,7 @@ AR_RESUME_CAP=3
 AR_FAILURE_CAP=2
 AR_STALL_CAP=3
 AR_COMPACTION_CAP=3
+AR_API_ERROR_CAP=10
 
 # A native jq.exe ends its lines CRLF; every script sourcing this sets
 # pipefail, so jq's own status, which -e relies on, still decides.
@@ -520,7 +521,7 @@ ar_task_complete() {
     echo "auto-run: $reason; the run has stopped. End as reference/auto-run.md §Stopping says." >&2
     return 5
   fi
-  ar_update '.resumes = 0 | .stalls = 0 | .stalledAt = null | .compactionsSinceTask = 0 | .setupDue = false' || return $?
+  ar_update '.resumes = 0 | .stalls = 0 | .stalledAt = null | .compactionsSinceTask = 0 | .apiErrors = 0 | .setupDue = false' || return $?
   ar_sweep_closes
   # The run's budget line last, so a compact verdict is the last thing the
   # session reads; its verdict never changes this exit.
@@ -722,6 +723,22 @@ ar_stalled() {
   n=$(ar_get stalls)
   if [ "${n:-0}" -ge "$AR_STALL_CAP" ]; then
     ar_stop "$AR_STALL_CAP stalls without a completed task" || return $?
+    return 5
+  fi
+}
+
+# ar_api_error [--clear] — count a turn that ended on an API error, apart from
+# stalls; the tenth in a row stops the run (return 5). --clear resets the count.
+ar_api_error() {
+  local n
+  if [ "${1:-}" = --clear ]; then
+    ar_update '.apiErrors = 0'
+    return
+  fi
+  ar_update '.apiErrors = ((.apiErrors // 0) + 1)' || return $?
+  n=$(ar_get apiErrors)
+  if [ "${n:-0}" -ge "$AR_API_ERROR_CAP" ]; then
+    ar_stop "$AR_API_ERROR_CAP API errors in a row" || return $?
     return 5
   fi
 }

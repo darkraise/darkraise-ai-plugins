@@ -1041,5 +1041,20 @@ vcall "$D" "$R2" auto-run status
 check "legacy_run_skips: a run with no version prints nothing" "$warned" "0"
 check "legacy_run_skips: and records nothing" "$(jq -r 'has("mismatch")' "$D/.dagents/sdd/auto-run.json")" "false"
 
+# --- api_error_counts_apart ---
+D="$TMP/ae1"; rs_repo "$D"; rs_state "$D" '.pending = null | .stalls = 1 | .apiErrors = 0'
+AES="$D/.dagents/sdd/auto-run.json"
+for i in 1 2 3 4 5 6 7 8 9; do rs "$D" --session s1 api-error >/dev/null 2>&1; done
+check "api_error_counts_apart: nine API errors count 9, apart from stalls, and the run goes on" \
+  "$(jq -c '[.apiErrors, .stalls, .active]' "$AES")" '[9,1,true]'
+rs "$D" --session s1 api-error >/dev/null 2>&1; status=$?
+check "api_error_counts_apart: the tenth exits 5 and stops the run" "$status:$(jq -c '[.active, .stopped]' "$AES")" '5:[false,"10 API errors in a row"]'
+rs_state "$D" '.pending = null | .apiErrors = 4'
+rs "$D" --session s1 api-error --clear >/dev/null 2>&1; status=$?
+check "api_error_counts_apart: --clear resets the count" "$status:$(jq -r .apiErrors "$AES")" "0:0"
+rs_state "$D" '.pending = null | .apiErrors = 4'
+rs "$D" --session s1 task-complete >/dev/null 2>&1
+check "api_error_counts_apart: task-complete resets the count" "$(jq -r .apiErrors "$AES")" "0"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
