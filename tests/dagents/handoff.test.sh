@@ -151,5 +151,19 @@ check "list --checkout: the primary omits the worktree's" "$(cd "$WT" && bash "$
 check "list --checkout: the primary lists its own" "$(cd "$WT" && bash "$H" list --checkout "$REPO" | wc -l | tr -d ' ')" "3"
 check "list --checkout: from the worktree, its own only" "$(cd "$WT" && bash "$H" list --checkout | cut -f2)" "Y"
 
+# list reads the marker's kind by name: a kind= inside subject= is not it
+printf '# Handoff\n<!-- next-step: kind=plan key=K session=- done=0 closed=0 subject=docs/kind=draft/K.md at=1 -->\n' > "$WT/.dagents/handoff/K.md"
+check "list: a kind= in the subject is not the kind" "$(cd "$WT" && bash "$H" list --checkout | awk -F'\t' '$2 == "K" { print $3 }')" "plan"
+rm -f "$WT/.dagents/handoff/K.md"
+
+# claim_cr_toplevel: Git for Windows can end its output with a carriage return
+REAL_GIT=$(command -v git)
+mkdir -p "$TMP/crbin"
+printf '#!/usr/bin/env bash\ncase " $* " in *" --show-toplevel "*) "%s" "$@" | sed "s/\\$/\\r/" ;; *) exec "%s" "$@" ;; esac\n' "$REAL_GIT" "$REAL_GIT" > "$TMP/crbin/git"
+chmod +x "$TMP/crbin/git"
+handoff_md "$HD/CR.md" plan
+out=$(cd "$REPO" && PATH="$TMP/crbin:$PATH" CLAUDE_CODE_SESSION_ID=$S2 bash "$H" claim "$HD/CR.md"); rc=$?
+check "claim_cr_toplevel: the claim lands in the primary's claims" "$rc:$(sed -n 1p "$CLAIMS/CR" 2>/dev/null)" "0:session=$S2"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
