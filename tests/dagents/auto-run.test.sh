@@ -889,7 +889,7 @@ check "A21: and stops the run with the key and holder" "$(field active):$(field 
 
 # --- resume: each case in its own repository on branch b, based on main ---
 PROOT="$(cd "$HERE/../../plugins/dagents" && pwd)"
-PVERSION=$(jq -r .version "$PROOT/.claude-plugin/plugin.json")
+PVERSION=$(jq -r .version < "$PROOT/.claude-plugin/plugin.json" | tr -d '\r')
 rs_repo() { # rs_repo DIR
   git init -q -b main "$1"
   git -C "$1" commit -q --allow-empty -m init
@@ -979,7 +979,7 @@ check "resume_early_phase: an in-place run stopped in the spec phase resumes wit
 vcopy() { # vcopy DIR VERSION — this plugin's scripts, agents and manifest at DIR, with VERSION
   mkdir -p "$1/.claude-plugin"
   cp -R "$PROOT/scripts" "$PROOT/reference" "$PROOT/agents" "$PROOT/criteria" "$PROOT/config" "$1/"
-  jq --arg v "$2" '.version = $v' "$PROOT/.claude-plugin/plugin.json" > "$1/.claude-plugin/plugin.json"
+  jq --arg v "$2" '.version = $v' < "$PROOT/.claude-plugin/plugin.json" > "$1/.claude-plugin/plugin.json"
 }
 vcopy "$TMP/R2" 5.2.0
 vcopy "$TMP/R3" 5.1.1
