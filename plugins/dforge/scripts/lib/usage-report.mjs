@@ -205,8 +205,119 @@ function subagentFiles(transcript) {
   });
 }
 
-export function reportPlan(plan, rows, opts, prices) {
+const LOOKUP_WORDS = new Set(['grep', 'rg', 'cat', 'head', 'tail']);
+const toolUses = (e) => (e && e.type === 'assistant' && e.message && Array.isArray(e.message.content)
+  ? e.message.content.filter((b) => b && b.type === 'tool_use') : []);
+const userBlocks = (e) => (e && e.type === 'user' && e.message && Array.isArray(e.message.content) ? e.message.content : []);
+const textOf = (c) => (typeof c === 'string' ? c : Array.isArray(c) ? c.map((b) => (b && typeof b.text === 'string' ? b.text : '')).join('') : '');
+const contextOf = (u) => u.input + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h;
+
+// The command a Bash lookup runs, past `cd …&&` and environment assignments.
+function lookupTarget(cmd) {
+  const parts = cmd.split(/&&|;/).map((x) => x.trim()).filter(Boolean);
+  const last = parts.filter((x) => !/^cd(\s|$)/.test(x)).shift();
+  if (!last) return null;
+  const words = last.split(/\s+/).filter((w) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w));
+  const [w0, w1] = words;
+  if (!(LOOKUP_WORDS.has(w0) || (w0 === 'sed' && w1 === '-n'))) return null;
+  const tail = words.slice(1).filter((w) => !w.startsWith('-') && !/[|<>]/.test(w));
+  return { target: (tail[tail.length - 1] || '').replace(/^['"]|['"]$/g, '') };
+}
+
+// The paths a task's **Files:** block names in the plan.
+export function planFiles(planText, n) {
+  const m = planText.split(/\r?\n/);
+  const start = m.findIndex((l) => new RegExp(`^### Task ${n}:`).test(l));
+  if (start < 0) return [];
+  const out = [];
+  let inFiles = false;
+  for (let i = start + 1; i < m.length && !/^### /.test(m[i]); i++) {
+    const l = m[i];
+    if (/^\*\*Files:\*\*/.test(l)) inFiles = true;
+    else if (inFiles && (/^\*\*[^*]+:\*\*/.test(l) || l.trim() === '')) { if (out.length) break; continue; }
+    if (!inFiles) continue;
+    const ticks = [...l.matchAll(/`([^`]+)`/g)].map((x) => x[1].split(/\s+/)[0]);
+    out.push(...(ticks.length ? ticks : (l.replace(/^\*\*Files:\*\*/, '').match(/[\w./-]+\.\w+/g) || [])));
+  }
+  return out;
+}
+
+// Lookups, reads, repeat reads and background waits among a row's entries.
+function lookupMetrics(entries, files) {
+  const seen = new Set();
+  const readIds = new Set();
+  const wholeRead = new Set();
+  const bg = new Map();
+  let lookups = 0; let repeatReads = 0; let inFiles = 0; let readTokens = 0; let waitSeconds = 0;
+  const hit = (t) => t && files.some((f) => t === f || t.endsWith(`/${f}`));
+  for (const { entry: e } of entries) {
+    for (const b of toolUses(e)) {
+      if (seen.has(b.id)) continue;
+      seen.add(b.id);
+      const inp = b.input || {};
+      if (b.name === 'Read') {
+        lookups++;
+        readIds.add(b.id);
+        if (hit(inp.file_path)) inFiles++;
+        if (inp.offset === undefined && inp.limit === undefined) {
+          if (wholeRead.has(inp.file_path)) repeatReads++;
+          wholeRead.add(inp.file_path);
+        }
+      } else if (b.name === 'Bash' && typeof inp.command === 'string') {
+        const l = lookupTarget(inp.command);
+        if (l) { lookups++; if (hit(l.target)) inFiles++; }
+        if (inp.run_in_background) bg.set(b.id, { at: ms(e.timestamp), task: null });
+      }
+    }
+    for (const b of userBlocks(e)) {
+      if (b.type !== 'tool_result') continue;
+      if (readIds.has(b.tool_use_id)) readTokens += Math.ceil(textOf(b.content).length / 4);
+      const w = bg.get(b.tool_use_id);
+      const id = w && /ID: ([A-Za-z0-9_-]+)/.exec(textOf(b.content));
+      if (id) w.task = id[1];
+    }
+    const text = e && e.type === 'user' && e.message ? textOf(e.message.content) : '';
+    if (text.includes('<task-notification>')) {
+      for (const [k, w] of bg) {
+        if (w.task === null ? true : text.includes(`<task-id>${w.task}</task-id>`)) {
+          const at = ms(e.timestamp);
+          if (Number.isFinite(at) && Number.isFinite(w.at)) waitSeconds += Math.round((at - w.at) / 1000);
+          bg.delete(k);
+          break;
+        }
+      }
+    }
+  }
+  return { lookups, readTokens, repeatReads, filesLookupShare: lookups && files.length ? round6(inFiles / lookups) : null, waitSeconds };
+}
+
+// Context growth: the sum of rises between consecutive main-chain requests.
+function growthOf(msgs) {
+  let g = 0;
+  for (let i = 1; i < msgs.length; i++) g += Math.max(0, contextOf(msgs[i].usage) - contextOf(msgs[i - 1].usage));
+  return g;
+}
+
+// The byte spans of every closed task's slices, per transcript.
+function taskSpans(rows, dirs) {
+  const tasks = new Map();
+  for (const r of rows) {
+    const t = tasks.get(r.task) || { opens: [], close: null };
+    if (r.event === 'close') { if (!t.close) t.close = r; } else if (!t.close) t.opens.push(r);
+    tasks.set(r.task, t);
+  }
+  const spans = new Map();
+  for (const t of tasks.values()) {
+    if (!t.close) continue;
+    for (const x of segments(t.opens, t.close, dirs)) spans.set(x.file, [...(spans.get(x.file) || []), { start: x.start, end: x.end }]);
+  }
+  return spans;
+}
+
+export function reportPlan(plan, rows, opts, prices, foreign = new Map()) {
   const dirs = opts.transcripts;
+  let planText = '';
+  if (opts.plan) { try { planText = fs.readFileSync(opts.plan, 'utf8'); } catch { /* no plan */ } }
   const tasks = new Map();
   for (const r of rows) {
     if (!/^\d+$/.test(r.task)) continue;
@@ -215,11 +326,16 @@ export function reportPlan(plan, rows, opts, prices) {
     tasks.set(r.task, t);
   }
   const excluded = [];
+  const deferredSegs = [];
   let unclosed = 0;
   const closed = [];
   for (const t of [...tasks.values()].sort((a, b) => a.n - b.n)) {
     if (!t.close) { unclosed++; continue; }
-    if (t.close.deferred === '1') { excluded.push(`Task ${t.n}: deferred by the auto run`); continue; }
+    if (t.close.deferred === '1') {
+      excluded.push(`Task ${t.n}: deferred by the auto run`);
+      deferredSegs.push(...segments(t.opens, t.close, dirs));
+      continue;
+    }
     t.segs = segments(t.opens, t.close, dirs);
     closed.push(t);
   }
@@ -257,6 +373,20 @@ export function reportPlan(plan, rows, opts, prices) {
     }
     const msgs = messages(entries, false);
     const main = total(msgs, prices, unpriced, byModel);
+    const named = [...new Set(members.flatMap((t) => planFiles(planText, t.n)))];
+    const lm = lookupMetrics(entries, named);
+    const compactions = [];
+    for (const f of files) {
+      const all = readEntries(f) || [];
+      const spans = mergeIntervals(segs.filter((x) => x.file === f));
+      all.forEach((x, i) => {
+        const e = x.entry;
+        if (!(e && e.type === 'system' && e.subtype === 'compact_boundary') || !spans.some((sp) => x.offset >= sp.start && x.offset < sp.end)) return;
+        const md = e.compactMetadata || {};
+        const next = messages(all.slice(i + 1).filter((y) => y.entry && y.entry.type === 'assistant'), false)[0];
+        compactions.push({ durationMs: md.durationMs ?? null, postTokens: md.postTokens ?? null, nextContext: next ? contextOf(next.usage) : null, file: f, offset: x.offset });
+      });
+    }
     const subagents = {};
     for (const f of files) {
       if (!subs.has(f)) subs.set(f, subagentFiles(f));
@@ -286,20 +416,52 @@ export function reportPlan(plan, rows, opts, prices) {
       models: [...new Set(msgs.map((m) => m.model))].sort(),
       contextOpen: opens.length ? num(opens[0].context) : null,
       contextClose: num(lastClose.context),
+      growth: growthOf(msgs),
+      lookups: lm.lookups,
+      readTokens: lm.readTokens,
+      repeatReads: lm.repeatReads,
+      filesLookupShare: lm.filesLookupShare,
+      compactions,
+      lookupsAfterCompaction: null,
+      waitSeconds: lm.waitSeconds,
+      start: Math.min(...segs.map((x) => (Number.isFinite(x.from) ? x.from : Infinity))),
+      firstSeg: segs.map((x) => ({ file: x.file, start: x.start })),
       subagents,
       cost: round6(main.cost + subCost),
       unpriced: [...unpriced].sort(),
     });
   }
   outRows.sort((a, b) => a.tasks[0] - b.tasks[0]);
-  // Usage in the same transcripts outside every task's slice.
+  // The first task to start after a compaction carries its lookups.
+  const comps = outRows.flatMap((r) => r.compactions);
+  for (const c of comps) {
+    const after = outRows.filter((r) => r.firstSeg.some((x) => x.file === c.file && x.start > c.offset))
+      .sort((a, b) => a.start - b.start)[0];
+    if (after) after.lookupsAfterCompaction = after.lookups;
+  }
+  for (const r of outRows) {
+    for (const c of r.compactions) { delete c.file; delete c.offset; }
+    delete r.start; delete r.firstSeg;
+  }
+  // Usage in the same transcripts outside every task's slice, from each
+  // transcript's first open on; what comes before it is excluded.
+  // Another plan's slices in a shared transcript are not this plan's outside.
+  for (const [f, list] of foreign) if (inTasks.has(f)) inTasks.set(f, [...inTasks.get(f), ...list]);
+  // A deferred task's slice is neither a task's nor outside.
+  for (const x of deferredSegs) inTasks.set(x.file, [...(inTasks.get(x.file) || []), { start: x.start, end: x.end }]);
+  const firstOpen = new Map();
+  for (const x of [...closed.flatMap((t) => t.segs), ...deferredSegs]) firstOpen.set(x.file, Math.min(firstOpen.get(x.file) ?? Infinity, x.start));
   const outsideMsgs = [];
   const outsideUnpriced = new Set();
+  let before = 0;
   for (const [f, spans] of inTasks) {
     const all = readEntries(f) || [];
-    outsideMsgs.push(...messages(all.filter((x) => !spans.some((s) => x.offset >= s.start && x.offset < s.end)), false));
+    const from = firstOpen.get(f) ?? 0;
+    before += messages(all.filter((x) => x.offset < from), false).length;
+    outsideMsgs.push(...messages(all.filter((x) => x.offset >= from && !spans.some((s) => x.offset >= s.start && x.offset < s.end)), false));
   }
-  const outside = total(outsideMsgs, prices, outsideUnpriced, null);
+  if (before) excluded.push('before first open');
+  const outside = total(outsideMsgs, prices, outsideUnpriced, byModel);
   for (const list of subs.values()) {
     for (const sa of list) {
       if (sa.taken) continue;
@@ -310,6 +472,10 @@ export function reportPlan(plan, rows, opts, prices) {
   outside.cost = round6(outside.cost);
   for (const u of Object.values(byModel)) u.cost = round6(u.cost);
   const completed = outRows.reduce((s, r) => s + r.tasks.length, 0);
+  const segCost = outRows.reduce((s, r) => s + r.cost, 0);
+  const planTotal = emptyUsage();
+  for (const u of Object.values(byModel)) for (const k of Object.keys(planTotal)) planTotal[k] += u[k];
+  planTotal.cost = round6(planTotal.cost);
   const file = rows[0] && rows[0].file;
   const repo = file && /[\\/]sdd[\\/]usage-markers\.tsv$/.test(file) ? path.resolve(file, '..', '..', '..') : null;
   return {
@@ -317,11 +483,13 @@ export function reportPlan(plan, rows, opts, prices) {
     repo,
     tasks: outRows,
     outside,
-    costPerTask: completed ? round6(outRows.reduce((s, r) => s + r.cost, 0) / completed) : null,
+    costPerTask: completed ? round6((segCost + outside.cost) / completed) : null,
+    costPerTaskSegments: completed ? round6(segCost / completed) : null,
     completed,
     unclosed,
     excluded,
     byModel,
+    byRepo: repo ? { [repo]: planTotal } : {},
     asOf: null,
   };
 }
@@ -331,12 +499,22 @@ export function report(opts) {
   const rows = readMarkers(opts.markers);
   const byPlan = new Map();
   for (const r of rows) {
-    if (opts.plan && r.plan !== opts.plan && path.basename(r.plan) !== path.basename(opts.plan)) continue;
     const list = byPlan.get(r.plan) || [];
     list.push(r);
     byPlan.set(r.plan, list);
   }
-  return { plans: [...byPlan].map(([plan, list]) => reportPlan(plan, list, opts, prices)) };
+  const spans = new Map([...byPlan].map(([plan, list]) => [plan, taskSpans(list, opts.transcripts)]));
+  const wanted = (plan) => !opts.plan || plan === opts.plan || path.basename(plan) === path.basename(opts.plan);
+  return {
+    plans: [...byPlan].filter(([plan]) => wanted(plan)).map(([plan, list]) => {
+      const foreign = new Map();
+      for (const [other, m] of spans) {
+        if (other === plan) continue;
+        for (const [f, l] of m) foreign.set(f, [...(foreign.get(f) || []), ...l]);
+      }
+      return reportPlan(plan, list, opts, prices, foreign);
+    }),
+  };
 }
 
 const usd = (n) => (n === null ? '-' : `$${n.toFixed(2)}`);

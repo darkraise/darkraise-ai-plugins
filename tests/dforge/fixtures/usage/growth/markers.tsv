@@ -1,0 +1,4 @@
+2026-01-01T00:00:05Z	open	dforge	5.1.1	/plugin	docs/plans/p.md	1	g2		332	1	task-brief:1		
+2026-01-01T00:00:20Z	close	dforge	5.1.1	/plugin	docs/plans/p.md	1	g2		1679	2	task-close:1	a..b	
+2026-01-01T00:00:35Z	open	dforge	5.1.1	/plugin	docs/plans/p.md	2	g2		2014	3	task-brief:2		
+2026-01-01T00:00:45Z	close	dforge	5.1.1	/plugin	docs/plans/p.md	2	g2		2347	4	task-close:2	b..c	

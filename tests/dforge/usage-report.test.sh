@@ -36,8 +36,9 @@ check "per_task_fields: task 1 cost" "$(q "$J" "$T1 | .cost")" "0.00586"
 check "per_task_fields: task 1 label, group and range" "$(q "$J" "$T1 | [.label, .group, .range]")" '["marked",false,"aaa..bbb"]'
 check "per_task_fields: task 2 usage and cost" \
   "$(q "$J" '.plans[0].tasks[] | select(.tasks == [2]) | [.turns, .input, .cacheRead, .output, .cost]')" "[1,7,500,8,0.000144]"
-check "per_task_fields: outside the tasks" "$(q "$J" '.plans[0].outside | [.turns, .cost]')" "[2,0.000372]"
-check "per_task_fields: cost per task" "$(q "$J" '.plans[0] | [.completed, .costPerTask]')" "[2,0.003002]"
+# m0 comes before the first open (excluded); m4 after task 2 is outside: 2*4 + 3*20.
+check "per_task_fields: outside the tasks" "$(q "$J" '.plans[0].outside | [.turns, .cost]')" "[1,0.000068]"
+check "per_task_fields: cost per task, with and without outside" "$(q "$J" '.plans[0] | [.completed, .costPerTask, .costPerTaskSegments]')" "[2,0.003036,0.003002]"
 check "per_task_fields: by model" "$(q "$J" '.plans[0].byModel | keys')" '["claude-opus-5-5","claude-sonnet-5-5"]'
 check "per_task_fields: md has a row per task" \
   "$(node "$REPORT" --markers "$FX/basic/markers.tsv" --transcripts "$FX/basic/proj" | grep -c '^| [12] |')" "2"
@@ -45,8 +46,10 @@ check "per_task_fields: md has a row per task" \
 # --- deferred_excluded, unpriced_model, open_after_close_ignored ---
 J=$(rep misc)
 check "deferred_excluded: not completed" "$(q "$J" '.plans[0] | [.completed, (.tasks | map(.tasks[]))]')" "[1,[7]]"
-check "deferred_excluded: listed as excluded" "$(q "$J" '.plans[0].excluded')" '["Task 6: deferred by the auto run"]'
-check "deferred_excluded: not in the cost per task" "$(q "$J" '.plans[0] | .costPerTask == .tasks[0].cost')" "true"
+check "deferred_excluded: listed as excluded" "$(q "$J" '.plans[0].excluded')" '["Task 6: deferred by the auto run","before first open"]'
+check "deferred_excluded: not in the cost per task" "$(q "$J" '.plans[0] | .costPerTaskSegments == .tasks[0].cost')" "true"
+# k4 and k5 after task 7 are outside (577*4); task 6's slice is neither.
+check "deferred_excluded: its slice is not outside" "$(q "$J" '.plans[0].outside | [.turns, .cost]')" "[2,0.002308]"
 check "unpriced_model: listed and priced at 0" "$(q "$J" '.plans[0].tasks[0] | [.unpriced, .cost, .turns]')" '[["claude-unknown-9"],0.00004,2]'
 check "open_after_close_ignored: the task keeps its slice" "$(q "$J" '.plans[0].tasks[0] | [.input, .contextOpen]')" "[1010,3]"
 check "open_after_close_ignored: an open with no close is unclosed" "$(q "$J" '.plans[0].unclosed')" "1"
@@ -62,6 +65,40 @@ check "overlapping_group: one row for both tasks" "$(q "$J" '.plans[0].tasks | l
 check "overlapping_group: tasks, group and the union once" \
   "$(q "$J" '.plans[0].tasks[0] | [.tasks, .group, .turns, .input]')" "[[4,5],true,3,7]"
 check "overlapping_group: both tasks completed" "$(q "$J" '.plans[0].completed')" "2"
+
+# --- lookups_and_files_share ---
+J=$(node "$REPORT" --markers "$FX/lookups/markers.tsv" --transcripts "$FX/lookups/proj" --plan "$FX/lookups/p.md" --format json 2>/dev/null)
+# Two whole reads of a.sh, rg on b.sh, sed -n on c.sh; git status is no lookup.
+# Read results of 400 and 200 characters are 100 + 50 tokens at 4 per token.
+check "lookups_and_files_share: lookups, repeats, share and read tokens" \
+  "$(q "$J" '.plans[0].tasks[0] | [.lookups, .repeatReads, .filesLookupShare, .readTokens]')" "[4,1,0.75,150]"
+
+# --- compaction_fields ---
+J=$(rep compaction)
+check "compaction_fields: task 2's compaction" "$(q "$J" '.plans[0].tasks[] | select(.tasks == [2]) | .compactions')" \
+  '[{"durationMs":117000,"postTokens":32000,"nextContext":40000}]'
+check "compaction_fields: the first task after it counts its lookups" \
+  "$(q "$J" '.plans[0].tasks | map(.lookupsAfterCompaction)')" "[null,2]"
+
+# --- growth_and_outside ---
+J=$(rep growth)
+check "growth_and_outside: growth sums the rises" "$(q "$J" '.plans[0].tasks[] | select(.tasks == [1]) | .growth')" "40000"
+# Task 1: 420000 cache read * 0.2; task 2: 10 * 4; outside (between tasks): 1000 * 4.
+check "growth_and_outside: the usage between tasks is outside" "$(q "$J" '.plans[0].outside | [.turns, .input]')" "[1,1000]"
+check "growth_and_outside: both cost figures" "$(q "$J" '.plans[0] | [.costPerTask, .costPerTaskSegments]')" "[0.04402,0.04202]"
+check "growth_and_outside: the usage before the first open is excluded" "$(q "$J" '.plans[0].excluded')" '["before first open"]'
+
+# --- splits_and_all_plans ---
+J=$(node "$REPORT" --markers "$FX/splits/repo/state/sdd/usage-markers.tsv" --transcripts "$FX/splits/proj" --format json 2>/dev/null)
+check "splits_and_all_plans: both plans" "$(q "$J" '[.plans[].plan]')" '["docs/plans/p.md","docs/plans/q.md"]'
+check "splits_and_all_plans: by model" "$(q "$J" '.plans[0].byModel | map_values([.input, .cost])')" \
+  '{"claude-opus-5-5":[10,0.00004],"claude-sonnet-5-5":[20,0.00004]}'
+check "splits_and_all_plans: by repository" "$(q "$J" '.plans[0].byRepo | to_entries | map([(.key | sub(".*/fixtures/"; "")), .value.input, .value.cost])')" \
+  '[["usage/splits/repo",30,0.00008]]'
+
+# --- wait_seconds ---
+J=$(rep wait)
+check "wait_seconds: from the background call to its notification" "$(q "$J" '.plans[0].tasks[0].waitSeconds')" "90"
 
 # --- usage errors ---
 node "$REPORT" --format csv >/dev/null 2>&1
