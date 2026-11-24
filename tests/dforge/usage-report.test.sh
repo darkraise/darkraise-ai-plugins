@@ -246,6 +246,113 @@ printf '2026-01-01T00:00:00Z\topen\tdforge\t1.0.0\t/plugin\tdocs/dforge/plans/p.
 missing_case "markers naming a transcript that does not exist" "no transcript"
 missing_case "no node on PATH" "node not found" "$(nonode_path)"
 
+# --- fixtures built here: one assistant record per line ---
+# say FILE ID TIME INPUT [MODEL] [BASH] — append a main-chain record, with a Bash call when BASH is given
+say() {
+  local content='[]'
+  [ -z "${6:-}" ] || content=$(jq -nc --arg c "$6" '[{type: "tool_use", id: ("t-" + $c | gsub("[^A-Za-z0-9]"; "")), name: "Bash", input: {command: $c}}]')
+  jq -nc --arg id "$2" --arg t "$3" --argjson n "$4" --arg m "${5:-claude-opus-5-5}" --argjson c "$content" \
+    '{type: "assistant", isSidechain: false, timestamp: $t, message: {id: $id, model: $m, content: $c,
+      usage: {input_tokens: $n, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 0}}}' >> "$1"
+}
+at() { wc -c < "$1" | tr -d ' '; } # at FILE — the byte offset the next record starts at
+mark() { # mark EVENT TIME PLAN TASK SESSION BYTES [RANGE]
+  printf '%s\t%s\tdforge\t5.1.1\t/plugin\t%s\t%s\t%s\t\t%s\t1\ttask-%s:%s\t%s\t\n' "$2" "$1" "$3" "$4" "$5" "$6" "$1" "$4" "${7:-}"
+}
+
+# --- inferred_open_only: open rows, no close, a ledger complete line ---
+IO="$TMP/io"; mkdir -p "$IO/proj"
+say "$IO/proj/i1.jsonl" i1 2026-01-01T00:00:01Z 0 "" 'bash task-brief --open docs/plans/p.md 1'
+say "$IO/proj/i1.jsonl" i2 2026-01-01T00:00:02Z 30
+mark open 2026-01-01T00:00:01Z docs/plans/p.md 1 i1 0 > "$IO/markers.tsv"
+printf '# SDD ledger — plan: docs/plans/p.md\nTask 1: complete (commits a..b, unreviewed) — x\n' > "$IO/progress.md"
+J=$(node "$REPORT" --markers "$IO/markers.tsv" --transcripts "$IO/proj" --ledger "$IO/progress.md" --format json 2>/dev/null)
+check "inferred_open_only: measured by inference" "$(q "$J" '.plans[0].tasks | map([.tasks, .label, .range, .input])')" '[[[1],"inferred","a..b",30]]'
+check "inferred_open_only: completed, not unclosed or unmarked" "$(q "$J" '.plans[0] | [.completed, .unclosed, .unmarked]')" "[1,0,0]"
+
+# --- plain_brief_after_open: a plain task-brief re-reads; alone it opens ---
+B=$(cd "$HERE/../../plugins/dforge/scripts/lib" && node --input-type=module -e '
+  import { inferBounds } from "./usage-report.mjs";
+  const call = (c) => ({ type: "assistant", message: { content: [{ type: "tool_use", id: c, name: "Bash", input: { command: c } }] } });
+  const at = (list) => list.map((c, i) => ({ offset: i, entry: c ? call(c) : { type: "assistant", message: { content: [] } } }));
+  const one = inferBounds(at(["bash task-brief --open docs/p.md 1", null, "bash task-brief docs/p.md 1", null, "bash task-close docs/p.md 1 x"]));
+  const two = inferBounds(at(["bash task-brief docs/p.md 2", null, "bash task-close docs/p.md 2 x"]));
+  console.log(JSON.stringify([...one, ...two].map((b) => [b.task, b.start, b.end])));' 2>&1)
+check "plain_brief_after_open: one slice per task" "$B" '[[1,0,5],[2,0,3]]'
+
+# --- wait_matches_job: a launch with no job id is not credited with another job's end ---
+WJ="$TMP/wj"; mkdir -p "$WJ/proj"
+jq -nc '{type: "assistant", isSidechain: false, timestamp: "2026-01-01T00:00:10Z", message: {id: "j1", model: "claude-opus-5-5",
+  content: [{type: "tool_use", id: "b1", name: "Bash", input: {command: "sleep 1", run_in_background: true}}], usage: {input_tokens: 1, output_tokens: 0}}}' >> "$WJ/proj/j1.jsonl"
+jq -nc '{type: "user", isSidechain: false, timestamp: "2026-01-01T00:00:11Z", message: {role: "user", content: [{type: "tool_result", tool_use_id: "b1", content: "Started."}]}}' >> "$WJ/proj/j1.jsonl"
+jq -nc '{type: "assistant", isSidechain: false, timestamp: "2026-01-01T00:00:40Z", message: {id: "j2", model: "claude-opus-5-5",
+  content: [{type: "tool_use", id: "b2", name: "Bash", input: {command: "sleep 60", run_in_background: true}}], usage: {input_tokens: 1, output_tokens: 0}}}' >> "$WJ/proj/j1.jsonl"
+jq -nc '{type: "user", isSidechain: false, timestamp: "2026-01-01T00:00:41Z", message: {role: "user", content: [{type: "tool_result", tool_use_id: "b2", content: "Command running in background with ID: bg2."}]}}' >> "$WJ/proj/j1.jsonl"
+jq -nc '{type: "user", isSidechain: false, timestamp: "2026-01-01T00:01:40Z", message: {role: "user", content: "<task-notification><task-id>bg2</task-id><status>completed</status></task-notification>"}}' >> "$WJ/proj/j1.jsonl"
+{ mark open 2026-01-01T00:00:00Z docs/plans/p.md 1 j1 0; mark close 2026-01-01T00:02:00Z docs/plans/p.md 1 j1 "$(at "$WJ/proj/j1.jsonl")" a..b; } > "$WJ/markers.tsv"
+J=$(node "$REPORT" --markers "$WJ/markers.tsv" --transcripts "$WJ/proj" --format json 2>/dev/null)
+check "wait_matches_job: bg2's wait from its own launch" "$(q "$J" '.plans[0].tasks[0].waitSeconds')" "60"
+
+# --- outside_subagents: before the first open, inside another plan's slice, after both ---
+OS="$TMP/os"; f="$OS/proj/o1.jsonl"; mkdir -p "$OS/proj/o1/subagents"
+say "$f" o1 2026-01-01T00:00:01Z 1
+p0=$(at "$f"); say "$f" o2 2026-01-01T00:00:10Z 10; p1=$(at "$f")
+say "$f" o3 2026-01-01T00:00:20Z 100; q1=$(at "$f")
+say "$f" o4 2026-01-01T00:00:30Z 1000
+sub() { # sub NAME TIME INPUT MODEL
+  printf '{"agentType": "x:%s"}\n' "$1" > "$OS/proj/o1/subagents/agent-$1.meta.json"
+  jq -nc --arg t "$2" --argjson n "$3" --arg m "$4" --arg id "s-$1" '{type: "assistant", isSidechain: true, timestamp: $t,
+    message: {id: $id, model: $m, usage: {input_tokens: $n, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 0}}}' \
+    > "$OS/proj/o1/subagents/agent-$1.jsonl"
+}
+sub early 2026-01-01T00:00:02Z 7 claude-opus-5-5
+sub other 2026-01-01T00:00:21Z 70 claude-opus-5-5
+sub late 2026-01-01T00:00:31Z 700 claude-sonnet-5-5
+{
+  mark open 2026-01-01T00:00:05Z docs/plans/p.md 1 o1 "$p0"
+  mark close 2026-01-01T00:00:15Z docs/plans/p.md 1 o1 "$p1" a..b
+  mark open 2026-01-01T00:00:18Z docs/plans/q.md 1 o1 "$p1"
+  mark close 2026-01-01T00:00:25Z docs/plans/q.md 1 o1 "$q1" c..d
+} > "$OS/markers.tsv"
+J=$(node "$REPORT" --markers "$OS/markers.tsv" --transcripts "$OS/proj" --plan docs/plans/p.md --format json 2>/dev/null)
+check "outside_subagents: only the late subagent and the main record after both plans" "$(q "$J" '.plans[0].outside | [.turns, .input]')" "[2,1700]"
+check "outside_subagents: the early one is before the first open" "$(q "$J" '.plans[0].excluded | index("before first open") != null')" "true"
+check "outside_subagents: the late one counts in by model" "$(q "$J" '.plans[0].byModel["claude-sonnet-5-5"].input')" "700"
+
+# --- unresolved_tasks: no transcript, or a mark with no byte offset ---
+UR="$TMP/ur"; mkdir -p "$UR/proj"
+say "$UR/proj/r1.jsonl" r1 2026-01-01T00:00:01Z 5
+{
+  mark open 2026-01-01T00:00:00Z docs/plans/p.md 1 gone 0; mark close 2026-01-01T00:00:01Z docs/plans/p.md 1 gone 10 a..b
+  mark open 2026-01-01T00:00:00Z docs/plans/p.md 2 r1 ""; mark close 2026-01-01T00:00:02Z docs/plans/p.md 2 r1 "$(at "$UR/proj/r1.jsonl")" b..c
+  mark open 2026-01-01T00:00:00Z docs/plans/p.md 3 r1 0; mark close 2026-01-01T00:00:03Z docs/plans/p.md 3 r1 "$(at "$UR/proj/r1.jsonl")" c..d
+} > "$UR/markers.tsv"
+J=$(node "$REPORT" --markers "$UR/markers.tsv" --transcripts "$UR/proj" --format json 2>/dev/null)
+check "unresolved_tasks: labelled unresolved, the bounded one marked" "$(q "$J" '[.plans[0].tasks[] | [.tasks[0], .label]] | sort')" '[[1,"unresolved"],[2,"unresolved"],[3,"marked"]]'
+check "unresolved_tasks: only the bounded task is completed" "$(q "$J" '.plans[0].completed')" "1"
+check "unresolved_tasks: each listed as excluded" "$(q "$J" '[.plans[0].excluded[] | select(test("no transcript bounds"))]')" \
+  '["Task 1: no transcript bounds its slice","Task 2: no transcript bounds its slice"]'
+
+# --- quality_unknowns: a gone range, no repository, no record ---
+qrun() { # qrun RANGE REPO RECORD — the plan's quality
+  printf '2026-01-01T00:00:00Z\topen\tdforge\t5.1.1\t/plugin\tdocs/plans/p.md\t1\tq1\t\t0\t1\ttask-brief:1\t\t\n2026-01-01T00:10:00Z\tclose\tdforge\t5.1.1\t/plugin\tdocs/plans/p.md\t1\tq1\t\t\t2\ttask-close:1\t%s\t\n' "$1" > "$TMP/q2-markers.tsv"
+  node "$REPORT" --markers "$TMP/q2-markers.tsv" --transcripts "$FX/quality/proj" --plan "$FX/quality/plans/p.md" \
+    --review-record "$3" --register "$FX/quality/reg.md" --repo "$2" --format json 2>/dev/null | jq -c '.plans[0].quality | [.findings, .fixCommits]'
+}
+check "quality_unknowns: a range whose commits are gone still counts later fixes" "$(qrun deadbee..cafebab "$QR" "$FX/quality/record.md")" '[{"Critical":1,"Important":2},2]'
+mkdir -p "$TMP/notrepo"
+check "quality_unknowns: no repository is unknown, not zero" "$(qrun "$QA..$QB" "$TMP/notrepo" "$FX/quality/record.md")" '[{"Critical":1,"Important":2},null]'
+check "quality_unknowns: an unreadable record is unknown, not zero" "$(qrun "$QA..$QB" "$QR" "$TMP/absent.md")" '[null,1]'
+
+# --- prices_unreadable ---
+mkdir -p "$TMP/noprices/lib"
+cp "$REPORT" "$TMP/noprices/lib/"
+J=$(node "$TMP/noprices/lib/usage-report.mjs" --markers "$FX/basic/markers.tsv" --transcripts "$FX/basic/proj" --format json 2>/dev/null)
+check "prices_unreadable: the report says why" "$(q "$J" '.pricesError | test("api-prices.json")')" "true"
+check "prices_unreadable: and the markdown says so first" \
+  "$(node "$TMP/noprices/lib/usage-report.mjs" --markers "$FX/basic/markers.tsv" --transcripts "$FX/basic/proj" 2>/dev/null | head -n 1 | grep -c '^Prices unreadable, every cost is unpriced: .*api-prices.json')" "1"
+check "prices_unreadable: a readable prices file adds no field" "$(q "$(rep basic)" 'has("pricesError")')" "false"
+
 # --- usage errors ---
 node "$REPORT" --format csv >/dev/null 2>&1
 check "usage: a bad format exits 2" "$?" "2"
