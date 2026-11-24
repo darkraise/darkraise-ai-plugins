@@ -81,6 +81,9 @@ check "mirror_audit: polish 5's panel and agy runner are recorded n/a" \
 # ---------------------------------------------------------------------------
 TMP=$(mktemp -d)
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
+# native PATH — PATH as native programs read it: jq.exe, node.exe and git.exe
+# cannot open a Git Bash path such as /d/a/... with MSYS_NO_PATHCONV set.
+native() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME/.claude/projects/fx"
@@ -271,11 +274,11 @@ arrun "$RV" v1 attach --plan docs/plans/p.md >/dev/null 2>&1
 check "A12: the run records the plugin version and root" "$(jq -c '[.version, .root]' "$RV/.dagents/sdd/auto-run.json")" "[\"$VERSION\",\"$P\"]"
 mkroot() { # mkroot DIR VERSION — a copy of the plugin at another root and version
   mkdir -p "$1"; cp -R "$P/scripts" "$P/skills" "$P/reference" "$P/criteria" "$P/agents" "$P/.claude-plugin" "$1/" 2>/dev/null
-  jq --arg v "$2" '.version = $v' "$P/.claude-plugin/plugin.json" > "$1/.claude-plugin/plugin.json"
+  jq --arg v "$2" '.version = $v' "$(native "$P/.claude-plugin/plugin.json")" > "$1/.claude-plugin/plugin.json"
 }
 mkroot "$TMP/other-9" 9.9.9
 mkroot "$TMP/other-same" "$VERSION"
-WARN="auto run: plugin version mismatch — run $VERSION at $P, this call 9.9.9 at $TMP/other-9"
+WARN="auto run: plugin version mismatch — run $VERSION at $P, this call 9.9.9 at $(cd "$TMP/other-9" && pwd)"
 beat v1
 (cd "$RV" && bash "$TMP/other-9/scripts/auto-run" --session v1 status >"$TMP/v.out" 2>"$TMP/v.err")
 check "A12: an auto-run call from another version warns on stderr, naming both versions and roots" "$(grep -cxF "$WARN" "$TMP/v.err")" "1"
@@ -377,7 +380,7 @@ arrun "$RQ" sess-q attach --plan docs/plans/p.md >/dev/null 2>&1
 (cd "$RQ" && CLAUDE_CODE_SESSION_ID=sess-q bash "$P/scripts/task-brief" docs/plans/p.md 1 >"$TMP/q1.out" 2>&1)
 tscript sess-q 75000 >/dev/null
 (cd "$RQ" && CLAUDE_CODE_SESSION_ID=sess-q bash "$P/scripts/task-brief" docs/plans/p.md 2 >"$TMP/q2.out" 2>&1)
-check "A27: auto path: the briefs printed the auto budget line" "$(grep -c '^budget (auto' "$TMP/q1.out" "$TMP/q2.out" | sed 's#[^:]*:##' | tr '\n' ' ')" "1 1 "
+check "A27: auto path: the briefs printed the auto budget line" "$(grep -hc '^budget (auto' "$TMP/q1.out" "$TMP/q2.out" | tr '\n' ' ')" "1 1 "
 OBSQ=$(cd "$RQ" && bash "$P/scripts/context-size" --observations 2>&1)
 check "A27: auto path: the growth between two task briefs of a Claude session" "$(grep -c '^sess-q  Task 1 -> Task 2  +45k$' <<<"$OBSQ")" "1"
 OBS_BAD=$((fail - G3))
@@ -386,7 +389,7 @@ OBS_BAD=$((fail - G3))
 G4=$fail
 CR="$TMP/cr"; mkdir -p "$CR/bin" "$CR/config/plugins" "$CR/work"
 printf '{"enabledPlugins":{"codex@openai-codex":true}}\n' > "$CR/config/settings.json"
-jq -nc --arg p "$HERE/fixtures/stub-codex-plugin" '{version:2, plugins:{"codex@openai-codex":[{scope:"user", installPath:$p, version:"1.0.3"}]}}' > "$CR/config/plugins/installed_plugins.json"
+jq -nc --arg p "$(native "$HERE/fixtures/stub-codex-plugin")" '{version:2, plugins:{"codex@openai-codex":[{scope:"user", installPath:$p, version:"1.0.3"}]}}' > "$CR/config/plugins/installed_plugins.json"
 jq -nc '{plugin:"codex@openai-codex", min_version:"1.0.3", max_major:1, trust:{calibration:"pending", smoke:"pending"}}' > "$CR/policy.json"
 printf '```codex-judge\ngpt-6-astra high 2\ngpt-6.1-sol high 2\n```\n' > "$CR/ladder.md"
 BASH_BIN=$(command -v bash)
@@ -581,7 +584,7 @@ SUBJ=$(jq -c "$T | [.. | objects | select(has(\"dagents:judge-opus\"))][0][\"dag
 check "A5: subagent usage by agent type, a repeated id once (100 in, 50 out)"   "$(jq -c '[.. | scalars] | [any(. == 100), any(. == 50), any(. == 200), any(. == 100) and (map(select(. == 100)) | length == 1)]' <<<"$SUBJ" 2>/dev/null)" "[true,true,false,true]"
 check "A5: subagent cost at the Sonnet 5.5 rate (700 micro-dollars)" "$(near "$SUBJ" '.' 0.0007)" "yes"
 # Task cost: the main-chain tokens at Opus 5.5 rates from the prices file, plus the subagent's.
-EXPECT=$(jq -n --slurpfile p "$P/reference/api-prices.json" '$p[0].models["claude-opus-5-5"] as $m | (41*$m.input + 59015*$m.cacheRead + 1301*$m.cacheWrite5m + 4016*$m.cacheWrite1h + 101*$m.output) / 1000000 + 0.0007')
+EXPECT=$(jq -n --slurpfile p "$(native "$P/reference/api-prices.json")" '$p[0].models["claude-opus-5-5"] as $m | (41*$m.input + 59015*$m.cacheRead + 1301*$m.cacheWrite5m + 4016*$m.cacheWrite1h + 101*$m.output) / 1000000 + 0.0007')
 check "A5: task cost" "$(near "$J" "$T | .cost" "$EXPECT")" "yes"
 check "A5: a task is not charged for a subagent outside its window (one subagent file)" "$(jq -c "[$T | .. | objects | select(has(\"dagents:judge-opus\"))] | length" <<<"$J")" "1"
 
@@ -606,7 +609,7 @@ check "A22: share of lookups on named files (4 of 5)" "$([ "$(has_val "$JP" "$T"
 check "A29: growth is the sum of positive context changes (10410; the drop is not netted)" "$(key "$J" "$T" 'growth')" "10410"
 check "A29: postTokens and the first request's context after the compaction" "$(has_val "$J" "$T" 5200)/$(has_val "$J" "$T" 11337)" "yes/yes"
 OUT=$(key "$J" '.plans[0]' '^outside')
-OUT_COST=$(jq -n --slurpfile p "$P/reference/api-prices.json" '$p[0].models["claude-opus-5-5"] as $m | (2*$m.input + 2222*$m.cacheRead + 3*$m.output) / 1000000')
+OUT_COST=$(jq -n --slurpfile p "$(native "$P/reference/api-prices.json")" '$p[0].models["claude-opus-5-5"] as $m | (2*$m.input + 2222*$m.cacheRead + 3*$m.output) / 1000000')
 check "A29: an outside-tasks bucket holds the usage after the close" "$(near "$OUT" '.' "$OUT_COST")" "yes"
 SEG=$(jq -c "$T | .cost" <<<"$J")
 check "A29: segment-only cost per completed task, beside the other figure" "$(near "$J" '.plans[0] | del(.tasks, .outside, .byModel, .byRepo)' "$SEG")" "yes"
@@ -617,7 +620,9 @@ check "A29: cost per completed task is (segments + outside) / completed" "$(near
 # --- A23: a task across two transcripts; two overlapping tasks in one transcript ---
 mkrep() { # mkrep NAME — a repository, its project directory and an empty marker file
   RN="$TMP/$1"; newrepo "$RN"
-  PJ="$HOME/.claude/projects/$(printf '%s' "$RN" | tr -c 'A-Za-z0-9' '-')"; mkdir -p "$PJ"
+  # Named as usage-report names it, after the checkout git reports: on
+  # Windows the long form, not TMP's 8.3 spelling.
+  PJ="$HOME/.claude/projects/$(git -C "$RN" rev-parse --show-toplevel | tr -d '\r' | tr -d '\n' | tr -c 'A-Za-z0-9' '-')"; mkdir -p "$PJ"
   MKN="$RN/.dagents/sdd/usage-markers.tsv"; mkdir -p "$(dirname "$MKN")"; : > "$MKN"
 }
 runrep() { (cd "$RN" && bash "$REPORT" "$@" --format json 2>/dev/null); }
