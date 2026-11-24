@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "dflow",
   "description": "Plan, build, review and ship with a task gate that only a passing command can open: lean plans tracked on a board, one evidence-bound review per branch, UI proof, living docs checked mechanically, and a HUD.",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": {
     "name": "Darkraise"
   },
