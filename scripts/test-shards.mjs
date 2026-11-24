@@ -156,7 +156,7 @@ export const windowsSeconds = {
   'tests/dagents/dagents-migrate.test.sh': 135,
   'tests/dagents/dagents-split.acceptance.test.sh': 90,
   'tests/dagents/dagents-state.test.sh': 10,
-  'tests/dagents/efficiency-measurement.acceptance.test.sh': 410,
+  'tests/dagents/efficiency-measurement.acceptance.test.sh': 700,
   'tests/dagents/executor-recovery.test.sh': 250,
   'tests/dagents/executor-session.test.sh': 85,
   'tests/dagents/executors.test.sh': 10,
@@ -245,10 +245,12 @@ export const windowsSeconds = {
 // takes about 760-800 s on a Windows runner; 1000 s keeps that within 80% of
 // its limit. auto-run took 479 s on one runner and over 1000 s on another, so
 // its limit is 1600 s. task-step's limit applies to each of its parts.
-// dforge's efficiency-measurement passed 600 s at about two thirds of its cases.
+// dforge's efficiency-measurement passed 600 s at about two thirds of its cases,
+// and dagents' took 409 s on one runner and over 600 s on another.
 // Both parallel-session-handoff-qa suites took 560 s to over 600 s there.
 export const suiteSeconds = {
   'tests/dforge/efficiency-measurement.acceptance.test.sh': 1200,
+  'tests/dagents/efficiency-measurement.acceptance.test.sh': 900,
   'tests/dforge/parallel-session-handoff-qa.acceptance.test.sh': 900,
   'tests/dagents/parallel-session-handoff-qa.acceptance.test.sh': 900,
   'tests/dforge/plan-lint.test.sh': 1200,
