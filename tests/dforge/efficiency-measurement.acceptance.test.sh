@@ -823,5 +823,187 @@ gate g-qa "$TMP/qa.md"
 check "A16: a QA report that opens with ## Verdict still passes" "$GST" "0"
 unset XDG_STATE_HOME
 
+# --- the replay harness (evals/workflow-ab): A21, A30, A31 ---
+case ${OSTYPE:-} in
+  msys*|cygwin*) echo 'skip - replay harness: Linux only'; HARNESS=0 ;;
+  *) HARNESS=1 ;;
+esac
+if [ "$HARNESS" = 1 ]; then
+WAB="$REPO_ROOT/evals/workflow-ab"
+FXP=docs/dforge/plans/2026-01-01-fixture.md
+WT="$(mktemp -d "${WAB_TEST_TMP:-/var/tmp}/efficiency-acceptance.XXXXXX")"
+trap 'rm -rf "$TMP" "$WT"' EXIT
+export WAB_ROOT="$WT/root" WAB_PLAN="$FXP"
+mkdir -p "$WT/owner-config"
+printf '{\n  "model": "opus",\n  "theme": "dark"\n}\n' > "$WT/owner-config/settings.json"
+printf '{"handoffTokens": 275000}\n' > "$WT/owner-dforge.json"
+export WAB_CLAUDE_CONFIG="$WT/owner-config" WAB_DFORGE_CONFIG="$WT/owner-dforge.json"
+printf '#!/bin/sh\necho "9.9.9 (Claude Code)"\n' > "$WT/claude-version"; chmod +x "$WT/claude-version"
+
+# make_src DIR [SED] — a source repository holding the fixture, with a later commit past the base and an origin
+make_src() {
+  mkdir -p "$1"; cp -R "$WAB/fixture/." "$1/"
+  mkdir -p "$1/.claude"
+  printf '{"enabledPlugins": {"extra@market": true}}\n' > "$1/.claude/settings.json"
+  mv "$1/$FXP" "$WT/plan.md"
+  git -C "$1" init -q -b main; git -C "$1" config user.name Tester; git -C "$1" config user.email tester@localhost
+  git -C "$1" add -A; git -C "$1" commit -q -m base
+  mv "$WT/plan.md" "$1/$FXP"
+  [ -z "${2:-}" ] || sed -i -E "$2" "$1/$FXP"
+  git -C "$1" add -A; git -C "$1" commit -q -m "docs: add the plan"
+  printf 'later\n' > "$1/later.txt"; git -C "$1" add -A; git -C "$1" commit -q -m later
+  git init -q --bare "$1.origin.git"; git -C "$1" remote add origin "$1.origin.git"; git -C "$1" push -q origin main
+}
+base_of() { git -C "$1" rev-list --max-parents=0 HEAD; }
+wprep() { WAB_CLAUDE="$WT/claude-version" bash "$WAB/prepare" "$@" >"$WT/prep.out" 2>&1; WST=$?; }
+
+# stubs: tmux runs the session command in its own process group; claude records its argv and environment
+cat > "$WT/tmux" <<EOF
+#!/usr/bin/env bash
+T=$WT
+printf '%s\n' "\$*" >> "\$T/tmux.log"
+cmd=\$1; shift
+name=""
+for ((i = 1; i <= \$#; i++)); do
+  case \${!i} in -t|-s) j=\$((i + 1)); name=\${!j#=}; name=\${name%:}; break ;; esac
+done
+case \$cmd in
+  new-session) setsid bash -c "\${!#}" >/dev/null 2>&1 & echo \$! > "\$T/tmux-\$name.pid" ;;
+  has-session) p=\$(cat "\$T/tmux-\$name.pid" 2>/dev/null) && kill -0 "\$p" 2>/dev/null; exit \$? ;;
+  list-panes) cat "\$T/tmux-\$name.pid" ;;
+  kill-session) p=\$(cat "\$T/tmux-\$name.pid" 2>/dev/null) && kill -TERM -- "-\$p" 2>/dev/null; rm -f "\$T/tmux-\$name.pid" ;;
+  capture-pane) cat "\$T/pane.txt" 2>/dev/null ;;
+esac
+exit 0
+EOF
+cat > "$WT/claude-stub" <<EOF
+#!/usr/bin/env bash
+T=$WT
+if [ "\${1:-}" = --version ]; then echo "9.9.9 (Claude Code)"; exit 0; fi
+printf '%s\n' "\$@" > "\$T/claude.argv"
+env > "\$T/claude.env"
+echo \$\$ > "\$T/claude.pid"
+[ -e "\$T/hang" ] && exec sleep 300
+exit 0
+EOF
+STUBP="$WT/stub-plugins"; mkdir -p "$STUBP/plugins/dforge/scripts" "$STUBP/plugins/dagents/scripts"
+for a in dforge dagents; do
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> %q\n' "$WT/auto-run.log" > "$STUBP/plugins/$a/scripts/auto-run"
+done
+chmod +x "$WT/tmux" "$WT/claude-stub"
+export WAB_TMUX="$WT/tmux"
+wlaunch() { # wlaunch ARGS… — with the stubs and a 3-second limit unless MAXS is set
+  WAB_PLUGINS="$STUBP" WAB_CLAUDE="$WT/claude-stub" WAB_MAX_SECONDS="${MAXS:-3}" bash "$WAB/launch" "$@" >"$WT/launch.out" 2>&1; LST=$?
+}
+snap() { git -C "$1" status --porcelain; git -C "$1" remote -v; git -C "$1" for-each-ref; git -C "$1" worktree list --porcelain; git -C "$1" stash list; git -C "$1" rev-parse HEAD; }
+
+make_src "$WT/src"
+export WAB_SOURCE="$WT/src" WAB_BASE; WAB_BASE=$(base_of "$WT/src")
+LATER=$(git -C "$WT/src" rev-parse HEAD)
+printf 'dirty\n' >> "$WT/src/greet.sh"; git -C "$WT/src" stash -q; printf 'untracked\n' > "$WT/src/scratch.txt"
+SRC_SNAP=$(snap "$WT/src")
+SET_SUM=$(sha256sum "$WT/owner-config/settings.json" | cut -d' ' -f1)
+
+# --- A30: the pins and the arm record ---
+wprep dforge 1; D1=$WST
+wprep dagents 1; D2=$WST
+check "A30: prepare exits 0 for both arms" "$D1$D2" "00"
+DC="$WAB_ROOT/dforge-1/home/.dforge/config.json"; AC="$WAB_ROOT/dagents-1/home/.dagents/config.json"
+check "A30: dforge pins: handoffTokens at the owner's pin, finishAction keep, API judge off, external reviews off" \
+  "$(jq -c '[.handoffTokens, .finishAction, .decisionApi, .codexReview, .agyReview]' "$DC" 2>/dev/null)" '[275000,"keep","off",false,false]'
+check "A30: dforge's three apiBudget caps are 0" "$(jq -c '[to_entries[] | select(.key | startswith("apiBudget")) | .value]' "$DC" 2>/dev/null)" "[0,0,0]"
+check "A30: dagents pins: handoffTokens, finishAction keep, Codex and agy surfaces off" \
+  "$(jq -c '[.handoffTokens, .finishAction, .codexReview, .codexLane, .agyLane]' "$AC" 2>/dev/null)" '[275000,"keep",false,false,false]'
+for arm in dforge dagents; do
+  AJ="$WAB_ROOT/$arm-1/arm.json"
+  check "A30: $arm's arm record exists and names the arm" "$(jq -r .arm "$AJ" 2>/dev/null)" "$arm"
+  check "A30: $arm's arm record holds the pins" "$(jq -c '.pins.handoffTokens, .pins.finishAction' "$AJ" 2>/dev/null | tr '\n' ' ')" '275000 "keep" '
+  check "A30: $arm's arm record holds the launch model and effort" "$(jq -c '[to_entries[] | select(.key | test("^model$|^effort$")) | .value]' "$AJ" 2>/dev/null)" '["sonnet","high"]'
+  check "A30: $arm's arm record holds parallelism, the Claude Code version and the autoCompactWindow" \
+    "$(jq -c '[(keys | map(test("parallelism")) | any), (keys | map(test("claude.?version"; "i")) | any), (keys | map(test("autoCompactWindow")) | any)] | all' "$AJ" 2>/dev/null)" "true"
+  check "A30: $arm's arm record holds the plugin commit and whether darkmem is available" \
+    "$(jq -c '[(keys | map(test("plugin.?commit"; "i")) | any), (keys | map(test("darkmem")) | any)] | all' "$AJ" 2>/dev/null)" "true"
+done
+make_src "$WT/src-bad" 's/^\*\*Integration check:\*\* .*/**Integration check:** `false`/'
+WAB_SOURCE="$WT/src-bad" WAB_BASE=$(base_of "$WT/src-bad") wprep dforge 2 --check
+check "A30: prepare --check fails when the Integration check fails" "$WST" "1"
+rm -f "$WT/claude.argv"; : > "$WT/tmux.log"
+wlaunch dforge 2
+check "A30: launch is blocked after a failed check" "$([ "$LST" -ne 0 ] && echo blocked || echo "ran: $(cat "$WT/launch.out")")" "blocked"
+check "A30: the nested session never started" "$([ -e "$WT/claude.argv" ] && echo started || echo no):$(grep -c '^new-session' "$WT/tmux.log")" "no:0"
+make_src "$WT/src-ok" 's/^\*\*Integration check:\*\* .*/**Integration check:** `true`/'
+WAB_SOURCE="$WT/src-ok" WAB_BASE=$(base_of "$WT/src-ok") wprep dforge 3 --check
+check "A30: prepare --check passes when the checks pass" "$WST" "0"
+
+# --- A31: converted plans, the arm record's model and effort, and one plugin per launch ---
+DP="$WAB_ROOT/dforge-1/clone/$FXP"; AP="$WAB_ROOT/dagents-1/clone/docs/dagents/plans/2026-01-01-fixture.md"
+RL_D=$(grep -F 'replay in a clone with no remote' "$DP"); RL_A=$(grep -F 'replay in a clone with no remote' "$AP")
+check "A31: the dforge copy carries exactly one replay-constraint line" "$(grep -cF 'replay in a clone with no remote' "$DP")" "1"
+check "A31: the dagents copy carries exactly one replay-constraint line" "$(grep -cF 'replay in a clone with no remote' "$AP")" "1"
+check "A31: the two lines are identical" "$([ -n "$RL_D" ] && [ "$RL_D" = "$RL_A" ] && echo same || echo differ)" "same"
+check "A31: the line forbids push, tag and workflow dispatch and says a gate that needs one is not run" \
+  "$(has "$(printf '%s' "$RL_D" | tr 'A-Z' 'a-z')" 'no push, tag or workflow dispatch')/$(has "$RL_D" 'recorded as not run')" "yes/yes"
+check "A31: the dforge copy's Execution line is inline on sonnet at high effort" "$(has "$(grep '^\*\*Execution:\*\*' "$DP")" '**Execution:** inline — `claude --model sonnet --effort high`')" "yes"
+check "A31: the dagents copy keeps its subagent Execution line" "$(grep '^\*\*Execution:\*\*' "$AP")" "$(grep '^\*\*Execution:\*\*' "$WAB/fixture/$FXP")"
+make_src "$WT/src-opus" '/^### Task 2/,$ { s/impl-sonnet-high/impl-opus-medium/; s/risk 1 = 5/risk 3 = 7/ }'
+WAB_SOURCE="$WT/src-opus" WAB_BASE=$(base_of "$WT/src-opus") wprep dforge 4
+check "A31: with an opus implementer and a risk-3 task, the Execution line names opus at high effort" \
+  "$(has "$(grep '^\*\*Execution:\*\*' "$WAB_ROOT/dforge-4/clone/$FXP")" '**Execution:** inline — `claude --model opus --effort high`')" "yes"
+check "A31: that arm record holds opus and high" "$(jq -c '[to_entries[] | select(.key | test("^model$|^effort$")) | .value]' "$WAB_ROOT/dforge-4/arm.json" 2>/dev/null)" '["opus","high"]'
+check "A31: the dforge copy qualifies the unqualified Items citation" "$(grep '^\*\*Items:\*\*' "$DP")" '**Items:** 2026-01-01-fixture#1'
+check "A31: both converted plans pass their arm's plan-lint" "$(grep -c 'plan-lint: 0 errors' "$WAB_ROOT/dforge-1/out/plan-lint.txt" "$WAB_ROOT/dagents-1/out/plan-lint.txt" | sed 's#.*:##' | tr '\n' ' ')" "1 1 "
+rm -f "$WT/claude.argv"; : > "$WT/tmux.log"
+rm -f "$WAB_ROOT/dforge-1/clone/.claude/settings.local.json"
+wlaunch dforge 1
+check "A31: launch refuses while the clone's project settings enable a second plugin" "$([ "$LST" -ne 0 ] && echo refused || echo "ran")" "refused"
+check "A31: the refusal names the other plugin" "$(grep -c 'extra@market' "$WT/launch.out")" "1"
+check "A31: no nested session started" "$([ -e "$WT/claude.argv" ] && echo started || echo no):$(grep -c '^new-session' "$WT/tmux.log")" "no:0"
+
+# --- A21: a run under stubs leaves the source and the owner's settings alone ---
+check "A21: the clone has no remote" "$(git -C "$WAB_ROOT/dforge-1/clone" remote)" ""
+check "A21: the clone's pre-push hook refuses" "$("$WAB_ROOT/dforge-1/clone/.git/hooks/pre-push" >/dev/null 2>&1; echo $?)" "1"
+CL="$WAB_ROOT/dforge-1/clone"
+check "A21: no object outside the base's ancestry (the later commit is not in the clone)" "$(git -C "$CL" cat-file -e "$LATER" 2>/dev/null && echo present || echo absent)" "absent"
+check "A21: every ref is the base's ancestry plus the one replay-plan commit" \
+  "$(git -C "$CL" rev-list --all | grep -vxF -f <(git -C "$WT/src" rev-list "$WAB_BASE") | wc -l | tr -d ' ')" "1"
+check "A21: no unreachable object is left in the clone" "$(git -C "$CL" fsck --unreachable --no-reflogs 2>/dev/null | grep -c unreachable)" "0"
+check "A21: after prepare the source's status, remotes, refs, worktrees, stashes and HEAD are unchanged" "$(snap "$WT/src")" "$SRC_SNAP"
+rm -f "$WT/claude.argv" "$WT/claude.env"; : > "$WT/tmux.log"
+wprep dforge 8
+wlaunch dforge 8
+check "A21: launch under stubs exits 0" "$LST" "0"
+check "A21: after launch the source is unchanged" "$(snap "$WT/src")" "$SRC_SNAP"
+check "A21: after launch the owner's settings.json is byte-identical" "$(sha256sum "$WT/owner-config/settings.json" | cut -d' ' -f1)" "$SET_SUM"
+ENVARR=(); while IFS= read -r l; do ENVARR+=("$l"); done < <(grep -E '^[A-Za-z_][A-Za-z0-9_]*=[^ ]*$' "$WT/claude.env")
+check "A21: a push to an ssh URL fails under the launch environment" \
+  "$(cd "$CL" && env -i "${ENVARR[@]}" git push ssh://example.invalid/x.git HEAD >/dev/null 2>&1; [ $? -ne 0 ] && echo fails || echo pushed)" "fails"
+check "A21: the clone still has no remote after the launch" "$(git -C "$CL" remote)" ""
+# a run past its limit is stopped and marked timed-out
+: > "$WT/auto-run.log"; touch "$WT/hang"
+wprep dforge 5
+MAXS=2 wlaunch dforge 5
+check "A21: a run past its limit exits 0 and is marked timed-out" "$LST:$(cat "$WAB_ROOT/dforge-5/state" 2>/dev/null)" "0:timed-out"
+check "A21: the bound run was told to stop" "$(grep -c -- ' stop$' "$WT/auto-run.log")" "1"
+check "A21: the harness killed its own tmux session" "$(grep -c '^kill-session -t =wab-dforge-5' "$WT/tmux.log")" "1"
+sleep 1
+check "A21: the nested session's process is gone" "$(kill -0 "$(cat "$WT/claude.pid")" 2>/dev/null && echo alive || echo gone)" "gone"
+check "A21: the timed-out run left the source unchanged too" "$(snap "$WT/src")" "$SRC_SNAP"
+# a harness killed mid-run: the next harness command restores settings.json
+CFG="$WT/repair-config"; mkdir -p "$CFG"; printf '{\n  "model": "opus",\n  "theme": "dark"\n}\n' > "$CFG/settings.json"
+cp "$CFG/settings.json" "$WT/settings.orig"
+wprep dforge 6
+( WAB_CLAUDE_CONFIG="$CFG" MAXS=60 wlaunch dforge 6 ) &
+LP=$!
+for _ in $(seq 60); do [ -f "$WAB_ROOT/dforge-6/settings-key" ] && [ -f "$WT/tmux-wab-dforge-6.pid" ] && break; sleep 0.2; done
+jq '. + {"skipDangerousModePermissionPrompt": true}' < "$CFG/settings.json" > "$CFG/settings.json.new" && mv "$CFG/settings.json.new" "$CFG/settings.json"
+killtree() { local c; for c in $(pgrep -P "$1"); do killtree "$c"; done; kill -KILL "$1" 2>/dev/null; }
+killtree "$LP"; wait "$LP" 2>/dev/null
+p=$(cat "$WT/tmux-wab-dforge-6.pid" 2>/dev/null) && kill -KILL -- "-$p" 2>/dev/null
+rm -f "$WT/tmux-wab-dforge-6.pid"
+check "A21: the killed harness left the key in settings.json" "$(jq -c .skipDangerousModePermissionPrompt "$CFG/settings.json")" "true"
+WAB_CLAUDE_CONFIG="$CFG" WAB_CLAUDE="$WT/claude-version" bash "$WAB/prepare" dforge 7 >/dev/null 2>&1
+check "A21: the next harness command restores settings.json byte for byte" "$(cmp -s "$CFG/settings.json" "$WT/settings.orig" && echo same || echo differ)" "same"
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
