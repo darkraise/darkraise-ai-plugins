@@ -293,6 +293,33 @@ test('the three workflow-guard copies are byte-identical', async t => {
   assert.ok(validateRepository(dir).includes('plugins/dflow/scripts/workflow-guard.mjs: differs from plugins/dforge/scripts/workflow-guard.mjs'));
 });
 
+test('usage report identity', async t => {
+  const { validateRepository } = await import('../scripts/validate-repository.mjs');
+  const dir = mkdtempSync(resolve(tmpdir(), 'usage-identity-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  cpSync(root, dir, { recursive: true, filter: src => !/[\\/](\.git|node_modules|\.dforge|\.worktrees)([\\/]|$)/.test(src) });
+  const identity = e => /usage-report|api-prices|usage-marker/.test(e);
+  assert.deepEqual(validateRepository(dir).filter(identity), []);
+  const cases = [
+    ['scripts/lib/usage-report.mjs', ''],
+    ['reference/api-prices.json', ''],
+    ['scripts/usage-report', ' beyond the plugin name'],
+    ['scripts/lib/usage-marker.sh', ' beyond the plugin name'],
+  ];
+  for (const [rel, suffix] of cases) {
+    const file = resolve(dir, 'plugins/dagents', rel);
+    const original = readFileSync(file);
+    // The first byte that is no part of a plugin name: a newline.
+    const at = original.indexOf(0x0a);
+    const changed = Buffer.from(original);
+    changed[at] = 0x20;
+    writeFileSync(file, changed);
+    const errors = validateRepository(dir).filter(identity);
+    writeFileSync(file, original);
+    assert.deepEqual(errors, [`plugins/dagents/${rel}: differs from plugins/dforge/${rel}${suffix}`]);
+  }
+});
+
 // A18 (2026-11-20 parallel-session handoff spec): handoffs are keyed files, and
 // only the migrate scripts, which rename an older checkout's latest.md, name it.
 test('no reader names latest.md', () => {

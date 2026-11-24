@@ -149,6 +149,56 @@ J=$(node "$REPORT" --markers "$TMP/q-markers.tsv" --transcripts "$FX/quality/pro
 check "quality_pairing: the plan's quality" "$(q "$J" '.plans[0].quality')" \
   '{"findings":{"Critical":1,"Important":2},"fixRounds":0,"breakerItems":0,"deferredRows":2,"followUpTasks":3,"fixCommits":1}'
 
+# --- wrapper_resolves_stores ---
+# A checkout whose plan names a spec a register covers, with the basic
+# fixture's markers and transcript in dforge's own stores.
+WRAP="$HERE/../../plugins/dforge/scripts/usage-report"
+WT=$TMP
+if command -v cygpath >/dev/null 2>&1; then WT=$(cygpath -m "$TMP"); fi
+wrap() { # wrap DIR ARGS… — the wrapper run in DIR with an isolated home
+  local dir=$1; shift
+  (cd "$dir" && env -u CLAUDE_CONFIG_DIR -u CLAUDE_CODE_SESSION_ID -u AR_SESSION HOME="$WT/home" \
+    bash "$WRAP" "$@")
+}
+WR="$WT/wr"
+git init -q "$WR"
+git -C "$WR" config user.name Darkraise
+git -C "$WR" config user.email dark@example.invalid
+mkdir -p "$WR/docs/dforge/plans" "$WR/docs/dforge/specs" "$WR/docs/dforge/registers" "$WR/docs/dforge/reviews"
+printf '# P\n\n**Spec:** `docs/dforge/specs/s.md`\n\n### Task 1: one\n\nBody.\n\n### Task 2: two\n\nBody.\n' > "$WR/docs/dforge/plans/p.md"
+printf '# S\n' > "$WR/docs/dforge/specs/s.md"
+printf '# Register\n\n**Covers:** `docs/dforge/specs/s.md`\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | a | - | - | done | |\n| 2 | b | - | - | deferred | later |\n' \
+  > "$WR/docs/dforge/registers/r.md"
+printf '# Review record: p\n\n- [Important] one\n' > "$WR/docs/dforge/reviews/p.md"
+git -C "$WR" add docs
+git -C "$WR" commit -q -m init
+mkdir -p "$WR/.dforge/sdd/p"
+awk -F'\t' 'BEGIN { OFS = "\t" } { $6 = "docs/dforge/plans/p.md"; print }' "$FX/basic/markers.tsv" > "$WR/.dforge/sdd/usage-markers.tsv"
+printf '# SDD ledger — plan: docs/dforge/plans/p.md\nTask 2: fix round 3/3 (x; commits a..b; still failing)\n' > "$WR/.dforge/sdd/p/progress.md"
+PROJ="$WT/home/.claude/projects/$(printf '%s' "$WR" | tr -c 'A-Za-z0-9' '-')"
+mkdir -p "$PROJ"
+cp -R "$FX/basic/proj/." "$PROJ/"
+J=$(wrap "$WR" --plan docs/dforge/plans/p.md --format json 2>/dev/null)
+check "wrapper_resolves_stores: markers and transcripts" "$(q "$J" '.plans[0] | [.completed, .tasks[0].turns]')" "[2,2]"
+check "wrapper_resolves_stores: register, review record and workspace" "$(q "$J" '.plans[0].quality')" \
+  '{"findings":{"Important":1},"fixRounds":0,"breakerItems":1,"deferredRows":1,"followUpTasks":0,"fixCommits":0}'
+
+# --- saved_report_reused ---
+git -C "$WR" worktree add -q "$WT/wrw" -b wrw
+OUT=$(wrap "$WT/wrw" --plan docs/dforge/plans/p.md --save 2>/dev/null)
+check "saved_report_reused: --save exits 0" "$?" "0"
+check "saved_report_reused: --save prints nothing" "$OUT" ""
+SAVED="$WR/.dforge/sdd/usage-report-p.json"
+check "saved_report_reused: the saved report is the json report" \
+  "$(cat "$SAVED" 2>/dev/null)" "$(wrap "$WT/wrw" --plan docs/dforge/plans/p.md --format json 2>/dev/null)"
+rm -rf "$WR/.dforge/sdd/p"
+J=$(wrap "$WT/wrw" --plan docs/dforge/plans/p.md --format json 2>/dev/null)
+check "saved_report_reused: quality as of finishing" "$(q "$J" '.plans[0] | [.quality, .asOf]')" \
+  "$(jq -c '.plans[0] | [.quality, "finishing"]' "$SAVED" 2>/dev/null | tr -d '\r')"
+check "saved_report_reused: the saved quality kept the breaker item" "$(q "$J" '.plans[0].quality.breakerItems')" "1"
+wrap "$WR" --save >/dev/null 2>&1
+check "saved_report_reused: --save without --plan exits 2" "$?" "2"
+
 # --- usage errors ---
 node "$REPORT" --format csv >/dev/null 2>&1
 check "usage: a bad format exits 2" "$?" "2"

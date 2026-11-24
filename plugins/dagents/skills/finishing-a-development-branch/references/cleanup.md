@@ -6,6 +6,21 @@ main repo root — worktree removal must run from outside the worktree —
 and use the `GIT_DIR`/`GIT_COMMON`/`WORKTREE_PATH` values captured in
 Step 2, from before that directory change.
 
+**Save the usage report first (work from a plan).** In an auto run, or
+whenever the primary checkout's `<state>/sdd/usage-markers.tsv` has a row
+naming the plan, save the plan's usage report before anything below removes
+its worktree, workspace or ledger:
+
+```bash
+bash <plugin-root>/scripts/usage-report --plan PLAN_FILE --save
+```
+
+It writes `<state>/sdd/usage-report-<plan>.json` in the primary checkout
+(`<plan>` the ledger directory's name) and prints nothing. A later
+`usage-report` with the ledger and workspace gone reports the plan's quality
+fields from it, as of finishing. A non-zero exit writes no file and does not
+stop the cleanup: say in the final message that the report was not saved.
+
 A plan's workspace (`<state>/sdd/<plan>/`: briefs, reports, and the ledger
 and `handoff.md` while progress is local) is git-ignored and lives in the
 worktree, so it goes with it — `git worktree remove` deletes ignored files

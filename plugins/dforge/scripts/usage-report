@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# usage-report [--plan PLAN] [--repo DIR …] [--from-archive DIR] [--format md|json] [--save]
+# The per-task usage report (lib/usage-report.mjs), reading only dforge stores:
+# each repository's primary-checkout task markers and the Claude project
+# directories of its checkouts (the current repository unless --repo names
+# others), and for --plan its ledger, workspace, register, review record and
+# the report finishing saved. Without --plan it reports every plan with
+# markers. --save writes the --format json report of --plan to
+# <primary>/<state>/sdd/usage-report-<plan>.json and prints nothing.
+# Exit: 0 printed or saved, 2 usage, else the core's status (1 when --save
+# got no report).
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$HERE/lib/plan.sh"
+. "$HERE/lib/register.sh"
+
+usage() {
+  echo "usage: usage-report [--plan PLAN] [--repo DIR …] [--from-archive DIR] [--format md|json] [--save]" >&2
+  exit 2
+}
+
+plan="" archive="" format=md save=0
+repos=()
+while [ $# -gt 0 ]; do
+  case $1 in
+    --plan) [ $# -ge 2 ] || usage; plan=$2; shift 2 ;;
+    --repo)
+      shift
+      [ $# -ge 1 ] && [[ $1 != --* ]] || usage
+      while [ $# -gt 0 ] && [[ $1 != --* ]]; do repos+=("$1"); shift; done
+      ;;
+    --from-archive) [ $# -ge 2 ] || usage; archive=$2; shift 2 ;;
+    --format) [ $# -ge 2 ] || usage; format=$2; shift 2 ;;
+    --save) save=1; shift ;;
+    *) usage ;;
+  esac
+done
+case $format in md|json) ;; *) usage ;; esac
+[ "$save" -eq 0 ] || [ -n "$plan" ] || usage
+
+top=$(git rev-parse --show-toplevel 2>/dev/null) || top=""
+[ ${#repos[@]} -gt 0 ] || [ -z "$top" ] || repos=("$top")
+
+# Claude names a project directory after the session's working directory,
+# every character other than a letter or digit replaced by a dash.
+projects="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"
+markers=() transcripts=() repo_args=()
+for r in ${repos[@]+"${repos[@]}"}; do
+  primary=$(plan_primary_root "$(dr_native_path "$r")") \
+    || { printf 'usage-report: not a git repository: %s\n' "$r" >&2; exit 2; }
+  repo_args+=("$(dr_native_path "$primary")")
+  f="$(dforge_dir state "$primary")/sdd/usage-markers.tsv"
+  [ -f "$f" ] && markers+=("$(dr_native_path "$f")")
+  while IFS= read -r wt; do
+    [ -n "$wt" ] || continue
+    d="$projects/$(printf '%s' "$(dr_native_path "$wt")" | tr -c 'A-Za-z0-9' '-')"
+    [ -d "$d" ] && transcripts+=("$(dr_native_path "$d")")
+  done < <(git -C "$(dr_native_path "$primary")" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p')
+done
+
+args=()
+[ ${#markers[@]} -eq 0 ] || args+=(--markers "${markers[@]}")
+[ ${#transcripts[@]} -eq 0 ] || args+=(--transcripts "${transcripts[@]}")
+[ ${#repo_args[@]} -eq 0 ] || args+=(--repo "${repo_args[@]}")
+[ -z "$archive" ] || args+=(--from-archive "$(dr_native_path "$archive")")
+
+saved=""
+if [ -n "$plan" ]; then
+  [ -n "$top" ] || { echo "usage-report: --plan needs a git checkout" >&2; exit 2; }
+  plan_file=$(plan_locate "$plan")
+  slug=$(basename "$plan_file" .md)
+  dforge_stores_init "$top"
+  if found=$(plan_ledger_any "$top" "$plan_file"); then
+    ledger=${found%%$'\t'*}
+    ws=$(dforge_workspace "$slug" "${found#*$'\t'}")
+  else
+    ledger="$(dforge_ledger_dir "$slug" "$top")/progress.md"
+    ws=$(dforge_workspace "$slug" "$top")
+  fi
+  args+=(--plan "$(dr_native_path "$plan_file")" --ledger "$(dr_native_path "$ledger")" --workspace "$(dr_native_path "$ws")")
+  if [ -f "$plan_file" ]; then
+    spec=$(sed -E 's/^\*\*Spec:\*\*[ \t]*(`([^`]+)`|([^ \t]+)).*/\2\3/' <<<"$(plan_header_line "$plan_file" Spec)")
+    if [ -n "$spec" ]; then
+      register=$(register_for_spec "$top" "$spec")
+      register=${register%%$'\n'*}
+      [ -z "$register" ] || args+=(--register "$(dr_native_path "$register")")
+    fi
+  fi
+  record="$(dforge_docs_root "$top")/reviews/$slug.md"
+  [ ! -f "$record" ] || args+=(--review-record "$(dr_native_path "$record")")
+  saved="$(dforge_dir state "$(plan_primary_root "$top")")/sdd/usage-report-$slug.json"
+  [ ! -f "$saved" ] || args+=(--saved "$(dr_native_path "$saved")")
+fi
+
+core=(node "$(dr_native_path "$HERE/lib/usage-report.mjs")" ${args[@]+"${args[@]}"})
+[ "$save" -eq 1 ] || exec "${core[@]}" --format "$format"
+
+dir=$(dirname "$saved")
+mkdir -p "$dir" || exit 1
+dforge_self_ignore "$dir"
+tmp=$(mktemp "$dir/.usage-report-$slug.json.XXXXXX") || exit 1
+"${core[@]}" --format json > "$tmp"
+rc=$?
+if [ "$rc" -eq 0 ] && [ -s "$tmp" ] && mv -f "$tmp" "$saved"; then exit 0; fi
+rm -f "$tmp"
+[ "$rc" -ne 0 ] || rc=1
+exit "$rc"

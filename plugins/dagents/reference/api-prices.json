@@ -1,0 +1,59 @@
+{
+  "checked": "2026-11-14",
+  "models": {
+    "gpt-6-luna": {
+      "source": "https://developers.openai.com/api/docs/guides/decisions",
+      "input": 0.1
+    },
+    "gpt-6-astra": {
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "input": 10,
+      "cached_input": 1,
+      "output": 50
+    },
+    "claude-fable-5-2": {
+      "provider": "anthropic",
+      "model": "claude-fable-5-2",
+      "input": 8,
+      "output": 40,
+      "cacheRead": 0.2,
+      "cacheWrite5m": 10,
+      "cacheWrite1h": 16,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "checked": "2026-11-24"
+    },
+    "claude-opus-5-5": {
+      "provider": "anthropic",
+      "model": "claude-opus-5-5",
+      "input": 4,
+      "output": 20,
+      "cacheRead": 0.2,
+      "cacheWrite5m": 5,
+      "cacheWrite1h": 8,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "checked": "2026-11-24"
+    },
+    "claude-sonnet-5-5": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-5-5",
+      "input": 2,
+      "output": 10,
+      "cacheRead": 0.1,
+      "cacheWrite5m": 2.5,
+      "cacheWrite1h": 4,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "checked": "2026-11-24"
+    },
+    "claude-haiku-5-5": {
+      "provider": "anthropic",
+      "model": "claude-haiku-5-5",
+      "input": 0.1,
+      "output": 0.5,
+      "cacheRead": 0.01,
+      "cacheWrite5m": 0.125,
+      "cacheWrite1h": 0.2,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "checked": "2026-11-24"
+    }
+  }
+}

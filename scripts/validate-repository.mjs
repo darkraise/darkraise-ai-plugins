@@ -106,6 +106,19 @@ export function validateRepository(root, { names = maintained } = {}) {
     const copy = existsSync(resolve(root, rel)) ? readFileSync(resolve(root, rel)) : null;
     if (guard !== null && (copy === null || !copy.equals(guard))) errors.push(`${rel}: differs from ${guardBase}`);
   }
+  // The usage report ships in both workflow plugins: its core and prices byte
+  // for byte, its wrapper and marker library apart from the plugin name.
+  const bytesOf = rel => existsSync(resolve(root, rel)) ? readFileSync(resolve(root, rel)) : null;
+  for (const [file, normalised] of [['scripts/lib/usage-report.mjs', false], ['reference/api-prices.json', false],
+    ['scripts/usage-report', true], ['scripts/lib/usage-marker.sh', true]]) {
+    const base = `plugins/dforge/${file}`;
+    const rel = `plugins/dagents/${file}`;
+    const original = bytesOf(base);
+    let copy = bytesOf(rel);
+    if (original === null) { errors.push(`${base}: missing`); continue; }
+    if (normalised && copy !== null) copy = Buffer.from(copy.toString('utf8').replaceAll('dagents', 'dforge').replaceAll('DAGENTS', 'DFORGE'), 'utf8');
+    if (copy === null || !copy.equals(original)) errors.push(`${rel}: differs from ${base}${normalised ? ' beyond the plugin name' : ''}`);
+  }
   for (const name of names) {
     const skillRoot = resolve(root, 'plugins', name, 'skills');
     if (!existsSync(skillRoot)) continue;

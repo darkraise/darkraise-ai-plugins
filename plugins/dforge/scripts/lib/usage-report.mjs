@@ -645,6 +645,7 @@ export function report(opts) {
   }
   const spans = new Map([...byPlan].map(([plan, list]) => [plan, taskSpans(list, opts.transcripts)]));
   const wanted = (plan) => !opts.plan || plan === opts.plan || path.basename(plan) === path.basename(opts.plan);
+  const saved = savedPlans(opts);
   return {
     plans: [...byPlan].filter(([plan]) => wanted(plan)).map(([plan, list]) => {
       const foreign = new Map();
@@ -652,9 +653,23 @@ export function report(opts) {
         if (other === plan) continue;
         for (const [f, l] of m) foreign.set(f, [...(foreign.get(f) || []), ...l]);
       }
-      return reportPlan(plan, list, opts, prices, foreign);
+      const rep = reportPlan(plan, list, opts, prices, foreign);
+      const kept = saved.find((p) => p && (p.plan === plan || path.basename(String(p.plan)) === path.basename(plan)));
+      if (kept && kept.quality) Object.assign(rep, { quality: kept.quality, asOf: 'finishing' });
+      return rep;
     }),
   };
+}
+
+// The plans of the report finishing saved, read only once the ledger and the
+// workspace are gone: until then the live quality fields are the newer ones.
+function savedPlans(opts) {
+  const gone = (f) => !f || !fs.existsSync(f);
+  if (!opts.saved || !gone(opts.ledger) || !gone(opts.workspace)) return [];
+  try {
+    const plans = JSON.parse(fs.readFileSync(opts.saved, 'utf8')).plans;
+    return Array.isArray(plans) ? plans : [];
+  } catch { return []; }
 }
 
 const usd = (n) => (n === null ? '-' : `$${n.toFixed(2)}`);
@@ -670,6 +685,7 @@ export function markdown(rep) {
     }
     out.push('', `Completed: ${p.completed}; unclosed: ${p.unclosed}; cost per task: ${p.costPerTask === null ? '-' : usd(p.costPerTask)}; outside tasks: ${usd(p.outside.cost)}`);
     for (const e of p.excluded) out.push(`Excluded: ${e}`);
+    if (p.asOf) out.push(`Quality fields: as of ${p.asOf}`);
     out.push('');
   }
   return out.join('\n');
