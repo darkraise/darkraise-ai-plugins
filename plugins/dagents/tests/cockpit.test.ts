@@ -6697,7 +6697,7 @@ describe('auto run', () => {
 
   test('passes the session checkout to every auto-run call (spec A8)', async ($, on) => {
     const WORKTREE = '/home/me/code/shop-wt'
-    const files = { ...autoFiles(), [WORKTREE]: { text: '', kind: 'dir' as const } }
+    const files: NonNullable<World['files']> = { ...autoFiles(), [WORKTREE]: { text: '', kind: 'dir' as const } }
     const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], processRuns: [], files, autoFile: files[AUTO], checkout: WORKTREE }
     const clock = world(on, w)
     signedIn(on, files)
@@ -7462,7 +7462,7 @@ describe('auto run', () => {
   const byId = () => ({ '/home/me/.claude/dagents/sessions/by-id/sess-1.json': { text: JSON.stringify({ session_id: 'sess-1', transcript_path: '/home/me/.claude/projects/p/sess-1.jsonl' }) } })
 
   test('api-error ending re-prompts', async ($, on) => {
-    const files = { ...autoFiles({ pending: null }), ...byId() }
+    const files: NonNullable<World['files']> = { ...autoFiles({ pending: null }), ...byId() }
     const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], transcript: API_ERROR_TEXT }
     const clock = world(on, w)
     signedIn(on, files)
@@ -7475,7 +7475,7 @@ describe('auto run', () => {
   })
 
   test('empty answer stays a stall', async ($, on) => {
-    const files = { ...autoFiles({ pending: null }), ...byId() }
+    const files: NonNullable<World['files']> = { ...autoFiles({ pending: null }), ...byId() }
     const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], transcript: `${JSON.stringify(API_ERROR_RECORDS[0])}\n` }
     const clock = world(on, w)
     signedIn(on, files)
@@ -7487,7 +7487,7 @@ describe('auto run', () => {
   })
 
   test('answer clears api errors', async ($, on) => {
-    const files = { ...autoFiles({ pending: null }), ...byId() }
+    const files: NonNullable<World['files']> = { ...autoFiles({ pending: null }), ...byId() }
     const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], transcript: API_ERROR_TEXT }
     const clock = world(on, w)
     signedIn(on, files)
@@ -7502,7 +7502,7 @@ describe('auto run', () => {
   const apiErrorPrompts = (w: World) => (w.prompts ?? []).filter(text => text.startsWith('The last turn ended on an API error'))
 
   test('stop auto cancels the api-error retry', async ($, on) => {
-    const files = { ...autoFiles({ pending: null }), ...byId(), ...configured({ density: 'dense' }) }
+    const files: NonNullable<World['files']> = { ...autoFiles({ pending: null }), ...byId(), ...configured({ density: 'dense' }) }
     const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], transcript: API_ERROR_TEXT }
     const clock = world(on, w)
     signedIn(on, files)
@@ -7516,7 +7516,7 @@ describe('auto run', () => {
   })
 
   test('api-error retry skips a run stopped meanwhile', async ($, on) => {
-    const files = { ...autoFiles({ pending: null }), ...byId() }
+    const files: NonNullable<World['files']> = { ...autoFiles({ pending: null }), ...byId() }
     const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], transcript: API_ERROR_TEXT }
     const clock = world(on, w)
     signedIn(on, files)

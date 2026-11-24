@@ -595,8 +595,11 @@ type PhaseWorld = {
   prompts: string[]
   autoRuns: string[]
   /** The whole argv of each scripts/auto-run call. */
-  autoArgv: string[][]
+  autoArgv: (readonly string[])[]
   commands: string[]
+  compacts: string[]
+  /** Exit codes by auto-run verb; an absent verb exits 0. */
+  exits: Record<string, number>
   sessionId: string
   autoFile: { text: string }
 }
@@ -706,6 +709,8 @@ describe('per-worktree-handoff: the cockpit phase clear (A8)', () => {
       autoRuns: [],
       autoArgv: [],
       commands: [],
+      compacts: [],
+      exits: {},
       sessionId: 'sess-1',
       autoFile: {
         text: JSON.stringify({
