@@ -191,7 +191,9 @@ git -C "$WR" commit -q -m init
 mkdir -p "$WR/.dforge/sdd/p"
 awk -F'\t' 'BEGIN { OFS = "\t" } { $6 = "docs/dforge/plans/p.md"; print }' "$FX/basic/markers.tsv" > "$WR/.dforge/sdd/usage-markers.tsv"
 printf '# SDD ledger — plan: docs/dforge/plans/p.md\nTask 2: fix round 3/3 (x; commits a..b; still failing)\n' > "$WR/.dforge/sdd/p/progress.md"
-PROJ="$WT/home/.claude/projects/$(printf '%s' "$WR" | tr -c 'A-Za-z0-9' '-')"
+# Named after the checkout as git reports it, as the wrapper names it: on
+# Windows the long path, not TMP's 8.3 form.
+PROJ="$WT/home/.claude/projects/$(git -C "$WR" rev-parse --show-toplevel | tr -d '\r\n' | tr -c 'A-Za-z0-9' '-')"
 mkdir -p "$PROJ"
 cp -R "$FX/basic/proj/." "$PROJ/"
 J=$(wrap "$WR" --plan docs/dforge/plans/p.md --format json 2>/dev/null)

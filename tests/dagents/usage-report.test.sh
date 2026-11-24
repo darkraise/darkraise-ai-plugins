@@ -39,7 +39,9 @@ check "wrapper_reads_own_stores: one plan" "$(jq -c '.plans | length' <<<"$J" 2>
 check "wrapper_reads_own_stores: only the .dagents task" \
   "$(jq -c '[.plans[0].tasks[].tasks[]]' <<<"$J" 2>/dev/null | tr -d '\r')" "[1]"
 # The rows' session s1 resolves to a transcript in the checkout's project directory.
-PROJ="$HOME/.claude/projects/$(printf '%s' "$R" | tr -c 'A-Za-z0-9' '-')"
+# Named after the checkout as git reports it, as the wrapper names it: on
+# Windows the long path, not TMP's 8.3 form.
+PROJ="$HOME/.claude/projects/$(git -C "$R" rev-parse --show-toplevel | tr -d '\r\n' | tr -c 'A-Za-z0-9' '-')"
 mkdir -p "$PROJ"
 printf '{}\n' > "$PROJ/s1.jsonl"
 J=$(cd "$R" && bash "$WRAP" --plan docs/dagents/plans/p.md --format json 2>/dev/null)
