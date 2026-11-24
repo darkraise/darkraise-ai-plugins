@@ -305,5 +305,108 @@ check "A29: segment-only cost per completed task, beside the other figure" "$(ne
 WITH=$(jq -n --argjson a "$SEG" --argjson b "$OUT_COST" '$a + $b')
 check "A29: cost per completed task is (segments + outside) / completed" "$(near "$J" '.plans[0] | del(.tasks, .outside, .byModel, .byRepo)' "$WITH")" "yes"
 
+# --- A23: a task across two transcripts; two overlapping tasks in one transcript ---
+mkrep() { # mkrep NAME — a repository, its project directory and an empty marker file
+  RN="$TMP/$1"; newrepo "$RN"
+  PJ="$HOME/.claude/projects/$(printf '%s' "$RN" | tr -c 'A-Za-z0-9' '-')"; mkdir -p "$PJ"
+  MKN="$RN/.dforge/sdd/usage-markers.tsv"; mkdir -p "$(dirname "$MKN")"; : > "$MKN"
+}
+runrep() { (cd "$RN" && bash "$REPORT" "$@" --format json 2>/dev/null); }
+
+mkrep xs
+TA="$PJ/sa.jsonl"; TB="$PJ/sb.jsonl"; : > "$TA"; : > "$TB"
+rec_asst "$TA" 1 a0 claude-opus-5-5 99 9999 0 0 99 '[]'
+mrow "$MKN" 10 open docs/plans/p.md 1 sa "$TA" "$(sz "$TA")" 1000 task-brief:1
+rec_asst "$TA" 20 a1 claude-opus-5-5 21 1001 0 0 31 '[]'
+rec_asst "$TA" 30 a2 claude-opus-5-5 22 1002 0 0 32 '[]'
+rec_asst "$TB" 40 b1 claude-opus-5-5 23 1003 0 0 33 '[]'
+rec_asst "$TB" 50 b2 claude-opus-5-5 24 1004 0 0 34 '[]'
+mrow "$MKN" 60 close docs/plans/p.md 1 sb "$TB" "$(sz "$TB")" 2000 task-close:1 aa11..bb22
+rec_asst "$TB" 70 b3 claude-opus-5-5 88 8888 0 0 88 '[]'
+J=$(runrep)
+T='.plans[0].tasks[0]'
+check "A23: one row for the task across two transcripts" "$(jq -c '.plans[0].tasks | length' <<<"$J")" "1"
+check "A23: its turns are the four in the two segments" "$(key "$J" "$T" '^turns$')" "4"
+check "A23: input is the two segments summed once (21+22+23+24)" "$(has_val "$J" "$T" 90)" "yes"
+check "A23: cache read is the two segments summed once" "$(has_val "$J" "$T" 4010)" "yes"
+check "A23: output is the two segments summed once" "$(has_val "$J" "$T" 130)" "yes"
+check "A23: nothing before the open or after the close is in the task" "$(has_val "$J" "$T" 99)/$(has_val "$J" "$T" 88)" "no/no"
+
+mkrep xg
+TG="$PJ/sg.jsonl"; : > "$TG"
+rec_asst "$TG" 5 g0 claude-opus-5-5 77 7777 0 0 77 '[]'
+mrow "$MKN" 10 open docs/plans/p.md 2 sg "$TG" "$(sz "$TG")" 1000 task-brief:2
+rec_asst "$TG" 20 g1 claude-opus-5-5 31 3001 0 0 41 '[]'
+mrow "$MKN" 25 open docs/plans/p.md 3 sg "$TG" "$(sz "$TG")" 1100 task-brief:3
+rec_asst "$TG" 30 g2 claude-opus-5-5 32 3002 0 0 42 '[]'
+mrow "$MKN" 35 close docs/plans/p.md 2 sg "$TG" "$(sz "$TG")" 2000 task-close:2 aa11..bb22
+rec_asst "$TG" 40 g3 claude-opus-5-5 33 3003 0 0 43 '[]'
+mrow "$MKN" 45 close docs/plans/p.md 3 sg "$TG" "$(sz "$TG")" 2100 task-close:3 bb22..cc33
+J=$(runrep)
+check "A23: tasks 2 and 3 form one group row" "$(jq -c '.plans[0].tasks | length' <<<"$J")" "1"
+check "A23: the row names both tasks" "$(jq -c '[.plans[0].tasks[0] | .tasks[]?]' <<<"$J")" "[2,3]"
+check "A23: the union is measured once (turns 3)" "$(key "$J" "$T" '^turns$')" "3"
+check "A23: input is the union once (31+32+33 = 96), not task 2's plus task 3's" "$(has_val "$J" "$T" 96)/$(has_val "$J" "$T" 63)" "yes/no"
+check "A23: both tasks count as completed" "$(jq -c '.plans[0].completed' <<<"$J")" "2"
+check "A23: the report names the row a group" "$(jq -c "$T | [.. | scalars] | any(. == true)" <<<"$J")" "true"
+
+# --- A24, A6: the ledger gone; a ledger line the markers miss; a deferred ledger line ---
+mkrep xu
+TU="$PJ/su.jsonl"; : > "$TU"
+rec_asst "$TU" 2 u0 claude-opus-5-5 5 500 0 0 5 '[]'
+mrow "$MKN" 10 open docs/plans/p.md 1 su "$TU" "$(sz "$TU")" 1000 task-brief:1
+rec_asst "$TU" 20 u1 claude-opus-5-5 6 600 0 0 6 '[]'
+mrow "$MKN" 30 close docs/plans/p.md 1 su "$TU" "$(sz "$TU")" 1500 task-close:1 aa11..bb22
+mrow "$MKN" 31 close docs/plans/p.md 4 su "$TU" "$(sz "$TU")" 1600 auto-run:task-complete "" 1
+rec_asst "$TU" 40 u2 claude-opus-5-5 7 700 0 0 7 "[$(tool_bash c1 'bash /x/scripts/task-brief --open docs/plans/p.md 3')]"
+rec_asst "$TU" 50 u3 claude-opus-5-5 8 800 0 0 8 '[]'
+rec_asst "$TU" 60 u4 claude-opus-5-5 9 900 0 0 9 "[$(tool_bash c2 'bash /x/scripts/task-close docs/plans/p.md 3 "done: x; verified: y; remaining: none; discovered: none; assumptions: none"')]"
+rec_asst "$TU" 70 u5 claude-opus-5-5 4 400 0 0 4 '[]'
+JN=$(runrep --plan docs/plans/p.md)
+check "A24: with no ledger, the marked task 1 is reported" "$(jq -c '[.plans[0].tasks[] | select(.tasks == [1])] | length' <<<"$JN")" "1"
+check "A24: with no ledger, its commit range comes from the close row" "$(has_val "$JN" '.plans[0].tasks[] | select(.tasks == [1])' '"aa11..bb22"')" "yes"
+check "A24: with no ledger, the deferred close row is not a completed task" "$(jq -c '.plans[0].completed' <<<"$JN")" "1"
+check "A24: with no ledger, the deferred flag is reported for task 4" \
+  "$(jq -e '[.plans[0] | .. | scalars | select(type == "string") | select(test("deferred"; "i"))] | length > 0' <<<"$JN" >/dev/null 2>&1 && echo yes || echo no)" "yes"
+LD="$RN/.dforge/sdd/p"; mkdir -p "$LD"
+printf '# SDD ledger — plan: docs/plans/p.md\nTask 1: complete (commits aa11..bb22, unreviewed) — x\nTask 2: complete (deferred by the auto run) — reason\nTask 3: complete (commits bb22..cc33, unreviewed) — y\n' > "$LD/progress.md"
+JL=$(runrep --plan docs/plans/p.md)
+check "A24: a ledger complete line with no marker is listed unmarked (task 3 only)" "$(key "$JL" '.plans[0]' '^unmarked$')" "1"
+check "A24: the unmarked task is listed as unmarked" \
+  "$(jq -c '[.plans[0].tasks[] | select(.tasks == [3]) | [.. | scalars] | any(. == "unmarked")] | any' <<<"$JL")" "true"
+check "A24: the unmarked task's inferred turns come from its boundaries (at least 2)" \
+  "$(jq -e '[.plans[0].tasks[] | select(.tasks == [3]) | .turns] | .[0] >= 2' <<<"$JL" >/dev/null 2>&1 && echo yes || echo no)" "yes"
+check "A6: the deferred ledger line is no task row" "$(jq -c '[.plans[0].tasks[] | .tasks[]] | index(2)' <<<"$JL")" "null"
+check "A6: the deferred ledger line is not listed unmarked (unmarked counts task 3 alone)" "$(key "$JL" '.plans[0]' '^unmarked$')" "1"
+check "A6: the deferred ledger line is not a completed task (1 marked + 1 inferred)" "$(jq -c '.plans[0].completed' <<<"$JL")" "2"
+
+# --- A8: an unpriced model adds nothing to cost ---
+mkrep xp
+TP="$PJ/sp.jsonl"; : > "$TP"
+mrow "$MKN" 10 open docs/plans/p.md 1 sp "$TP" 0 1000 task-brief:1
+rec_asst "$TP" 20 p1 claude-opus-5-5 1000 0 0 0 0 '[]'
+rec_asst "$TP" 21 p2 claude-mystery-9 5000000 0 0 0 5000000 '[]'
+mrow "$MKN" 30 close docs/plans/p.md 1 sp "$TP" "$(sz "$TP")" 1500 task-close:1 aa11..bb22
+J=$(runrep)
+check "A8: the unknown model is named as unpriced" \
+  "$(jq -c '[.plans[0].tasks[0] | .. | scalars | select(. == "claude-mystery-9")] | length > 0' <<<"$J")" "true"
+check "A8: only the priced model's tokens are costed (1000 Opus input tokens)" \
+  "$(near "$J" '.plans[0].tasks[0] | .cost' "$(jq -n --slurpfile p "$P/reference/api-prices.json" '1000 * $p[0].models["claude-opus-5-5"].input / 1000000')")" "yes"
+check "A8: the unknown model adds no cost (nothing near what 5M tokens would cost)" \
+  "$(jq -c '.plans[0].tasks[0].cost < 0.01' <<<"$J")" "true"
+check "A8: dagents ships the same prices file" "$(cmp -s "$P/reference/api-prices.json" "$REPO_ROOT/plugins/dagents/reference/api-prices.json" && echo same || echo differ)" "same"
+# validate-repository over a copy of the committed tree
+VR="$TMP/vr"; mkdir -p "$VR"
+git -C "$REPO_ROOT" archive HEAD | tar -x -C "$VR"
+check "A8: validate-repository passes on an untouched copy" "$(node "$REPO_ROOT/scripts/validate-repository.mjs" "$VR" >/dev/null 2>&1; echo $?)" "0"
+for f in plugins/dagents/scripts/lib/usage-report.mjs plugins/dagents/reference/api-prices.json plugins/dagents/scripts/usage-report plugins/dagents/scripts/lib/usage-marker.sh; do
+  cp "$VR/$f" "$TMP/vr-keep"
+  printf '\n# drift\n' >> "$VR/$f"
+  [ "${f##*.}" != json ] || { cp "$TMP/vr-keep" "$VR/$f"; jq '.models["claude-opus-5-5"].input = 5' "$VR/$f" > "$TMP/vr-edit" && cp "$TMP/vr-edit" "$VR/$f"; }
+  out=$(node "$REPO_ROOT/scripts/validate-repository.mjs" "$VR" 2>&1); st=$?
+  check "A8: validate-repository fails when $f drifts" "$([ "$st" -ne 0 ] && echo fails || echo "passes: $out")" "fails"
+  cp "$TMP/vr-keep" "$VR/$f"
+done
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
