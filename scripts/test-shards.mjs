@@ -52,7 +52,7 @@ export const windowsSeconds = {
   'tests/dforge/dforge-dir.test.sh': 10,
   'tests/dforge/dforge-migrate.test.sh': 64,
   'tests/dforge/dforge-state.test.sh': 10,
-  'tests/dforge/efficiency-measurement.acceptance.test.sh': 10,
+  'tests/dforge/efficiency-measurement.acceptance.test.sh': 900,
   'tests/dforge/executor-session.test.sh': 100,
   'tests/dforge/executors.test.sh': 10,
   'tests/dforge/faster-plans.acceptance.test.sh': 900,
@@ -156,7 +156,7 @@ export const windowsSeconds = {
   'tests/dagents/dagents-migrate.test.sh': 135,
   'tests/dagents/dagents-split.acceptance.test.sh': 90,
   'tests/dagents/dagents-state.test.sh': 10,
-  'tests/dagents/efficiency-measurement.acceptance.test.sh': 10,
+  'tests/dagents/efficiency-measurement.acceptance.test.sh': 410,
   'tests/dagents/executor-recovery.test.sh': 250,
   'tests/dagents/executor-session.test.sh': 85,
   'tests/dagents/executors.test.sh': 10,
@@ -245,7 +245,9 @@ export const windowsSeconds = {
 // takes about 760-800 s on a Windows runner; 1000 s keeps that within 80% of
 // its limit. auto-run took 479 s on one runner and over 1000 s on another, so
 // its limit is 1600 s. task-step's limit applies to each of its parts.
+// dforge's efficiency-measurement passed 600 s at about two thirds of its cases.
 export const suiteSeconds = {
+  'tests/dforge/efficiency-measurement.acceptance.test.sh': 1200,
   'tests/dforge/plan-lint.test.sh': 1200,
   'tests/dforge/speed-and-cost-followups.acceptance.test.sh': 1200,
   'tests/dforge/task-loop-steps.acceptance.test.sh': 1200,
