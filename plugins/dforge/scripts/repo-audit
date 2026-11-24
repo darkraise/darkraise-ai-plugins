@@ -140,17 +140,20 @@ handoff_checkout() { # FILE — the checkout whose next-step recomputes FILE
 }
 
 mtime_of() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null; }
+# A whole-second mtime misses a rewrite in the second it was read; the
+# checksum catches that one.
+digest_of() { printf '%s ' "$(mtime_of "$1")"; cksum 2>/dev/null < "$1"; }
 
-# remove_finished FILE KEY MTIME — run under the claims lock, so a claim taken
+# remove_finished FILE KEY DIGEST — run under the claims lock, so a claim taken
 # or a block written since the recompute counts: status 3 when a live session
-# other than this one holds KEY, 4 when FILE changed since it read MTIME, else
+# other than this one holds KEY, 4 when FILE changed since it read DIGEST, else
 # rm's. The claim goes too once no listed copy of KEY is left, so a claim this
 # session took never makes another session's next-step refuse the key.
 remove_finished() {
   local held f key kind age claim
   held=$(claim_session "$2")
   if [ -n "$held" ] && [ "$held" != "$sid" ] && ! session_gone "$held"; then return 3; fi
-  [ "$(mtime_of "$1")" = "$3" ] || return 4
+  [ "$(digest_of "$1")" = "$3" ] || return 4
   rm -f -- "$1" || return 1
   while IFS=$'\t' read -r f key kind age claim; do
     [ "$key" = "$2" ] && [ -e "$f" ] && return 0
@@ -159,7 +162,7 @@ remove_finished() {
 }
 
 status_lines() { tr -d '\r' | grep -E '^\*\*(Status|Next):\*\*' | sed 's/^/- /'; }
-stored_lines() { status_lines < "$1"; }
+stored_lines() { status_lines 2>/dev/null < "$1"; }
 note_stale() { [ "$2" -le 1209600 ] || stale+="- $(session_age_text "$2") \`$1\`"$'\n'; }
 
 # show_handoff FILE KEY KIND AGE CLAIM MINE — one handoff's lines; FILE goes
@@ -180,7 +183,7 @@ show_handoff() {
         return
       fi ;;
   esac
-  before=$(mtime_of "$f")
+  before=$(digest_of "$f")
   if co=$(handoff_checkout "$f"); then
     out=$(cd "$co" && bash "$here/with-timeout" 20 bash "$here/next-step" --print --handoff "$f" 2>&1 </dev/null) || rc=$?
   else

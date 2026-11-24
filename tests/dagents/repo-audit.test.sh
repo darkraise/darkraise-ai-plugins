@@ -374,6 +374,17 @@ printf '#!/usr/bin/env bash\ntouch -d 2000-01-01 "$3"\necho "next-step: the plan
 out=$(cd "$RW" && bash "$FX/scripts/repo-audit" 2>&1)
 check "fix: a handoff rewritten during the audit stays" "$([ -e "$RW/.dagents/handoff/rewritten.md" ] && echo yes || echo no)" "yes"
 has "fix: and says so" "$out" "- finished, kept: it was rewritten during this audit (the plan is finished: x)"
+# A rewrite in the same second as the audit's first read keeps its mtime.
+kh "$RW/.dagents/handoff/rewritten.md" plan - docs/dagents/plans/2026-11-02-fin.md "s" "n"
+printf '#!/usr/bin/env bash\nm=$(stat -c %%Y "$3" 2>/dev/null || stat -f %%m "$3")\necho rewritten >> "$3"\ntouch -d "@$m" "$3"\necho "next-step: the plan is finished: x" >&2\nexit 6\n' > "$FX/scripts/next-step"
+out=$(cd "$RW" && bash "$FX/scripts/repo-audit" 2>&1)
+check "fix: a rewrite that keeps the mtime stays" "$(grep -c '^rewritten$' "$RW/.dagents/handoff/rewritten.md" 2>/dev/null)" "1"
+has "fix: and says it was rewritten" "$out" "- finished, kept: it was rewritten during this audit (the plan is finished: x)"
+# A handoff deleted during the audit prints no shell error.
+kh "$RW/.dagents/handoff/vanished.md" plan - docs/dagents/plans/2026-11-02-fin.md "s" "n"
+printf '#!/usr/bin/env bash\nrm -f "$3"\necho "next-step: the plan is finished: x" >&2\nexit 6\n' > "$FX/scripts/next-step"
+out=$(cd "$RW" && bash "$FX/scripts/repo-audit" 2>&1)
+check "fix: a handoff deleted during the audit prints no error" "$(grep -c 'No such file' <<<"$out")" "0"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
