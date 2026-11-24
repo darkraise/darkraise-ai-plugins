@@ -242,6 +242,49 @@ export function inferBounds(entries) {
   });
 }
 
+// --from-archive DIR: an extracted transcript archive whose manifest.tsv names
+// each session and its project. With no markers, a task's bounds come from the
+// session's own task calls (C15), as open and close rows labelled inferred; a
+// task no task-close call ends closes where its last bound ends.
+export function archiveRows(dir) {
+  if (!dir) return [];
+  const manifest = path.join(dir, 'manifest.tsv');
+  let text;
+  try { text = fs.readFileSync(manifest, 'utf8'); } catch { return []; }
+  const [head = '', ...lines] = text.split(/\r?\n/).filter(Boolean);
+  const cols = head.split('\t');
+  const rows = [];
+  const last = new Map();
+  for (const line of lines) {
+    const cells = line.split('\t');
+    const session = cells[cols.indexOf('session')];
+    const file = session && resolveTranscript({ session }, [dir]);
+    if (!file) continue;
+    const entries = readEntries(file) || [];
+    const starts = new Set(entries.map((x) => x.offset));
+    for (const b of inferBounds(entries)) {
+      if (!/\.md$/.test(b.plan) || b.plan.includes('$')) continue;
+      const stamped = entries.filter((x) => x.offset >= b.start && x.offset < b.end && x.entry && x.entry.timestamp);
+      if (!stamped.length) continue;
+      const row = {
+        plugin: '', version: '', root: '', plan: path.basename(b.plan), task: String(b.task), session,
+        transcript: file, context: '', caller: 'inferred', range: '', deferred: '', file: manifest,
+        repo: cells[cols.indexOf('project')] || null, inferred: true,
+      };
+      const end = stamped[stamped.length - 1].entry.timestamp;
+      rows.push({ ...row, time: stamped[0].entry.timestamp, event: 'open', bytes: String(b.start) });
+      // A bound a task-close call ends stops one byte past that call's line start.
+      if (starts.has(b.end - 1)) rows.push({ ...row, time: end, event: 'close', bytes: String(b.end) });
+      last.set(`${row.plan}\t${row.task}`, { ...row, time: end, event: 'close', bytes: String(b.end) });
+    }
+    transcriptCache.delete(file);
+  }
+  for (const [key, close] of last) {
+    if (!rows.some((r) => r.event === 'close' && `${r.plan}\t${r.task}` === key)) rows.push(close);
+  }
+  return rows;
+}
+
 const LOOKUP_WORDS = new Set(['grep', 'rg', 'cat', 'head', 'tail']);
 const toolUses = (e) => (e && e.type === 'assistant' && e.message && Array.isArray(e.message.content)
   ? e.message.content.filter((b) => b && b.type === 'tool_use') : []);
@@ -540,7 +583,7 @@ export function reportPlan(plan, rows, opts, prices, foreign = new Map()) {
     const lastClose = members.map((t) => t.close).sort((a, b) => (a.time < b.time ? 1 : -1))[0];
     outRows.push({
       tasks: members.map((t) => t.n).sort((a, b) => a - b),
-      label: members.some((t) => t.unmarked) ? 'unmarked' : 'marked',
+      label: members.some((t) => t.unmarked) ? 'unmarked' : members.some((t) => t.close.inferred) ? 'inferred' : 'marked',
       group: members.length > 1,
       range: members.map((t) => t.close.range).filter(Boolean).join(', '),
       turns: main.turns,
@@ -615,7 +658,8 @@ export function reportPlan(plan, rows, opts, prices, foreign = new Map()) {
   for (const u of Object.values(byModel)) for (const k of Object.keys(planTotal)) planTotal[k] += u[k];
   planTotal.cost = round6(planTotal.cost);
   const file = rows[0] && rows[0].file;
-  const repo = file && /[\\/]sdd[\\/]usage-markers\.tsv$/.test(file) ? path.resolve(file, '..', '..', '..') : null;
+  const repo = rows.find((r) => r.repo)?.repo
+    || (file && /[\\/]sdd[\\/]usage-markers\.tsv$/.test(file) ? path.resolve(file, '..', '..', '..') : null);
   return {
     plan,
     repo,
@@ -636,7 +680,10 @@ export function reportPlan(plan, rows, opts, prices, foreign = new Map()) {
 
 export function report(opts) {
   const prices = loadPrices();
-  const rows = readMarkers(opts.markers);
+  const archived = archiveRows(opts.fromArchive);
+  archived.forEach((r, i) => { r.order = 1e15 + i; });
+  const rows = [...readMarkers(opts.markers), ...archived]
+    .sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : a.order - b.order));
   const byPlan = new Map();
   for (const r of rows) {
     const list = byPlan.get(r.plan) || [];
@@ -654,6 +701,8 @@ export function report(opts) {
         for (const [f, l] of m) foreign.set(f, [...(foreign.get(f) || []), ...l]);
       }
       const rep = reportPlan(plan, list, opts, prices, foreign);
+      // An archive holds gigabytes of transcripts: keep one plan's in memory.
+      transcriptCache.clear();
       const kept = saved.find((p) => p && (p.plan === plan || path.basename(String(p.plan)) === path.basename(plan)));
       if (kept && kept.quality) Object.assign(rep, { quality: kept.quality, asOf: 'finishing' });
       return rep;

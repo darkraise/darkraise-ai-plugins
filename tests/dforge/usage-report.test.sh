@@ -149,6 +149,18 @@ J=$(node "$REPORT" --markers "$TMP/q-markers.tsv" --transcripts "$FX/quality/pro
 check "quality_pairing: the plan's quality" "$(q "$J" '.plans[0].quality')" \
   '{"findings":{"Critical":1,"Important":2},"fixRounds":0,"breakerItems":0,"deferredRows":2,"followUpTasks":3,"fixCommits":1}'
 
+# --- archive_inferred ---
+# Two sessions with no markers: alpha opens with task-brief and closes with
+# task-close; beta starts tasks 1 and 2 in one task-step call through $P.
+J=$(node "$REPORT" --from-archive "$FX/archive" --format json 2>/dev/null)
+check "archive_inferred: both manifest plans" "$(q "$J" '[.plans[].plan] | sort')" '["2026-11-01-alpha.md","2026-11-02-beta.md"]'
+check "archive_inferred: every task inferred" "$(q "$J" '[.plans[].tasks[].label] | unique')" '["inferred"]'
+A='.plans[] | select(.plan == "2026-11-01-alpha.md")'
+check "archive_inferred: alpha's tasks and turns" "$(q "$J" "[$A | .tasks[] | [.tasks, .turns]]")" '[[[1],3],[[2],3]]'
+check "archive_inferred: alpha's repository from the manifest" "$(q "$J" "$A | [.completed, (.byRepo | keys)]")" '[2,["/root/repositories/x"]]'
+check "archive_inferred: beta's batch start is one group" \
+  "$(q "$J" '[.plans[] | select(.plan == "2026-11-02-beta.md") | .tasks[] | [.tasks, .group, .turns]]')" '[[[1,2],true,4]]'
+
 # --- wrapper_resolves_stores ---
 # A checkout whose plan names a spec a register covers, with the basic
 # fixture's markers and transcript in dforge's own stores.
