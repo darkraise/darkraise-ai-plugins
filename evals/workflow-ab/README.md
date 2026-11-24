@@ -38,11 +38,14 @@ creates `<WAB_ROOT>/<ARM>-<RUN>/` and refuses an existing one.
   plugin the clone's project settings enable, and is excluded from git.
 - **Record.** `arm.json` holds the arm, the plan path in the clone, the plugin
   commit, the pins, the launch model and effort, parallelism, the Claude Code
-  version, the `autoCompactWindow` the scripts read and whether darkmem is
-  available.
+  version, the `autoCompactWindow` the scripts read and whether a darkmem MCP
+  server is configured for the nested session (in the config directory's
+  `.claude.json` or the clone's `.mcp.json`). An unparsable settings or
+  `.claude.json` file fails `prepare`.
 - **`--check`** runs the plan's `**Worktree setup:**` and `**Integration
-  check:**` commands in the clone with `HOME` and `GOCACHE` in the run
-  directory, each in its own process group and killed at two hours. A failure
+  check:**` commands in the clone under the launch environment (`env -i`
+  with the variables `launch` sets, `HOME` and `GOCACHE` in the run
+  directory), each in its own process group and killed at two hours. A failure
   writes `check-failed` to `state` and exits 1. Run it before any model
   spend on a large plan.
 
@@ -95,6 +98,7 @@ run under `WAB_ROOT`: `## Runs` (each `arm.json`, runs that did not finish
 marked and listed), `## Per-task distributions` (min, median and max of
 turns, lookups, growth, cache writes and subagent share per arm, finished
 runs only, a group row counted once and divided by its task count),
+`## Spread across runs` (each finished run's median per metric),
 `## Groups`, and `## What this replay cannot decide`.
 
 ### The w8 replay (run after merge)
@@ -102,11 +106,11 @@ runs only, a group row counted once and divided by its task count),
 ```
 export WAB_SOURCE=/root/repositories/darkpanel WAB_BASE=33bc6da6 \
   WAB_PLAN=docs/dforge/plans/2026-11-04-v1-w8-panel-exposure.md
-evals/workflow-ab/prepare ARM RUN --check
 ```
 
-Then, for runs 1 and 2 of each arm, `prepare ARM RUN`, `launch ARM RUN` and
-`collect ARM RUN`, and finally `compare`; the note is copied to
+Then, for runs 1 and 2 of each arm, `prepare ARM RUN --check` (it prepares
+the run and runs the plan's setup and Integration check before any model
+spend), `launch ARM RUN` and `collect ARM RUN`, and finally `compare`; the note is copied to
 `docs/dforge/notes/<date>-dforge-vs-dagents-replay.md`.
 
 ## Parameters (environment)
@@ -135,13 +139,13 @@ the check logs, `seed.log`), `launcher.sh`, `claude-settings.json`,
 ## Writes outside scratch
 
 `prepare` writes nothing outside `WAB_ROOT`; it only reads the source, the
-owner's dforge config and the owner's Claude settings. A launch writes the
+owner's dforge config and the owner's Claude settings and `.claude.json`. A launch writes the
 nested sessions' transcripts and project entry under the owner's config
 directory. Accepting the bypass prompt would write
 `skipDangerousModePermissionPrompt` into the owner's `settings.json`: `launch`
 records in `<run>/settings-repair` whether the key was there before, and
-when it was not, its exit, or the start of the next `prepare` or `launch`
-after a killed one, removes the key with an atomic rewrite (at the link's target when
+when it was not, its exit, or the start of the next `prepare`, `launch`,
+`collect` or `compare` after a killed one, removes the key with an atomic rewrite (at the link's target when
 `settings.json` is a symbolic link) that leaves every other byte as it was.
 
 ## Tests

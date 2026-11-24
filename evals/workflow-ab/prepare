@@ -2,8 +2,8 @@
 # prepare ARM RUN [--check] — clone the source into a replay run directory,
 # convert the plan for the arm, pin the arm's configuration and record it in
 # arm.json. --check then runs the plan's Worktree setup and Integration check
-# in the clone; a failure writes check-failed to the run's state and blocks
-# launch. Parameters: README.md.
+# in the clone under the launch environment; a failure writes check-failed to
+# the run's state and blocks launch. Parameters: README.md.
 # Exit: 0 prepared; 1 failed; 2 usage.
 set -uo pipefail
 
@@ -195,8 +195,16 @@ claude_version=$(timeout 30 "$WAB_CLAUDE" --version 2>/dev/null | head -n 1 | tr
 acw=null
 for f in "$WAB_CLAUDE_CONFIG/settings.json" "$clone/.claude/settings.json" "$clone/.claude/settings.local.json"; do
   [ -f "$f" ] || continue
-  v=$(jq -r '.autoCompactWindow | numbers | floor' < "$f" 2>/dev/null | tr -d '\r')
+  v=$(jq -r '.autoCompactWindow | numbers | floor' < "$f" | tr -d '\r') || wab_die 1 "cannot read $f"
   [ -z "$v" ] || acw=$v
+done
+# The nested session loads MCP servers from its config directory's .claude.json
+# and from the clone's .mcp.json.
+darkmem=false
+for f in "$WAB_CLAUDE_CONFIG/.claude.json" "$clone/.mcp.json"; do
+  [ -f "$f" ] || continue
+  v=$(jq -r '.mcpServers // {} | has("darkmem")' < "$f" | tr -d '\r') || wab_die 1 "cannot read $f"
+  [ "$v" = true ] && darkmem=true
 done
 if [ "$arm" = dforge ]; then
   parallelism=sequential
@@ -208,11 +216,11 @@ jq -n --arg arm "$arm" --arg run "$run" --arg plan "$plan" --arg source "$WAB_SO
   --arg pluginCommit "$(git -C "$WAB_PLUGINS" rev-parse HEAD 2>/dev/null)" --arg pluginRoot "$plugin" \
   --argjson pins "$pins" --arg model "$model" --arg effort "$effort" --arg parallelism "$parallelism" \
   --arg claudeVersion "$claude_version" --argjson autoCompactWindow "$acw" \
-  --arg preparedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --argjson darkmem "$darkmem" --arg preparedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   '{arm: $arm, run: $run, plan: $plan, source: $source, base: $base, pluginCommit: $pluginCommit,
     pluginRoot: $pluginRoot, pins: $pins, model: $model, effort: $effort, parallelism: $parallelism,
     claudeVersion: (if $claudeVersion == "" then null else $claudeVersion end),
-    autoCompactWindow: $autoCompactWindow, darkmem: false, preparedAt: $preparedAt}' > "$dir/arm.json"
+    autoCompactWindow: $autoCompactWindow, darkmem: $darkmem, preparedAt: $preparedAt}' > "$dir/arm.json"
 
 [ "$check" -eq 1 ] || { wab_log "prepared $dir"; exit 0; }
 
@@ -225,9 +233,10 @@ command_of() { # command_of LABEL — the plan's command for LABEL, or nothing f
 }
 # timeout signals only the process it starts, so the command gets its own
 # process group and the whole group is killed at the limit.
+wab_env "$dir"
 bounded() { # bounded SECONDS COMMAND
   local waited=0 pid
-  (cd "$clone" && exec env HOME="$dir/home" GOCACHE="$dir/gocache" setsid bash -c "$2") &
+  (cd "$clone" && exec env -i "${WAB_ENV[@]}" setsid bash -c "$2") &
   pid=$!
   while kill -0 "$pid" 2>/dev/null; do
     if [ "$waited" -ge "$1" ]; then

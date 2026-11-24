@@ -152,16 +152,30 @@ check "prepare_pins: arm.json values" \
   '[true,250000,"sonnet","high","sequential","9.9.9 (Claude Code)",500000,false]'
 check "prepare_pins: dagents arm.json keeps the plan's waves" "$(jq -r '[.model, .effort, .parallelism, .plan] | join("|")' "$WAB_ROOT/dagents-1/arm.json")" \
   "sonnet|high|waves — 1-2|docs/dagents/plans/2026-01-01-fixture.md"
+mkdir -p "$TMP/mcp-config"
+cp "$TMP/claude-config/settings.json" "$TMP/mcp-config/"
+printf '{"mcpServers": {"darkmem": {"type": "http", "url": "http://localhost:1"}}}\n' > "$TMP/mcp-config/.claude.json"
+WAB_CLAUDE_CONFIG="$TMP/mcp-config" prep dforge 13
+check "prepare_pins: a darkmem server in the config directory is recorded" "$status $(jq .darkmem "$WAB_ROOT/dforge-13/arm.json")" "0 true"
+printf '{not json' > "$TMP/mcp-config/settings.json"
+WAB_CLAUDE_CONFIG="$TMP/mcp-config" prep dforge 14
+check "prepare_pins: unparsable owner settings fail prepare" "$status $(grep -c "cannot read $TMP/mcp-config/settings.json" <<<"$out")" "1 1"
+check "prepare_pins: and write no arm.json" "$([ -e "$WAB_ROOT/dforge-14/arm.json" ] && echo written || echo none)" "none"
 
 # --- prepare_check_blocks ---
 make_source "$TMP/src-false" 's/^\*\*Integration check:\*\* .*/**Integration check:** `false`/'
 WAB_SOURCE="$TMP/src-false" WAB_BASE=$(git -C "$TMP/src-false" rev-list --max-parents=0 HEAD) prep dforge 2 --check
 check "prepare_check_blocks: a failing Integration check exits 1" "$status" "1"
 check "prepare_check_blocks: and writes check-failed" "$(cat "$WAB_ROOT/dforge-2/state" 2>/dev/null)" "check-failed"
-make_source "$TMP/src-true" 's/^\*\*Integration check:\*\* .*/**Integration check:** `true`/'
-WAB_SOURCE="$TMP/src-true" WAB_BASE=$(git -C "$TMP/src-true" rev-list --max-parents=0 HEAD) prep dforge 3 --check
+make_source "$TMP/src-true" 's/^\*\*Integration check:\*\* .*/**Integration check:** `env > check-env.txt`/'
+WAB_SOURCE="$TMP/src-true" WAB_BASE=$(git -C "$TMP/src-true" rev-list --max-parents=0 HEAD) GH_TOKEN=secret SSH_AUTH_SOCK=/sock \
+  prep dforge 3 --check
 check "prepare_check_blocks: a passing Integration check exits 0" "$status" "0"
 check "prepare_check_blocks: and writes no state" "$([ -e "$WAB_ROOT/dforge-3/state" ] && echo written || echo none)" "none"
+cenv="$WAB_ROOT/dforge-3/clone/check-env.txt"
+check "prepare_check_blocks: the check runs under the launch environment" \
+  "$(grep -cxE "HOME=$WAB_ROOT/dforge-3/home|GOCACHE=$WAB_ROOT/dforge-3/gocache|GIT_ALLOW_PROTOCOL=file|GIT_SSH_COMMAND=false|GH_CONFIG_DIR=$WAB_ROOT/dforge-3/gh|IS_SANDBOX=1" "$cenv")" "6"
+check "prepare_check_blocks: and none of the caller's tokens or sockets" "$(grep -cE '^(GH_TOKEN|SSH_AUTH_SOCK)=' "$cenv")" "0"
 
 # --- prepare_source_untouched ---
 printf 'dirty\n' >> "$TMP/src/greet.sh"
@@ -351,6 +365,35 @@ check "collect_runs_report: report.json is the dforge core's json report" \
 check "collect_runs_report: dispatches.json counts per family" "$(jq -c . "$CR/out/dispatches.json")" '{"dforge:judge-opus":1}'
 bash "$WAB/collect" dforge 21 >/dev/null 2>&1; status=$?
 check "collect_runs_report: an unprepared run exits 1" "$status" "1"
+CS="$WAB_ROOT/dforge-22"
+cp -R "$CR" "$CS"
+rm -rf "$CS/out"
+cp -R "$CPROJ" "$WAB_CLAUDE_CONFIG/projects/$(printf '%s' "$CS/clone" | tr -c 'A-Za-z0-9' '-')"
+printf '# P\n\n**Spec:** `docs/dforge/specs/2026-01-01-s-design.md`\n\n### Task 1: one\n\n### Task 2: two\n\n### Task 3: three\n' > "$CS/clone/docs/plans/p.md"
+mkdir -p "$CS/clone/docs/dforge/registers" "$CS/clone/docs/dforge/reviews"
+printf '# A
+
+**Covers:** 2026-01-01-other-design.md
+
+| 1 | x | deferred |
+' > "$CS/clone/docs/dforge/registers/a.md"
+printf '# S
+
+**Covers:** 2026-01-01-s-design.md
+
+| 1 | x | deferred |
+| 2 | y | deferred |
+| 3 | z | done |
+' > "$CS/clone/docs/dforge/registers/s reg.md"
+printf '# Review
+
+final review lens security — 0 Critical, 1 Important, 2 Minor
+final review lens ui-ux — 1 Critical, 0 Important, 1 Minor
+' > "$CS/clone/docs/dforge/reviews/p.md"
+bash "$WAB/collect" dforge 22 2>"$TMP/collect.err"; status=$?
+check "collect_runs_report: a plan naming its spec exits 0" "$status" "0"
+check "collect_runs_report: the register whose Covers names the spec, the review record's lens lines" \
+  "$(jq -c '.plans[0].quality | [.deferredRows, .findings]' "$CS/out/report.json")" '[2,{"Critical":1,"Important":1,"Minor":3}]'
 
 # --- compare_note ---
 CMP="$TMP/root-compare"
@@ -370,15 +413,21 @@ cmp_run dforge-2 finished "[$(row '[1]' false 3 3 800 30 0)]"
 cmp_run dagents-1 finished "[$(row '[1,2]' true 10 4 4000 40 10)]"
 cmp_run dagents-2 finished "[$(row '[1]' false 6 2 900 5 0),$(row '[2]' false 4 6 700 15 0)]"
 cmp_run dagents-3 timed-out "[$(row '[1]' false 999 999 999 999 0)]"
+cmp_run dforge-3 finished "[]"
+rm -f "$CMP/dforge-3/state" "$CMP/dforge-3/out/report.json"
+cmp_run dforge-4 finished "[]"
+rm -f "$CMP/dforge-4/out/report.json"
 WAB_ROOT="$CMP" bash "$WAB/compare" 2>"$TMP/compare.err"; status=$?
 NOTE="$CMP/comparison.md"
 check "compare_note: exit 0, the note at its default path" "$status:$([ -s "$NOTE" ] && echo written)" "0:written"
 check "compare_note: the sections in order" "$(grep '^## ' "$NOTE" | tr '\n' '|')" \
-  "## Runs|## Per-task distributions|## Groups|## What this replay cannot decide|"
+  "## Runs|## Per-task distributions|## Spread across runs|## Groups|## What this replay cannot decide|"
 section() { awk -v h="## $1" '$0 == h { f = 1; next } /^## / { f = 0 } f' "$NOTE"; }
-check "compare_note: every run's arm.json is reproduced" "$(section Runs | grep -c '"model": "opus"')" "5"
+check "compare_note: every run's arm.json is reproduced" "$(section Runs | grep -c '"model": "opus"')" "7"
 has "compare_note: the timed-out run is marked" "$(section Runs)" "### dagents-3: timed-out — excluded from the figures"
-has "compare_note: and listed" "$(section Runs)" "Excluded runs: dagents-3 (timed-out)."
+has "compare_note: and listed" "$(section Runs)" "Excluded runs: dagents-3 (timed-out), dforge-3 (not launched, no report), dforge-4 (finished, no report)."
+has "compare_note: a run with no state is not launched" "$(section Runs)" "### dforge-3: not launched — excluded from the figures"
+has "compare_note: a finished run with no report is excluded" "$(section Runs)" "### dforge-4: finished — excluded from the figures"
 DIST=$(section 'Per-task distributions')
 has "compare_note: dforge turns over three tasks" "$DIST" "| dforge | turns | 3 | 2 | 3 | 4 |"
 has "compare_note: a dagents group is one observation divided by its task count" "$DIST" "| dagents | turns | 3 | 4 | 5 | 6 |"
@@ -386,6 +435,11 @@ has "compare_note: cache writes per arm" "$DIST" "| dagents | cache writes | 3 |
 has "compare_note: subagent share per arm" "$DIST" "| dagents | subagent share | 3 | 0 | 0 | 0.5 |"
 has "compare_note: lookups and growth too" "$DIST" "| dforge | growth | 3 | 500 | 800 | 1000 |"
 check "compare_note: the timed-out run's figures are absent from the distributions" "$(grep -c 999 <<<"$DIST")" "0"
+SPREAD=$(section 'Spread across runs')
+has "compare_note: each run's median, run by run" "$SPREAD" "| dforge | lookups | dforge-1 | 2 | 1.5 |
+| dforge | lookups | dforge-2 | 1 | 3 |"
+has "compare_note: a group is one observation in its run's median" "$SPREAD" "| dagents | turns | dagents-1 | 1 | 5 |"
+check "compare_note: excluded runs are absent from the spread" "$(grep -cE 'dagents-3|dforge-3|dforge-4|999' <<<"$SPREAD")" "0"
 has "compare_note: the group row" "$(section Groups)" "- dagents-1 tasks 1, 2: turns 10 (5 per task), lookups 4 (2 per task)"
 has "compare_note: the group sentence" "$(section Groups)" "Per-task spread inside a group is not measurable."
 has "compare_note: the plan-level cost gap" "$(section 'What this replay cannot decide')" "plan-level cost gap"

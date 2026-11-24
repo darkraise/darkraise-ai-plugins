@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # compare [--out FILE] — the comparison note over every run under WAB_ROOT:
 # each run's arm.json, per-task distributions per arm from the finished runs'
-# out/report.json (collect writes it), the group rows, and what the replay
+# out/report.json (collect writes it), each run's medians, the group rows, and what the replay
 # cannot decide. Runs that did not finish are listed and left out of the
 # figures. Default FILE: <WAB_ROOT>/comparison.md. Parameters: README.md.
 # Exit: 0 written; 1 failed; 2 usage.
@@ -26,11 +26,11 @@ runs=$(
   for d in "$WAB_ROOT"/*/; do
     d=${d%/}
     [ -f "$d/arm.json" ] || continue
-    report=null
-    [ -f "$d/out/report.json" ] && report=$(cat "$d/out/report.json")
+    report=/dev/null
+    [ -f "$d/out/report.json" ] && report=$d/out/report.json
     jq -n --arg name "$(basename "$d")" --arg state "$(tr -d '\r\n' < "$d/state" 2>/dev/null)" \
-      --slurpfile arm "$d/arm.json" --argjson report "$report" \
-      '{name: $name, state: (if $state == "" then "not launched" else $state end), arm: $arm[0], report: $report}' \
+      --slurpfile arm "$d/arm.json" --slurpfile report "$report" \
+      '{name: $name, state: (if $state == "" then "not launched" else $state end), arm: $arm[0], report: $report[0]}' \
       || exit 1
   done | jq -s .
 ) || wab_die 1 "cannot read the runs under $WAB_ROOT"
@@ -60,15 +60,29 @@ const fmt = (x) => (Number.isInteger(x) ? String(x) : x.toFixed(3).replace(/0+$/
 out.push("## Per-task distributions", "",
   "Finished runs only. A group row is one observation, each figure divided by its task count; subagent share is subagent turns over all turns.", "",
   "| Arm | Metric | n | Min | Median | Max |", "|---|---|---|---|---|---|");
-const arms = [...new Set(kept.map((r) => r.arm.arm))].sort();
-for (const arm of arms) {
-  const obs = kept.filter((r) => r.arm.arm === arm).flatMap(rows);
+const seriesOf = (obs) => {
   const per = (f) => obs.map((t) => f(t) / Math.max(1, (t.tasks || []).length));
   const series = METRICS.map(([name, f]) => [name, per(f)]);
   series.push(["subagent share", obs.map((t) => { const s = sum(t.subagents, "turns"), all = (t.turns || 0) + s; return all ? s / all : 0; })]);
-  for (const [name, xs] of series) {
+  return series;
+};
+const arms = [...new Set(kept.map((r) => r.arm.arm))].sort();
+for (const arm of arms) {
+  for (const [name, xs] of seriesOf(kept.filter((r) => r.arm.arm === arm).flatMap(rows))) {
     if (!xs.length) continue;
     out.push(`| ${arm} | ${name} | ${xs.length} | ${fmt(Math.min(...xs))} | ${fmt(median(xs))} | ${fmt(Math.max(...xs))} |`);
+  }
+}
+out.push("", "## Spread across runs", "",
+  "Each finished run'"'"'s per-task median, so a difference between runs shows apart from task-to-task variation.", "",
+  "| Arm | Metric | Run | n | Median |", "|---|---|---|---|---|");
+for (const arm of arms) {
+  const mine = kept.filter((r) => r.arm.arm === arm).map((r) => [r.name, seriesOf(rows(r))]);
+  for (const [i, [name]] of METRICS.concat([["subagent share"]]).entries()) {
+    for (const [run, series] of mine) {
+      const xs = series[i][1];
+      if (xs.length) out.push(`| ${arm} | ${name} | ${run} | ${xs.length} | ${fmt(median(xs))} |`);
+    }
   }
 }
 out.push("", "## Groups", "");
