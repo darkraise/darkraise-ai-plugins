@@ -20,7 +20,8 @@ while [ $# -gt 0 ]; do
   esac
 done
 wab_check_arm "$arm"
-case $run in ''|*/*|.|..) usage ;; esac
+# tmux rewrites . and : in session names, so RUN keeps to a safe set.
+[[ $run =~ ^[A-Za-z0-9_-]+$ ]] || usage
 wab_check_root
 command -v jq >/dev/null 2>&1 || wab_die 1 "jq is required"
 wab_settings_repair || wab_die 1 "cannot remove skipDangerousModePermissionPrompt left by an earlier launch"
@@ -47,9 +48,10 @@ for f in "$clone/.claude/settings.json" "$clone/.claude/settings.local.json"; do
 done
 others=""
 if [ ${#settings_files[@]} -gt 0 ]; then
-  others=$(jq -s -r --arg arm "$arm" '(map(.enabledPlugins // {}) | add // {}) | to_entries[]
-    | select(.value == true and (.key | split("@")[0]) != $arm) | .key' "${settings_files[@]}" \
-    | paste -sd, - | sed 's/,/, /g')
+  enabled=$(jq -s -r --arg arm "$arm" '(map(.enabledPlugins // {}) | add // {}) | to_entries[]
+    | select(.value == true and (.key | split("@")[0]) != $arm) | .key' "${settings_files[@]}") \
+    || wab_die 1 "cannot read the clone's project settings: ${settings_files[*]}"
+  others=$(paste -sd, - <<<"$enabled" | sed 's/,/, /g')
 fi
 [ -z "$others" ] || wab_die 1 "plugins other than $arm are enabled: $others"
 
@@ -59,8 +61,7 @@ key_before=absent
 if [ -f "$owner_settings" ] && jq -e 'has("skipDangerousModePermissionPrompt")' < "$owner_settings" >/dev/null 2>&1; then
   key_before=present
 fi
-mkdir -p "$WAB_ROOT"
-printf 'keyBefore=%s\nfile=%s\n' "$key_before" "$owner_settings" > "$WAB_ROOT/settings-repair"
+printf 'keyBefore=%s\nfile=%s\n' "$key_before" "$owner_settings" > "$dir/settings-repair"
 printf 'keyBefore=%s\n' "$key_before" > "$dir/settings-key"
 
 printf '{"skipDangerousModePermissionPrompt":true}\n' > "$dir/claude-settings.json"
@@ -89,8 +90,10 @@ kill_tree() { # kill_tree PID — the process and every descendant, children fir
 outcome="" launched=0
 cleanup() {
   if [ -n "$pane_pid" ]; then
-    tm kill-session -t "=$name" 2>/dev/null
+    # The tree first: once kill-session ends the pane process, its children
+    # are reparented and pgrep -P no longer finds them.
     kill_tree "$pane_pid"
+    tm kill-session -t "=$name" 2>/dev/null
     pane_pid=""
   fi
   wab_settings_repair
@@ -149,6 +152,11 @@ stage=startup trusted=0 bypassed=0
 while :; do
   now=$(date +%s)
   if [ $((now - started)) -ge "$max_seconds" ]; then outcome=timed-out; break; fi
+  if ! tm has-session -t "=$name" 2>/dev/null; then
+    wab_log "the nested session ended before the run did"
+    outcome=stopped
+    break
+  fi
   case $stage in
     startup)
       screen=$(tm capture-pane -p -t "$pane" 2>/dev/null)
@@ -189,7 +197,9 @@ while :; do
   esac
   left=$((max_seconds - ($(date +%s) - started)))
   [ "$left" -lt "$wait_for" ] && wait_for=$((left > 0 ? left : 1))
-  sleep "$wait_for"
+  # In the background, so a signal's trap runs at once rather than after it.
+  sleep "$wait_for" &
+  wait $!
 done
 
 end_run "$outcome"

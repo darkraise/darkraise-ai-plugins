@@ -58,24 +58,31 @@ wab_env() {
 }
 
 # Accepting the bypass prompt writes skipDangerousModePermissionPrompt into the
-# owner's settings.json even with user settings sources off. launch records
-# whether the key was there before in WAB_ROOT/settings-repair; this removes a
-# key the harness saw appear, and runs at the start of every command so a
-# killed launch's removal is finished by the next one.
+# owner's settings.json even with user settings sources off. Each launch
+# records whether the key was there before in <run>/settings-repair; this
+# removes a key the harness saw appear, and runs at the start of every command
+# so a killed launch's removal is finished by the next one.
 wab_settings_repair() {
-  local marker="$WAB_ROOT/settings-repair" file before tmp
-  [ -f "$marker" ] || return 0
-  before=$(sed -n 's/^keyBefore=//p' "$marker")
-  file=$(sed -n 's/^file=//p' "$marker")
-  if [ "$before" = absent ] && [ -f "$file" ] \
-    && jq -e 'has("skipDangerousModePermissionPrompt")' < "$file" >/dev/null 2>&1; then
-    tmp=$(mktemp "$file.wab.XXXXXX") || return 1
-    if jq 'del(.skipDangerousModePermissionPrompt)' < "$file" > "$tmp" && chmod --reference="$file" "$tmp"; then
-      mv -f "$tmp" "$file" || { rm -f "$tmp"; return 1; }
-    else
-      rm -f "$tmp"
-      return 1
+  local marker file before tmp status=0
+  for marker in "$WAB_ROOT"/*/settings-repair; do
+    [ -f "$marker" ] || continue
+    before=$(sed -n 's/^keyBefore=//p' "$marker")
+    file=$(sed -n 's/^file=//p' "$marker")
+    # A symlinked settings.json is rewritten at its target, so the link stays.
+    [ -e "$file" ] && file=$(readlink -f "$file")
+    if [ "$before" = absent ] && [ -f "$file" ] \
+      && jq -e 'has("skipDangerousModePermissionPrompt")' < "$file" >/dev/null 2>&1; then
+      tmp=$(mktemp "$file.wab.XXXXXX") || { status=1; continue; }
+      if jq 'del(.skipDangerousModePermissionPrompt)' < "$file" > "$tmp" && chmod --reference="$file" "$tmp" \
+        && mv -f "$tmp" "$file"; then
+        :
+      else
+        rm -f "$tmp"
+        status=1
+        continue
+      fi
     fi
-  fi
-  rm -f "$marker"
+    rm -f "$marker"
+  done
+  return "$status"
 }

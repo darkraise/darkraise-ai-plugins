@@ -190,7 +190,7 @@ for ((i = 1; i <= \$#; i++)); do
 done
 case \$cmd in
   new-session) setsid bash -c "\${!#}" >/dev/null 2>&1 & echo \$! > "\$T/tmux-\$name.pid" ;;
-  has-session) [ -f "\$T/tmux-\$name.pid" ]; exit \$? ;;
+  has-session) p=\$(cat "\$T/tmux-\$name.pid" 2>/dev/null) && kill -0 "\$p" 2>/dev/null; exit \$? ;;
   list-panes) cat "\$T/tmux-\$name.pid" ;;
   kill-session) p=\$(cat "\$T/tmux-\$name.pid" 2>/dev/null) && kill -TERM -- "-\$p" 2>/dev/null; rm -f "\$T/tmux-\$name.pid" ;;
   capture-pane) cat "\$T/pane.txt" 2>/dev/null ;;
@@ -240,7 +240,7 @@ check "launch_environment: --session-id is a uuid recorded in sessions" \
   "$([[ $sid =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] && echo uuid) $(head -n 1 "$run1/sessions")" "uuid $sid"
 check "launch_environment: tmux only touches wab- sessions" \
   "$(awk '{ for (i = 1; i < NF; i++) if ($i == "-t" || $i == "-s") { n = $(i + 1); sub(/^=/, "", n); if (n !~ /^wab-/) print n } }' "$TMP/tmux.log")" ""
-check "launch_environment: no beat in time: timed-out" "$(cat "$run1/state")" "timed-out"
+check "launch_environment: a nested session that exits is stopped, not left to time out" "$(cat "$run1/state")" "stopped"
 
 # --- launch_push_blocked ---
 pushed=$( (. "$WAB/lib.sh"; wab_env "$run1"; cd "$run1/clone" && env -i "${WAB_ENV[@]}" git push ssh://example.invalid/x HEAD) >/dev/null 2>&1; echo $?)
@@ -252,6 +252,12 @@ rm -f "$WAB_ROOT/dforge-7/clone/.claude/settings.local.json" "$TMP/claude.argv"
 launch dforge 7
 check "launch_one_plugin: another enabled plugin refuses the launch" "$status $out" "1 workflow-ab: plugins other than dforge are enabled: other@market"
 check "launch_one_plugin: before claude runs" "$([ -e "$TMP/claude.argv" ] && echo ran || echo not-run)" "not-run"
+
+printf '{not json' > "$WAB_ROOT/dforge-7/clone/.claude/settings.json"
+launch dforge 7
+check "launch_one_plugin: unreadable project settings refuse the launch" "$status $(grep -c 'cannot read the clone' <<<"$out")" "1 1"
+launch dforge 1.2
+check "launch: a RUN outside [A-Za-z0-9_-] is a usage error" "$status" "2"
 
 # --- launch_timeout ---
 : > "$TMP/auto-run.log"
@@ -298,6 +304,19 @@ check "settings_repair_after_kill: and removes the key, every other byte equal" 
 printf '{\n  "skipDangerousModePermissionPrompt": true,\n  "theme": "dark"\n}\n' > "$cfg/settings.json"
 cp "$cfg/settings.json" "$TMP/settings.orig"
 WAB_CLAUDE_CONFIG="$cfg" MAXS=2 launch dforge 5
+mkdir -p "$TMP/dotfiles" "$TMP/link-config"
+printf '{\n  "theme": "dark"\n}\n' > "$TMP/dotfiles/settings.json"
+cp "$TMP/dotfiles/settings.json" "$TMP/dotfiles.orig"
+ln -s "$TMP/dotfiles/settings.json" "$TMP/link-config/settings.json"
+prep dforge 12
+(WAB_CLAUDE_CONFIG="$TMP/link-config" MAXS=60 launch dforge 12) &
+lpid=$!
+for _ in $(seq 50); do [ -f "$WAB_ROOT/dforge-12/settings-repair" ] && [ -f "$TMP/tmux-wab-dforge-12.pid" ] && break; sleep 0.2; done
+jq '. + {"skipDangerousModePermissionPrompt": true}' < "$TMP/dotfiles/settings.json" > "$TMP/dotfiles/s.new" && mv "$TMP/dotfiles/s.new" "$TMP/dotfiles/settings.json"
+kill -TERM $(pgrep -f "evals/workflow-ab/launch dforge 12$")
+wait "$lpid" 2>/dev/null
+check "settings_repair_after_kill: a symlinked settings.json keeps its link, the key removed at its target" \
+  "$([ -L "$TMP/link-config/settings.json" ] && echo link) $(cmp -s "$TMP/dotfiles/settings.json" "$TMP/dotfiles.orig" && echo equal || echo differs)" "link equal"
 check "settings_repair_after_kill: a key present before is kept" "$(cat "$WAB_ROOT/dforge-5/settings-key") $(cmp -s "$cfg/settings.json" "$TMP/settings.orig" && echo equal || echo differs)" "keyBefore=present equal"
 rm -f "$TMP/hang"
 

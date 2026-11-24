@@ -105,10 +105,10 @@ owner's dforge config and the owner's Claude settings. A launch writes the
 nested sessions' transcripts and project entry under the owner's config
 directory. Accepting the bypass prompt would write
 `skipDangerousModePermissionPrompt` into the owner's `settings.json`: `launch`
-records in `WAB_ROOT/settings-repair` whether the key was there before, and
+records in `<run>/settings-repair` whether the key was there before, and
 when it was not, its exit, or the start of the next `prepare` or `launch`
-after a killed one, removes the key with an atomic rewrite that leaves every
-other byte as it was.
+after a killed one, removes the key with an atomic rewrite (at the link's target when
+`settings.json` is a symbolic link) that leaves every other byte as it was.
 
 ## Tests
 
