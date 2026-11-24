@@ -235,6 +235,7 @@ command_of() { # command_of LABEL — the plan's command for LABEL, or nothing f
 # process group and the whole group is killed at the limit.
 # The commands run in the nested session's sandbox, so a write it would refuse
 # fails here, before any model spend.
+wab_run_config "$dir" || wab_die 1 "cannot make the run's Claude config directory"
 wab_env "$dir"
 wab_sandbox_args "$dir"
 bounded() { # bounded SECONDS COMMAND

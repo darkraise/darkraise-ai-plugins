@@ -45,27 +45,41 @@ wab_run_dir() { # wab_run_dir ARM RUN
 wab_plugin_dir() { printf '%s/plugins/%s\n' "$WAB_PLUGINS" "$1"; }
 
 # wab_env RUN_DIR — set WAB_ENV to the nested session's whole environment, for
-# `env -i "${WAB_ENV[@]}" …`: a scratch home, the owner's config directory for
-# the login only, and git and gh with no way to reach a network remote.
+# `env -i "${WAB_ENV[@]}" …`: a scratch home, the run's own Claude config
+# directory, and git and gh with no way to reach a network remote.
 wab_env() {
   local dir=$1
   mkdir -p "$dir/gh" "$dir/guard"
   WAB_ENV=(
     "PATH=$PATH" "HOME=$dir/home" "TERM=xterm-256color" "LANG=${LANG:-C.UTF-8}"
-    "IS_SANDBOX=1" "CLAUDE_CONFIG_DIR=$WAB_CLAUDE_CONFIG"
+    "IS_SANDBOX=1" "CLAUDE_CONFIG_DIR=$dir/claude-config"
     "GIT_ALLOW_PROTOCOL=file" "GIT_SSH_COMMAND=false" "GIT_TERMINAL_PROMPT=0"
     "GH_CONFIG_DIR=$dir/gh" "WORKFLOW_GUARD_CLAUDE_DIR=$dir/guard"
     "GOCACHE=$dir/gocache" "DISABLE_AUTOUPDATER=1"
   )
 }
 
+# wab_run_config RUN_DIR — the run's own Claude config directory: copies of
+# the owner's login, .claude.json and settings.json, so the nested session
+# writes nothing the owner's own sessions read. A token refresh in the run
+# stays in its copy.
+wab_run_config() {
+  local cfg="$1/claude-config" f
+  mkdir -p "$cfg" && chmod 700 "$cfg" || return 1
+  for f in .credentials.json .claude.json settings.json; do
+    if [ -e "$WAB_CLAUDE_CONFIG/$f" ]; then
+      cp -L "$WAB_CLAUDE_CONFIG/$f" "$cfg/$f" && chmod 600 "$cfg/$f" || return 1
+    fi
+  done
+}
+
 # wab_sandbox_args RUN_DIR — set WAB_SANDBOX_ARGS to the sandbox options for
-# a run: writable only the run directory, the owner's config directory (the
-# login and transcripts) and each WAB_WRITABLE directory; the owner's
-# credentials hidden.
+# a run: writable only the run directory and each WAB_WRITABLE directory; the
+# owner's Claude config directories and credentials hidden.
 wab_sandbox_args() {
   local extra h parts=()
-  WAB_SANDBOX_ARGS=(-w "$1" -w "$WAB_CLAUDE_CONFIG")
+  WAB_SANDBOX_ARGS=(-w "$1" -h "$WAB_CLAUDE_CONFIG")
+  [ "$WAB_CLAUDE_CONFIG" = "$HOME/.claude" ] || WAB_SANDBOX_ARGS+=(-h "$HOME/.claude")
   [ -z "$WAB_WRITABLE" ] || IFS=: read -ra parts <<<"$WAB_WRITABLE"
   for extra in "${parts[@]}"; do [ -n "$extra" ] && WAB_SANDBOX_ARGS+=(-w "$extra"); done
   for h in .ssh .gnupg .config/gh .aws .docker .kube .dforge .netrc .git-credentials; do

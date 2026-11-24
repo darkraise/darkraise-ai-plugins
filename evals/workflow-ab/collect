@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # collect ARM RUN — after a launch: copy the run's session transcripts (with
-# their subagents/) from the owner's project directory for the clone into
+# their subagents/) from the run's own project directory for the clone into
 # out/transcripts/, run the usage-report core (the dforge copy) over that run
 # alone, and write out/report.json and out/dispatches.json (the report's
 # dispatch counts summed per family). Parameters: README.md.
@@ -29,7 +29,7 @@ mkdir -p "$tdir" || wab_die 1 "cannot create $tdir"
 
 # Claude names a project directory after the session's working directory,
 # every character other than a letter or digit replaced by a dash.
-proj="$WAB_CLAUDE_CONFIG/projects/$(printf '%s' "$clone" | tr -c 'A-Za-z0-9' '-')"
+proj="$dir/claude-config/projects/$(printf '%s' "$clone" | tr -c 'A-Za-z0-9' '-')"
 copied=0
 while IFS= read -r sid; do
   [ -n "$sid" ] || continue

@@ -59,8 +59,11 @@ when the clone's project settings enable any other. It starts the tmux
 session `wab-<ARM>-<RUN>` (the only tmux session it touches) running Claude
 Code in the clone, in the run's sandbox, under `env -i` with:
 
-- `HOME=<run>/home`, `IS_SANDBOX=1`, and `CLAUDE_CONFIG_DIR` set to the
-  owner's config directory for the login only (credentials are never copied);
+- `HOME=<run>/home`, `IS_SANDBOX=1`, and `CLAUDE_CONFIG_DIR=<run>/claude-config`,
+  made by `launch` (and `prepare --check`) with copies of the owner's
+  `.credentials.json`, `.claude.json` and `settings.json`, so the session
+  writes nothing the owner's own sessions read; a token refresh during the
+  run stays in the copy;
 - `GIT_ALLOW_PROTOCOL=file`, `GIT_SSH_COMMAND=false`, `GIT_TERMINAL_PROMPT=0`,
   an empty `GH_CONFIG_DIR`, an empty `WORKFLOW_GUARD_CLAUDE_DIR`, and no
   token, ssh agent or API key;
@@ -82,12 +85,11 @@ same way and writes `stopped`.
 
 **The sandbox** (`sandbox`, private mount and pid namespaces made with
 `unshare`, the command in a further user namespace so it cannot undo the
-mounts or see a host process) leaves writable only the run directory, the owner's Claude config directory
-and each `WAB_WRITABLE` directory; every other mount is read-only. `/tmp` and
+mounts or see a host process) leaves writable only the run directory and each `WAB_WRITABLE` directory; every other mount is read-only. `/tmp` and
 `/run`, `/dev/shm` and `/proc` are fresh and private (so no host socket under `/run`, `docker.sock`
 among them, is reachable), and `.ssh`, `.gnupg`, `.config/gh`, `.aws`,
 `.docker`, `.kube`, `.dforge`, `.netrc` and `.git-credentials` under the
-owner's home read as empty. The network is shared: the session needs the API,
+owner's home, `WAB_CLAUDE_CONFIG` and `~/.claude` read as empty. The network is shared: the session needs the API,
 and git and gh reach no remote only through the variables above. Without
 root, `sandbox` uses a user namespace; a host that refuses both makes
 `launch` exit 1 before Claude starts. The seeding commands `launch` runs
@@ -98,7 +100,8 @@ evals/workflow-ab/collect ARM RUN
 ```
 
 After a launch, copies the transcripts of the sessions listed in `sessions`
-(with their `subagents/`) from the owner's project directory for the clone
+(with their `subagents/`) from the run's own project directory for the clone
+(`<run>/claude-config/projects/…`)
 into `out/transcripts/`, runs this repository's dforge copy of the usage
 report core over that run alone (the clone's marker file, ledger, plan and
 register), and writes `out/report.json` and `out/dispatches.json` (dispatch
@@ -151,7 +154,7 @@ spend), `launch ARM RUN` and `collect ARM RUN`, and finally `compare`; the note 
 ## Run directory
 
 `<WAB_ROOT>/<ARM>-<RUN>/` holds `clone/`, `home/`, `arm.json`,
-`plan.orig.md` (the plan as the source holds it), `out/` (`plan-lint.txt`,
+`plan.orig.md` (the plan as the source holds it), `claude-config/`, `out/` (`plan-lint.txt`,
 the check logs, `sandbox.log`, `seed.log`), `launcher.sh`, `claude-settings.json`,
 `sessions`, `settings-key` and, once a check fails or a launch starts,
 `state` (`check-failed`, `running`, `finished`, `stopped` or `timed-out`).
@@ -160,10 +163,11 @@ the check logs, `sandbox.log`, `seed.log`), `launcher.sh`, `claude-settings.json
 
 `prepare` writes nothing outside `WAB_ROOT`; it only reads the source, the
 owner's dforge config and the owner's Claude settings and `.claude.json`. The
-sandbox lets a launch write only its run directory, each `WAB_WRITABLE`
-directory and the owner's config directory, where it writes the nested
-sessions' transcripts and project entry. Accepting the bypass prompt would write
-`skipDangerousModePermissionPrompt` into the owner's `settings.json`: `launch`
+sandbox lets a launch write only its run directory and each `WAB_WRITABLE`
+directory; the nested sessions' transcripts and project entry go to the run's
+config directory. Before that directory existed, accepting the bypass prompt
+wrote `skipDangerousModePermissionPrompt` into the owner's `settings.json`, and
+the repair below still runs: `launch`
 records in `<run>/settings-repair` whether the key was there before, and
 when it was not, its exit, or the start of the next `prepare`, `launch`,
 `collect` or `compare` after a killed one, removes the key with an atomic rewrite (at the link's target when

@@ -36,6 +36,7 @@ printf '#!/bin/sh\necho "9.9.9 (Claude Code)"\n' > "$TMP/claude"
 chmod +x "$TMP/claude"
 mkdir -p "$TMP/claude-config"
 printf '{"autoCompactWindow": 500000}\n' > "$TMP/claude-config/settings.json"
+printf '{"claudeAiOauth": "owner"}\n' > "$TMP/claude-config/.credentials.json"
 printf '{"handoffTokens": 250000}\n' > "$TMP/owner-dforge.json"
 # A stand-in for the mount-namespace sandbox, which CI runners may refuse; the
 # real one is tested on its own below.
@@ -188,7 +189,7 @@ check "prepare_check_blocks: the check runs under the launch environment" \
   "$(grep -cxE "HOME=$WAB_ROOT/dforge-3/home|GOCACHE=$WAB_ROOT/dforge-3/gocache|GIT_ALLOW_PROTOCOL=file|GIT_SSH_COMMAND=false|GH_CONFIG_DIR=$WAB_ROOT/dforge-3/gh|IS_SANDBOX=1" "$cenv")" "6"
 check "prepare_check_blocks: and none of the caller's tokens or sockets" "$(grep -cE '^(GH_TOKEN|SSH_AUTH_SOCK)=' "$cenv")" "0"
 has "prepare_check_blocks: the check runs in the run's sandbox" "$(cat "$TMP/sandbox.argv")" \
-  "-w $WAB_ROOT/dforge-3 -w $TMP/claude-config "
+  "-w $WAB_ROOT/dforge-3 -h $TMP/claude-config "
 
 # --- sandbox: the real mount namespace, where this host allows one ---
 sb="$TMP/sbx"
@@ -293,7 +294,7 @@ GH_TOKEN=x GITHUB_TOKEN=x SSH_AUTH_SOCK=x ANTHROPIC_API_KEY=x OPENAI_API_KEY=x W
 check "launch_environment: launch exits 0" "$status" "0"
 check "launch_environment: the session environment" \
   "$(envval IS_SANDBOX)|$(envval HOME)|$(envval CLAUDE_CONFIG_DIR)|$(envval GIT_ALLOW_PROTOCOL)|$(envval GIT_SSH_COMMAND)|$(envval GIT_TERMINAL_PROMPT)|$(envval GH_CONFIG_DIR)" \
-  "1|$run1/home|$TMP/claude-config|file|false|0|$run1/gh"
+  "1|$run1/home|$run1/claude-config|file|false|0|$run1/gh"
 check "launch_environment: GH_CONFIG_DIR and WORKFLOW_GUARD_CLAUDE_DIR are empty directories" \
   "$(empty_dir "$(envval GH_CONFIG_DIR)") $(empty_dir "$(envval WORKFLOW_GUARD_CLAUDE_DIR)")" "empty empty"
 check "launch_environment: no tokens, sockets, API keys or other inherited variables" \
@@ -312,7 +313,11 @@ check "launch_environment: tmux only touches wab- sessions" \
 check "launch_environment: a nested session that exits is stopped, not left to time out" "$(cat "$run1/state")" "stopped"
 sbx=$(grep -v '^--check ' "$TMP/sandbox.argv" | tail -n 1)
 has "launch_sandbox: the run directory is writable" "$sbx" "-w $run1 "
-has "launch_sandbox: the owner's config directory is writable" "$sbx" "-w $TMP/claude-config "
+has "launch_sandbox: the owner's config directory is hidden" "$sbx" "-h $TMP/claude-config "
+check "launch_sandbox: only the run directory is writable" "$(grep -o -- '-w [^ ]*' <<<"$sbx")" "-w $run1"
+check "launch_sandbox: the run's config directory holds copies of the login and settings" \
+  "$(cat "$run1/claude-config/.credentials.json" "$run1/claude-config/settings.json" | tr -d '\n') $(stat -c %a "$run1/claude-config/.credentials.json")" \
+  '{"claudeAiOauth": "owner"}{"autoCompactWindow": 500000} 600'
 has "launch_sandbox: the owner's ssh keys are hidden" "$sbx" "-h $HOME/.ssh "
 has "launch_sandbox: claude runs inside it" "$sbx" "-- $TMP/claude-rec --dangerously-skip-permissions"
 touch "$TMP/sandbox-refuse"
@@ -438,7 +443,7 @@ git init -q "$CR/clone"
 printf '{"arm": "dforge", "plan": "docs/plans/p.md"}\n' > "$CR/arm.json"
 printf '# P\n\n### Task 1: one\n\n### Task 2: two\n\n### Task 3: three\n' > "$CR/clone/docs/plans/p.md"
 printf '# SDD ledger — plan: docs/plans/p.md\nTask 1: complete (commits a..b, unreviewed)\n' > "$CR/clone/.dforge/sdd/p/progress.md"
-CPROJ="$WAB_CLAUDE_CONFIG/projects/$(printf '%s' "$CR/clone" | tr -c 'A-Za-z0-9' '-')"
+CPROJ="$CR/claude-config/projects/$(printf '%s' "$CR/clone" | tr -c 'A-Za-z0-9' '-')"
 mkdir -p "$CPROJ"
 cp -R "$UFX/proj/." "$CPROJ/"
 printf '%s\n' '{"type": "assistant", "isSidechain": false, "timestamp": "2026-01-01T00:03:00Z", "message": {"id": "m9", "model": "claude-opus-5-5", "content": [{"type": "tool_use", "id": "tu9", "name": "Agent", "input": {"subagent_type": "dforge:judge-opus", "prompt": "review"}}], "usage": {"input_tokens": 1, "cache_read_input_tokens": 10, "cache_creation_input_tokens": 0, "output_tokens": 5}}}' > "$CPROJ/s2.jsonl"
@@ -464,7 +469,8 @@ check "collect_runs_report: an unprepared run exits 1" "$status" "1"
 CS="$WAB_ROOT/dforge-22"
 cp -R "$CR" "$CS"
 rm -rf "$CS/out"
-cp -R "$CPROJ" "$WAB_CLAUDE_CONFIG/projects/$(printf '%s' "$CS/clone" | tr -c 'A-Za-z0-9' '-')"
+mkdir -p "$CS/claude-config/projects"
+cp -R "$CPROJ" "$CS/claude-config/projects/$(printf '%s' "$CS/clone" | tr -c 'A-Za-z0-9' '-')"
 printf '# P\n\n**Spec:** `docs/dforge/specs/2026-01-01-s-design.md`\n\n### Task 1: one\n\n### Task 2: two\n\n### Task 3: three\n' > "$CS/clone/docs/plans/p.md"
 mkdir -p "$CS/clone/docs/dforge/registers" "$CS/clone/docs/dforge/reviews"
 printf '# A

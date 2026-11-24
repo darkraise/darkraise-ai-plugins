@@ -69,6 +69,7 @@ sid=$(tr 'A-F' 'a-f' < /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen | tr 
 [ -n "$sid" ] || wab_die 1 "cannot make a session id"
 printf '%s\n' "$sid" > "$dir/sessions"
 
+wab_run_config "$dir" || wab_die 1 "cannot make the run's Claude config directory"
 wab_env "$dir"
 wab_sandbox_args "$dir"
 bash "$WAB_SANDBOX" --check "${WAB_SANDBOX_ARGS[@]}" 2>"$dir/out/sandbox.log" \
