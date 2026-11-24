@@ -62,10 +62,11 @@ wab_env() {
 # wab_run_config RUN_DIR — the run's own Claude config directory: copies of
 # the owner's login, .claude.json and settings.json, so the nested session
 # writes nothing the owner's own sessions read. A token refresh in the run
-# stays in its copy.
+# stays in its copy. Made afresh each time: an earlier sandboxed command
+# could have left a link in it that a copy would write through.
 wab_run_config() {
   local cfg="$1/claude-config" f
-  mkdir -p "$cfg" && chmod 700 "$cfg" || return 1
+  rm -rf -- "$cfg" && mkdir -m 700 -- "$cfg" || return 1
   for f in .credentials.json .claude.json settings.json; do
     if [ -e "$WAB_CLAUDE_CONFIG/$f" ]; then
       cp -L "$WAB_CLAUDE_CONFIG/$f" "$cfg/$f" && chmod 600 "$cfg/$f" || return 1
@@ -74,11 +75,17 @@ wab_run_config() {
 }
 
 # wab_sandbox_args RUN_DIR — set WAB_SANDBOX_ARGS to the sandbox options for
-# a run: writable only the run directory and each WAB_WRITABLE directory; the
-# owner's Claude config directories and credentials hidden.
+# a run: writable only the session's own directories in the run directory and
+# each WAB_WRITABLE directory; the owner's Claude config directories and
+# credentials hidden. The files the harness writes (state, arm.json, out/,
+# the settings-repair marker) stay out of reach, so the session cannot plant
+# a link the harness would write through.
 wab_sandbox_args() {
-  local extra h parts=()
-  WAB_SANDBOX_ARGS=(-w "$1" -h "$WAB_CLAUDE_CONFIG")
+  local extra h d parts=()
+  WAB_SANDBOX_ARGS=(-h "$WAB_CLAUDE_CONFIG")
+  for d in clone home claude-config gh guard gocache; do
+    mkdir -p -- "$1/$d" && WAB_SANDBOX_ARGS+=(-w "$1/$d")
+  done
   [ "$WAB_CLAUDE_CONFIG" = "$HOME/.claude" ] || WAB_SANDBOX_ARGS+=(-h "$HOME/.claude")
   [ -z "$WAB_WRITABLE" ] || IFS=: read -ra parts <<<"$WAB_WRITABLE"
   for extra in "${parts[@]}"; do [ -n "$extra" ] && WAB_SANDBOX_ARGS+=(-w "$extra"); done

@@ -189,7 +189,7 @@ check "prepare_check_blocks: the check runs under the launch environment" \
   "$(grep -cxE "HOME=$WAB_ROOT/dforge-3/home|GOCACHE=$WAB_ROOT/dforge-3/gocache|GIT_ALLOW_PROTOCOL=file|GIT_SSH_COMMAND=false|GH_CONFIG_DIR=$WAB_ROOT/dforge-3/gh|IS_SANDBOX=1" "$cenv")" "6"
 check "prepare_check_blocks: and none of the caller's tokens or sockets" "$(grep -cE '^(GH_TOKEN|SSH_AUTH_SOCK)=' "$cenv")" "0"
 has "prepare_check_blocks: the check runs in the run's sandbox" "$(cat "$TMP/sandbox.argv")" \
-  "-w $WAB_ROOT/dforge-3 -h $TMP/claude-config "
+  "-h $TMP/claude-config -w $WAB_ROOT/dforge-3/clone "
 
 # --- sandbox: the real mount namespace, where this host allows one ---
 sb="$TMP/sbx"
@@ -312,14 +312,21 @@ check "launch_environment: tmux only touches wab- sessions" \
   "$(awk '{ for (i = 1; i < NF; i++) if ($i == "-t" || $i == "-s") { n = $(i + 1); sub(/^=/, "", n); if (n !~ /^wab-/) print n } }' "$TMP/tmux.log")" ""
 check "launch_environment: a nested session that exits is stopped, not left to time out" "$(cat "$run1/state")" "stopped"
 sbx=$(grep -v '^--check ' "$TMP/sandbox.argv" | tail -n 1)
-has "launch_sandbox: the run directory is writable" "$sbx" "-w $run1 "
 has "launch_sandbox: the owner's config directory is hidden" "$sbx" "-h $TMP/claude-config "
-check "launch_sandbox: only the run directory is writable" "$(grep -o -- '-w [^ ]*' <<<"$sbx")" "-w $run1"
+check "launch_sandbox: only the session's own directories are writable" "$(grep -o -- '-w [^ ]*' <<<"$sbx" | tr '\n' ' ')" \
+  "-w $run1/clone -w $run1/home -w $run1/claude-config -w $run1/gh -w $run1/guard -w $run1/gocache "
 check "launch_sandbox: the run's config directory holds copies of the login and settings" \
   "$(cat "$run1/claude-config/.credentials.json" "$run1/claude-config/settings.json" | tr -d '\n') $(stat -c %a "$run1/claude-config/.credentials.json")" \
   '{"claudeAiOauth": "owner"}{"autoCompactWindow": 500000} 600'
 has "launch_sandbox: the owner's ssh keys are hidden" "$sbx" "-h $HOME/.ssh "
 has "launch_sandbox: claude runs inside it" "$sbx" "-- $TMP/claude-rec --dangerously-skip-permissions"
+printf 'victim\n' > "$TMP/victim"
+prep dforge planted
+mkdir -p "$WAB_ROOT/dforge-planted/claude-config"
+ln -s "$TMP/victim" "$WAB_ROOT/dforge-planted/claude-config/.credentials.json"
+launch dforge planted
+check "launch_sandbox: a link left in the run's config directory is not written through" \
+  "$(cat "$TMP/victim") $([ -L "$WAB_ROOT/dforge-planted/claude-config/.credentials.json" ] && echo link || echo file)" "victim file"
 touch "$TMP/sandbox-refuse"
 rm -f "$TMP/claude.argv"
 prep dforge nosandbox

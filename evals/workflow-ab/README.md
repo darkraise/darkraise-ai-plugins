@@ -85,7 +85,10 @@ same way and writes `stopped`.
 
 **The sandbox** (`sandbox`, private mount and pid namespaces made with
 `unshare`, the command in a further user namespace so it cannot undo the
-mounts or see a host process) leaves writable only the run directory and each `WAB_WRITABLE` directory; every other mount is read-only. `/tmp` and
+mounts or see a host process) leaves writable only the session's own directories in the run directory
+(`clone/`, `home/`, `claude-config/`, `gh/`, `guard/`, `gocache/`) and each
+`WAB_WRITABLE` directory, so the files the harness writes (`state`,
+`arm.json`, `out/`, the repair marker) are out of its reach; every other mount is read-only. `/tmp` and
 `/run`, `/dev/shm` and `/proc` are fresh and private (so no host socket under `/run`, `docker.sock`
 among them, is reachable), and `.ssh`, `.gnupg`, `.config/gh`, `.aws`,
 `.docker`, `.kube`, `.dforge`, `.netrc` and `.git-credentials` under the
@@ -163,8 +166,8 @@ the check logs, `sandbox.log`, `seed.log`), `launcher.sh`, `claude-settings.json
 
 `prepare` writes nothing outside `WAB_ROOT`; it only reads the source, the
 owner's dforge config and the owner's Claude settings and `.claude.json`. The
-sandbox lets a launch write only its run directory and each `WAB_WRITABLE`
-directory; the nested sessions' transcripts and project entry go to the run's
+sandbox lets a launch write only its session's directories in the run
+directory and each `WAB_WRITABLE` directory; the nested sessions' transcripts and project entry go to the run's
 config directory. Before that directory existed, accepting the bypass prompt
 wrote `skipDangerousModePermissionPrompt` into the owner's `settings.json`, and
 the repair below still runs: `launch`
