@@ -408,5 +408,98 @@ for f in plugins/dagents/scripts/lib/usage-report.mjs plugins/dagents/reference/
   cp "$TMP/vr-keep" "$VR/$f"
 done
 
+# --- A27: context-size --observations pairs Claude rows, plain and auto path ---
+RB="$TMP/rb"; newrepo "$RB"
+tscript sess-p 50000 >/dev/null
+(cd "$RB" && CLAUDE_CODE_SESSION_ID=sess-p bash "$BRIEF" --open docs/plans/p.md 1 >/dev/null 2>&1)
+tscript sess-p 90000 >/dev/null
+(cd "$RB" && CLAUDE_CODE_SESSION_ID=sess-p bash "$BRIEF" --open docs/plans/p.md 2 >/dev/null 2>&1)
+OBS=$(cd "$RB" && bash "$P/scripts/context-size" --observations 2>&1)
+check "A27: plain path: the growth between two task briefs of a Claude session" "$(grep -c '^sess-p  Task 1 -> Task 2  +40k$' <<<"$OBS")" "1"
+check "A27: plain path: the span line" "$(grep -c '^sess-p  span  50k -> 90k$' <<<"$OBS")" "1"
+check "A27: plain path: the budget log rows name the session" "$(cut -f4 "$RB/.dforge/sdd/budget-log.tsv" 2>/dev/null | sort -u | tr '\n' ' ')" "sess-p "
+
+RQ="$TMP/rq"; newrepo "$RQ"
+tscript sess-q 30000 >/dev/null; beat sess-q
+(cd "$RQ" && bash "$AR" --session sess-q start --spec docs/s.md --register docs/r.md >/dev/null 2>&1
+  bash "$AR" --session sess-q attach --plan docs/plans/p.md >/dev/null 2>&1
+  CLAUDE_CODE_SESSION_ID=sess-q bash "$BRIEF" --open docs/plans/p.md 1 >"$TMP/q1.out" 2>&1)
+tscript sess-q 75000 >/dev/null
+(cd "$RQ" && CLAUDE_CODE_SESSION_ID=sess-q bash "$BRIEF" --open docs/plans/p.md 2 >"$TMP/q2.out" 2>&1)
+check "A27: auto path: the briefs printed the auto budget line" "$(grep -c '^budget (auto' "$TMP/q1.out" "$TMP/q2.out" | tr '\n' ' ' | sed 's#[^ ]*out:##g')" "1 1 "
+OBSQ=$(cd "$RQ" && bash "$P/scripts/context-size" --observations 2>&1)
+check "A27: auto path: the growth between two task briefs of a Claude session" "$(grep -c '^sess-q  Task 1 -> Task 2  +45k$' <<<"$OBSQ")" "1"
+
+RN2="$TMP/rn2"; newrepo "$RN2"
+PN2="$HOME/.claude/projects/$(printf '%s' "$RN2" | tr -c 'A-Za-z0-9' '-')"; mkdir -p "$PN2"
+printf '{"type":"assistant","isSidechain":false,"message":{"id":"m1","model":"claude-opus-5-5","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":20000,"output_tokens":1}}}\n' > "$PN2/named-by-file.jsonl"
+(cd "$RN2" && bash "$BRIEF" --open docs/plans/p.md 1 >/dev/null 2>&1)
+check "A27: with no session id in the environment, the row's session is the transcript's name" "$(cut -f4 "$RN2/.dforge/sdd/budget-log.tsv" 2>/dev/null)" "named-by-file"
+
+# --- A26: --from-archive over a small fixture archive ---
+ARC="$TMP/archive"; mkdir -p "$ARC/-root-repositories-x" "$ARC/-root-repositories-y"
+printf 'session\tproject\tdforge\tstart\tend\tplans\ttasks\tcost_usd_list_1h\nar1\t/root/repositories/x\t4.17.1\t2026-11-01T10:00:00Z\t2026-11-01T10:09:00Z\t2026-11-01-alpha\t3\t0.01\nar2\t/root/repositories/y\t5.0.1\t2026-11-02T10:00:00Z\t2026-11-02T10:09:00Z\t2026-11-02-beta\t2\t0.01\n' > "$ARC/manifest.tsv"
+APL=docs/dforge/plans/2026-11-01-alpha.md; BPL=docs/dforge/plans/2026-11-02-beta.md
+A1F="$ARC/-root-repositories-x/ar1.jsonl"; A2F="$ARC/-root-repositories-y/ar2.jsonl"; : > "$A1F"; : > "$A2F"
+rec_asst "$A1F" 5 x0 claude-opus-5-5 1 100 0 0 1 "[$(tool_bash k1 "bash /p/scripts/task-brief --open $APL 1")]"
+rec_asst "$A1F" 10 x1 claude-opus-5-5 2 200 0 0 2 '[]'
+rec_asst "$A1F" 15 x2 claude-opus-5-5 3 300 0 0 3 "[$(tool_bash k2 "bash /p/scripts/task-close $APL 1 \"done: x\"")]"
+rec_asst "$A1F" 20 x3 claude-opus-5-5 4 400 0 0 4 "[$(tool_bash k3 "bash /p/scripts/task-step start $APL 2 3")]"
+rec_asst "$A1F" 25 x4 claude-opus-5-5 5 500 0 0 5 '[]'
+rec_asst "$A1F" 30 x5 claude-opus-5-5 6 600 0 0 6 "[$(tool_bash k4 "bash /p/scripts/task-close $APL 2 \"done: x\"")]"
+rec_asst "$A1F" 35 x6 claude-opus-5-5 7 700 0 0 7 "[$(tool_bash k5 "bash /p/scripts/task-close $APL 3 \"done: x\"")]"
+rec_asst "$A2F" 5 y0 claude-opus-5-5 1 100 0 0 1 "[$(tool_bash j1 "PLAN=$BPL; bash /p/scripts/task-brief --open \"\$PLAN\" 1")]"
+rec_asst "$A2F" 10 y1 claude-opus-5-5 2 200 0 0 2 '[]'
+rec_asst "$A2F" 15 y2 claude-opus-5-5 3 300 0 0 3 "[$(tool_bash j2 "PLAN=$BPL; bash /p/scripts/task-close \"\$PLAN\" 1 \"done: x\"")]"
+rec_asst "$A2F" 20 y3 claude-opus-5-5 4 400 0 0 4 "[$(tool_bash j3 "PLAN=$BPL && bash /p/scripts/task-brief --open \$PLAN 2")]"
+rec_asst "$A2F" 25 y4 claude-opus-5-5 5 500 0 0 5 '[]'
+rec_asst "$A2F" 30 y5 claude-opus-5-5 6 600 0 0 6 "[$(tool_bash j4 "PLAN=$BPL && bash /p/scripts/task-close \$PLAN 2 \"done: x\"")]"
+JA=$(cd "$TMP" && bash "$REPORT" --from-archive "$ARC" --format json 2>/dev/null)
+tasks_of() { jq -c --arg n "$1" '[.plans[] | select([.. | strings] | any(test($n))) | .tasks[] | .tasks[]] | unique' <<<"$JA" 2>/dev/null; }
+check "A26: both plans of the manifest are reported" "$(jq -c '[.plans[] | .plan] | length' <<<"$JA")" "2"
+check "A26: alpha's tasks, batch start included (1, 2 and 3)" "$(tasks_of alpha)" "[1,2,3]"
+check "A26: beta's tasks, with the plan in a variable (1 and 2)" "$(tasks_of beta)" "[1,2]"
+check "A26: every task is labelled inferred" "$(jq -c '[.plans[] | .tasks[] | [.. | scalars] | any(. == "inferred")] | all' <<<"$JA")" "true"
+
+# --- A28: the report saved at finishing, reused with the ledger gone ---
+RF="$TMP/rf"; newrepo "$RF"
+printf '\n**Spec:** docs/specs/s.md\n' >> "$RF/docs/plans/p.md"
+mkdir -p "$RF/docs/dforge/reviews" "$RF/docs/dforge/registers" "$RF/docs/specs"
+printf '# Review record: p
+
+Plan: docs/plans/p.md
+
+final review lens security — 1 Critical, 2 Important, 3 Minor; fixed 1, rejected 0
+final review lens ui-ux — 0 Critical, 1 Important, 0 Minor; fixed 1, rejected 0
+Final review: clean (commits aa11..bb22, 0 parked)
+' > "$RF/docs/dforge/reviews/p.md"
+git -C "$RF" worktree add -q "$TMP/wf" -b wf
+PF="$HOME/.claude/projects/$(printf '%s' "$RF" | tr -c 'A-Za-z0-9' '-')"; mkdir -p "$PF"
+TF="$PF/sf.jsonl"; : > "$TF"
+MKF="$RF/.dforge/sdd/usage-markers.tsv"; mkdir -p "$(dirname "$MKF")"; : > "$MKF"
+FB=$(git -C "$RF" rev-parse HEAD); printf 'x\n' > "$RF/x.txt"; git -C "$RF" add x.txt; git -C "$RF" commit -q -m x; FH=$(git -C "$RF" rev-parse HEAD)
+mrow "$MKF" 10 open docs/plans/p.md 1 sf "$TF" 0 1000 task-brief:1
+rec_asst "$TF" 20 f1 claude-opus-5-5 6 600 0 0 6 '[]'
+mrow "$MKF" 30 close docs/plans/p.md 1 sf "$TF" "$(sz "$TF")" 1500 task-close:1 "$FB..$FH"
+mkdir -p "$RF/.dforge/sdd/p"
+printf '# SDD ledger — plan: docs/plans/p.md\nTask 1: fix round 3/3 (lint; commits %s..%s; still failing)\nTask 1: complete (commits %s..%s, unreviewed) — x\n' "$FB" "$FH" "$FB" "$FH" > "$RF/.dforge/sdd/p/progress.md"
+out=$(cd "$TMP/wf" && bash "$REPORT" --plan docs/plans/p.md --save 2>&1); st=$?
+SAVED="$RF/.dforge/sdd/usage-report-p.json"
+check "A28: saving from a worktree exits 0 and prints nothing" "$st:$out" "0:"
+check "A28: the report is saved in the primary checkout's state directory" "$([ -f "$SAVED" ] && echo yes || echo no)" "yes"
+check "A28: the saved file is the JSON report" "$(jq -c '.plans[0].plan' "$SAVED" 2>/dev/null)" '"docs/plans/p.md"'
+git -C "$RF" worktree remove --force "$TMP/wf"
+rm -rf "$RF/.dforge/sdd/p" "$RF/docs/dforge/reviews/p.md"
+JS=$(cd "$RF" && bash "$REPORT" --plan docs/plans/p.md --format json 2>/dev/null)
+check "A28: the saved report carries the final-review findings by severity (1 Critical, 3 Important, 3 Minor)" \
+  "$(jq -c '.plans[0].quality.findings | [(.Critical // .critical), (.Important // .important), (.Minor // .minor)]' "$SAVED" 2>/dev/null)" "[1,3,3]"
+check "A28: with the ledger, workspace and review record gone, the same findings come from the saved report" \
+  "$(jq -c '.plans[0].quality.findings | [(.Critical // .critical), (.Important // .important), (.Minor // .minor)]' <<<"$JS" 2>/dev/null)" "[1,3,3]"
+check "A28: the ledger's breaker item is in the saved report" "$(jq -c '.plans[0].quality.breakerItems' "$SAVED" 2>/dev/null)" "1"
+check "A28: with the ledger gone, the breaker item still comes from the saved report" "$(jq -c '.plans[0].quality.breakerItems' <<<"$JS" 2>/dev/null)" "1"
+check "A28: the plan is still reported" "$(jq -c '.plans | length' <<<"$JS")" "1"
+check "A28: the quality fields are labelled as of finishing" \
+  "$(jq -c '[.plans[0] | .. | strings | select(test("finishing"; "i"))] | length > 0' <<<"$JS" 2>/dev/null)" "true"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
