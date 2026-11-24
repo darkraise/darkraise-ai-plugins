@@ -16,7 +16,6 @@ wab_check_arm "$arm"
 [[ $run =~ ^[A-Za-z0-9_-]+$ ]] || usage
 wab_check_root
 command -v jq >/dev/null 2>&1 || wab_die 1 "jq is required"
-wab_settings_repair || wab_die 1 "cannot remove skipDangerousModePermissionPrompt left by an earlier launch"
 command -v node >/dev/null 2>&1 || wab_die 1 "node is required"
 
 dir=$(wab_run_dir "$arm" "$run")

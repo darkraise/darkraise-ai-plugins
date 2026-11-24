@@ -159,7 +159,7 @@ spend), `launch ARM RUN` and `collect ARM RUN`, and finally `compare`; the note 
 `<WAB_ROOT>/<ARM>-<RUN>/` holds `clone/`, `home/`, `arm.json`,
 `plan.orig.md` (the plan as the source holds it), `claude-config/`, `out/` (`plan-lint.txt`,
 the check logs, `sandbox.log`, `seed.log`), `launcher.sh`, `claude-settings.json`,
-`sessions`, `settings-key` and, once a check fails or a launch starts,
+`sessions` and, once a check fails or a launch starts,
 `state` (`check-failed`, `running`, `finished`, `stopped` or `timed-out`).
 
 ## Writes outside scratch
@@ -168,14 +168,9 @@ the check logs, `sandbox.log`, `seed.log`), `launcher.sh`, `claude-settings.json
 owner's dforge config and the owner's Claude settings and `.claude.json`. The
 sandbox lets a launch write only its session's directories in the run
 directory and each `WAB_WRITABLE` directory; the nested sessions' transcripts and project entry go to the run's
-config directory. Before that directory existed, accepting the bypass prompt
-wrote `skipDangerousModePermissionPrompt` into the owner's `settings.json`, and
-the repair below still runs: `launch`
-records in `<run>/settings-repair` whether the key was there before, and
-when it was not, its exit, or the start of the next `prepare`, `launch`,
-`collect` or `compare` after a killed one, removes the key with an atomic rewrite (at the link's target when
-`settings.json` is a symbolic link) that leaves every other byte as it was.
-A marker whose launch is still running is left to that launch.
+config directory, so accepting the bypass prompt writes
+`skipDangerousModePermissionPrompt` into the run's copy of `settings.json`,
+never the owner's.
 
 ## Tests
 

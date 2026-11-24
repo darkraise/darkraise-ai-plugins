@@ -24,7 +24,6 @@ wab_check_arm "$arm"
 [[ $run =~ ^[A-Za-z0-9_-]+$ ]] || usage
 wab_check_root
 command -v jq >/dev/null 2>&1 || wab_die 1 "jq is required"
-wab_settings_repair || wab_die 1 "cannot remove skipDangerousModePermissionPrompt left by an earlier launch"
 
 dir=$(wab_run_dir "$arm" "$run")
 clone="$dir/clone"
@@ -54,15 +53,6 @@ if [ ${#settings_files[@]} -gt 0 ]; then
   others=$(paste -sd, - <<<"$enabled" | sed 's/,/, /g')
 fi
 [ -z "$others" ] || wab_die 1 "plugins other than $arm are enabled: $others"
-
-# --- the owner's settings.json: was the bypass key there before? ---
-owner_settings="$WAB_CLAUDE_CONFIG/settings.json"
-key_before=absent
-if [ -f "$owner_settings" ] && jq -e 'has("skipDangerousModePermissionPrompt")' < "$owner_settings" >/dev/null 2>&1; then
-  key_before=present
-fi
-printf 'keyBefore=%s\nfile=%s\n' "$key_before" "$owner_settings" > "$dir/settings-repair"
-printf 'keyBefore=%s\n' "$key_before" > "$dir/settings-key"
 
 printf '{"skipDangerousModePermissionPrompt":true}\n' > "$dir/claude-settings.json"
 sid=$(tr 'A-F' 'a-f' < /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen | tr 'A-F' 'a-f')
@@ -102,7 +92,6 @@ cleanup() {
     tm kill-session -t "=$name" 2>/dev/null
     pane_pid="" sleep_pid=""
   fi
-  wab_settings_repair
 }
 # A launch killed by a signal still stops its run and says so in state.
 end_run() { # end_run OUTCOME

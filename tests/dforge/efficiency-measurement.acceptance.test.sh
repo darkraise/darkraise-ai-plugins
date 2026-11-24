@@ -988,21 +988,21 @@ check "A21: the harness killed its own tmux session" "$(grep -c '^kill-session -
 sleep 1
 check "A21: the nested session's process is gone" "$(kill -0 "$(cat "$WT/claude.pid")" 2>/dev/null && echo alive || echo gone)" "gone"
 check "A21: the timed-out run left the source unchanged too" "$(snap "$WT/src")" "$SRC_SNAP"
-# a harness killed mid-run: the next harness command restores settings.json
+# a harness killed mid-run: the nested session had the run's own config
+# directory, so the owner's settings.json is left byte for byte
 CFG="$WT/repair-config"; mkdir -p "$CFG"; printf '{\n  "model": "opus",\n  "theme": "dark"\n}\n' > "$CFG/settings.json"
 cp "$CFG/settings.json" "$WT/settings.orig"
 wprep dforge 6
 ( WAB_CLAUDE_CONFIG="$CFG" MAXS=60 wlaunch dforge 6 ) &
 LP=$!
-for _ in $(seq 60); do [ -f "$WAB_ROOT/dforge-6/settings-key" ] && [ -f "$WT/tmux-wab-dforge-6.pid" ] && break; sleep 0.2; done
-jq '. + {"skipDangerousModePermissionPrompt": true}' < "$CFG/settings.json" > "$CFG/settings.json.new" && mv "$CFG/settings.json.new" "$CFG/settings.json"
+for _ in $(seq 60); do [ -f "$WAB_ROOT/dforge-6/launcher.sh" ] && [ -f "$WT/tmux-wab-dforge-6.pid" ] && break; sleep 0.2; done
 killtree() { local c; for c in $(pgrep -P "$1"); do killtree "$c"; done; kill -KILL "$1" 2>/dev/null; }
 killtree "$LP"; wait "$LP" 2>/dev/null
 p=$(cat "$WT/tmux-wab-dforge-6.pid" 2>/dev/null) && kill -KILL -- "-$p" 2>/dev/null
 rm -f "$WT/tmux-wab-dforge-6.pid"
-check "A21: the killed harness left the key in settings.json" "$(jq -c .skipDangerousModePermissionPrompt "$CFG/settings.json")" "true"
-WAB_CLAUDE_CONFIG="$CFG" WAB_CLAUDE="$WT/claude-version" bash "$WAB/prepare" dforge 7 >/dev/null 2>&1
-check "A21: the next harness command restores settings.json byte for byte" "$(cmp -s "$CFG/settings.json" "$WT/settings.orig" && echo same || echo differ)" "same"
+check "A21: the killed run's session was given the run's config directory, not the owner's" \
+  "$(grep -c -F -- "CLAUDE_CONFIG_DIR=$WAB_ROOT/dforge-6/claude-config" "$WAB_ROOT/dforge-6/launcher.sh") $(grep -c -F -- "CLAUDE_CONFIG_DIR=$CFG" "$WAB_ROOT/dforge-6/launcher.sh")" "1 0"
+check "A21: a harness killed mid-run leaves the owner's settings.json byte for byte" "$(cmp -s "$CFG/settings.json" "$WT/settings.orig" && echo same || echo differ)" "same"
 fi
 
 # --- A9, A10: the skill and instruction text, read independently of the cases above ---

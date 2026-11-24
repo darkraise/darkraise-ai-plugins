@@ -77,8 +77,8 @@ wab_run_config() {
 # wab_sandbox_args RUN_DIR — set WAB_SANDBOX_ARGS to the sandbox options for
 # a run: writable only the session's own directories in the run directory and
 # each WAB_WRITABLE directory; the owner's Claude config directories and
-# credentials hidden. The files the harness writes (state, arm.json, out/,
-# the settings-repair marker) stay out of reach, so the session cannot plant
+# credentials hidden. The files the harness writes (state, arm.json, out/)
+# stay out of reach, so the session cannot plant
 # a link the harness would write through.
 wab_sandbox_args() {
   local extra h d parts=()
@@ -94,34 +94,3 @@ wab_sandbox_args() {
   done
 }
 
-# Accepting the bypass prompt writes skipDangerousModePermissionPrompt into the
-# owner's settings.json even with user settings sources off. Each launch
-# records whether the key was there before in <run>/settings-repair; this
-# removes a key the harness saw appear, and runs at the start of every command
-# so a killed launch's removal is finished by the next one.
-wab_settings_repair() {
-  local marker file before tmp status=0
-  for marker in "$WAB_ROOT"/*/settings-repair; do
-    [ -f "$marker" ] || continue
-    # A launch still running owns its marker: its own exit repairs it.
-    "$WAB_TMUX" has-session -t "=wab-$(basename "$(dirname "$marker")")" 2>/dev/null && continue
-    before=$(sed -n 's/^keyBefore=//p' "$marker")
-    file=$(sed -n 's/^file=//p' "$marker")
-    # A symlinked settings.json is rewritten at its target, so the link stays.
-    [ -e "$file" ] && file=$(readlink -f "$file")
-    if [ "$before" = absent ] && [ -f "$file" ] \
-      && jq -e 'has("skipDangerousModePermissionPrompt")' < "$file" >/dev/null 2>&1; then
-      tmp=$(mktemp "$file.wab.XXXXXX") || { status=1; continue; }
-      if jq 'del(.skipDangerousModePermissionPrompt)' < "$file" > "$tmp" && chmod --reference="$file" "$tmp" \
-        && mv -f "$tmp" "$file"; then
-        :
-      else
-        rm -f "$tmp"
-        status=1
-        continue
-      fi
-    fi
-    rm -f "$marker"
-  done
-  return "$status"
-}

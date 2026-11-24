@@ -401,45 +401,6 @@ rm -f "$TMP/beat"
 check "launch_interrupted: a signalled launch writes stopped and stops its run" \
   "$(cat "$WAB_ROOT/dforge-11/state") $(grep -c ' stop --reason workflow-ab: stopped$' "$TMP/auto-run.log") $([ -f "$TMP/tmux-wab-dforge-11.pid" ] && echo left || echo killed)" "stopped 1 killed"
 
-# --- settings_repair_after_kill ---
-cfg="$TMP/repair-config"
-mkdir -p "$cfg"
-printf '{\n  "model": "opus",\n  "theme": "dark"\n}\n' > "$cfg/settings.json"
-cp "$cfg/settings.json" "$TMP/settings.orig"
-(WAB_CLAUDE_CONFIG="$cfg" MAXS=60 launch dforge 4) &
-lpid=$!
-for _ in $(seq 50); do [ -f "$WAB_ROOT/dforge-4/settings-key" ] && [ -f "$TMP/tmux-wab-dforge-4.pid" ] && break; sleep 0.2; done
-check "settings_repair_after_kill: launch records keyBefore=absent" "$(cat "$WAB_ROOT/dforge-4/settings-key")" "keyBefore=absent"
-jq '. + {"skipDangerousModePermissionPrompt": true}' < "$cfg/settings.json" > "$cfg/settings.json.new" && mv "$cfg/settings.json.new" "$cfg/settings.json"
-kill_tree() { local c; for c in $(pgrep -P "$1"); do kill_tree "$c"; done; kill -KILL "$1" 2>/dev/null; }
-kill_tree "$lpid"
-wait "$lpid" 2>/dev/null
-p=$(cat "$TMP/tmux-wab-dforge-4.pid" 2>/dev/null) && kill -KILL -- "-$p" 2>/dev/null
-rm -f "$TMP/tmux-wab-dforge-4.pid"
-check "settings_repair_after_kill: the killed launch left the key" "$(jq .skipDangerousModePermissionPrompt "$cfg/settings.json")" "true"
-WAB_CLAUDE_CONFIG="$cfg" prep dforge 10
-check "settings_repair_after_kill: the next prepare runs" "$status" "0"
-check "settings_repair_after_kill: and removes the key, every other byte equal" "$(cmp -s "$cfg/settings.json" "$TMP/settings.orig" && echo equal || echo differs)" "equal"
-printf '{\n  "skipDangerousModePermissionPrompt": true,\n  "theme": "dark"\n}\n' > "$cfg/settings.json"
-cp "$cfg/settings.json" "$TMP/settings.orig"
-WAB_CLAUDE_CONFIG="$cfg" MAXS=2 launch dforge 5
-mkdir -p "$TMP/dotfiles" "$TMP/link-config"
-printf '{\n  "theme": "dark"\n}\n' > "$TMP/dotfiles/settings.json"
-cp "$TMP/dotfiles/settings.json" "$TMP/dotfiles.orig"
-ln -s "$TMP/dotfiles/settings.json" "$TMP/link-config/settings.json"
-prep dforge 12
-(WAB_CLAUDE_CONFIG="$TMP/link-config" MAXS=60 launch dforge 12) &
-lpid=$!
-for _ in $(seq 50); do [ -f "$WAB_ROOT/dforge-12/settings-repair" ] && [ -f "$TMP/tmux-wab-dforge-12.pid" ] && break; sleep 0.2; done
-jq '. + {"skipDangerousModePermissionPrompt": true}' < "$TMP/dotfiles/settings.json" > "$TMP/dotfiles/s.new" && mv "$TMP/dotfiles/s.new" "$TMP/dotfiles/settings.json"
-prep dforge concurrent
-check "settings_repair_live_launch: another command leaves a running launch's key and marker" \
-  "$(jq .skipDangerousModePermissionPrompt "$TMP/dotfiles/settings.json") $([ -f "$WAB_ROOT/dforge-12/settings-repair" ] && echo kept)" "true kept"
-kill -TERM $(pgrep -f "evals/workflow-ab/launch dforge 12$")
-wait "$lpid" 2>/dev/null
-check "settings_repair_after_kill: a symlinked settings.json keeps its link, the key removed at its target" \
-  "$([ -L "$TMP/link-config/settings.json" ] && echo link) $(cmp -s "$TMP/dotfiles/settings.json" "$TMP/dotfiles.orig" && echo equal || echo differs)" "link equal"
-check "settings_repair_after_kill: a key present before is kept" "$(cat "$WAB_ROOT/dforge-5/settings-key") $(cmp -s "$cfg/settings.json" "$TMP/settings.orig" && echo equal || echo differs)" "keyBefore=present equal"
 rm -f "$TMP/hang"
 
 # --- collect_runs_report ---
@@ -555,21 +516,6 @@ has "compare_note: the plan-level cost gap" "$(section 'What this replay cannot 
 has "compare_note: P1.1's effect" "$(section 'What this replay cannot decide')" "P1.1's effect"
 WAB_ROOT="$CMP" bash "$WAB/compare" --out "$TMP/elsewhere/note.md" 2>/dev/null
 check "compare_note: --out writes the note there" "$(cmp -s "$TMP/elsewhere/note.md" "$NOTE" && echo same)" "same"
-
-# --- collect and compare finish a removal a killed launch left undone ---
-rcfg="$TMP/repair-config-2"
-mkdir -p "$rcfg"
-printf '{\n  "model": "opus",\n  "theme": "dark"\n}\n' > "$rcfg/settings.json"
-cp "$rcfg/settings.json" "$TMP/settings2.orig"
-for cmd in collect compare; do
-  mkdir -p "$CMP/rep-$cmd"
-  printf 'keyBefore=absent\nfile=%s\n' "$rcfg/settings.json" > "$CMP/rep-$cmd/settings-repair"
-  jq '. + {"skipDangerousModePermissionPrompt": true}' < "$rcfg/settings.json" > "$rcfg/s.new" && mv "$rcfg/s.new" "$rcfg/settings.json"
-  if [ "$cmd" = collect ]; then WAB_ROOT="$CMP" bash "$WAB/collect" dforge 99 >/dev/null 2>&1
-  else WAB_ROOT="$CMP" bash "$WAB/compare" --out "$TMP/repair-note.md" >/dev/null 2>&1; fi
-  check "settings_repair_after_kill: $cmd removes the key, every other byte equal" \
-    "$(cmp -s "$rcfg/settings.json" "$TMP/settings2.orig" && echo equal || echo differs)" "equal"
-done
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -19,7 +19,6 @@ while [ $# -gt 0 ]; do
 done
 wab_check_root
 command -v jq >/dev/null 2>&1 || wab_die 1 "jq is required"
-wab_settings_repair || wab_die 1 "cannot remove skipDangerousModePermissionPrompt left by an earlier launch"
 command -v node >/dev/null 2>&1 || wab_die 1 "node is required"
 
 runs=$(
