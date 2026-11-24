@@ -194,9 +194,29 @@ test("a handoff that names no plan is copied unsent, and dates no checkpoint", a
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
   assert.match(result.stdout, /^ {2}stored\.md names no plan or draft; copied to the mirror, not sent$/m);
   assert.equal(read(path.join(s.workRoot, "handoff", "stored.md")), "a note with no State section\n");
-  assert.deepEqual(s.state().checkpoints, { stored: sha("a note with no State section\n") });
+  assert.deepEqual(s.state().checkpoints, {}, "an unsent copy is not synced, so a push naming its workstream still files it");
   assert.equal(s.state().checkpointAt, null, "a pull never writes over another key's file, so the copy needs no date");
   assert.equal(s.stub.db.workstreams.flatMap(w => w.entries).filter(e => e.kind === "checkpoint").length, 1);
+  const plain = await run(["push"], { cwd: s.repo, env: s.env });
+  assert.equal(plain.code, 1, "a plain push reports the unsent copy as it reports a note written in the mirror");
+  assert.match(plain.stdout + plain.stderr, /handoff\/stored\.md: its State section names no plan or draft; push again with --handoff .+stored\.md --workstream KEY/);
+  const push = await run(["push", "--handoff", path.join(s.workRoot, "handoff", "stored.md"), "--workstream", "p9"], { cwd: s.repo, env: s.env });
+  assert.equal(push.code, 0, push.stdout + push.stderr);
+  assert.equal(s.stub.db.workstreams.find(w => w.key === "p9").entries.filter(e => e.kind === "checkpoint").length, 2);
+  const after = await run(["push"], { cwd: s.repo, env: s.env });
+  assert.equal(after.code, 0, "once filed, a plain push has nothing to report: " + after.stdout + after.stderr);
+});
+
+test("a rerun after a stopped move files neither of two handoffs one workstream already holds", async t => {
+  const s = await setup(t, "darkmem");
+  const finished = key => `# Handoff ${key}\n\n<!-- next-step: kind=complete key=${key} session=- done=1 closed=0 subject=docs/dforge/plans/${key}.md at=1700000000 -->\n`;
+  await s.seed.append({ project: "proj", workstream: "project", entries: [{ kind: "checkpoint", body: finished("p7") }, { kind: "checkpoint", body: finished("p8") }] });
+  write(path.join(s.repo, ".dforge", "handoff", "p7.md"), finished("p7"));
+  write(path.join(s.repo, ".dforge", "handoff", "p8.md"), finished("p8"));
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.equal(s.stub.db.workstreams.find(w => w.key === "project").entries.filter(e => e.kind === "checkpoint").length, 2);
+  assert.deepEqual(s.state().checkpoints, { p7: sha(finished("p7")), p8: sha(finished("p8")) });
 });
 
 test("an unsent copy beside a checkpoint of a workstream key with a slash leaves a loadable state", async t => {
@@ -884,13 +904,13 @@ test("moves every keyed handoff both ways", async t => {
   assert.deepEqual(filed.map(e => e.body), [P3], "the plan's handoff is filed as a checkpoint of its plan");
   assert.equal(s.stub.db.workstreams.flatMap(w => w.entries).some(e => e.body === ADHOC), false, "an unplanned handoff is copied, not sent");
   const moved = s.state();
-  assert.deepEqual(moved.checkpoints, { p3: sha(P3), "adhoc-1234abcd": sha(ADHOC) });
+  assert.deepEqual(moved.checkpoints, { p3: sha(P3) }, "the unsent adhoc copy is not synced");
   assert.equal(moved.checkpoint, null);
   assert.deepEqual(moved.checkpointAtByWorkstream, { p6: p6.last_entry_at, p3: filed[0].created_at }, "the record survives the move");
   assert.deepEqual(fs.readdirSync(handoffs), ["claims"], "every handoff moved aside; the claims stay");
   assert.equal(read(path.join(handoffs, "claims", "p3")), "session=s-1\nat=1700000000\n");
   const status = await run(["status"], { cwd: s.repo, env: s.env });
-  assert.doesNotMatch(status.stdout, /handoff\//, "every moved handoff is synced");
+  assert.deepEqual(status.stdout.match(/^.*handoff\/.*$/gm), ["modified: handoff/adhoc-1234abcd.md"], "only the unsent adhoc copy is unsynced");
 
   // Another machine files p5 after the move; p6's checkpoint is older than the record's newest.
   const { workstream: p5 } = await s.seed.append({ project: "proj", workstream: "p5", entries: [{ kind: "checkpoint", body: P5 }] });
@@ -937,6 +957,17 @@ test("a mirror work tree that cannot be set aside refuses the move back, and a r
   assert.match(again.stdout, /^darkmem-sync reconcile: progress moved to local$/m);
   assert.equal(fs.existsSync(s.workRoot), false);
   assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
+});
+
+test("a mirror handoff whose name is no handoff key refuses the move back, as the move into darkmem does", async t => {
+  const s = await setup(t, "local");
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+  write(path.join(s.workRoot, "handoff", "bad name.md"), "# Handoff\n");
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^ {2}.+bad name\.md: not a usable handoff key$/m);
+  assert.equal(fs.existsSync(path.join(s.repo, ".dforge", "handoff", "bad name.md")), false);
+  assert.equal(s.stores().progress, "darkmem");
 });
 
 test("a plan's amendments move back into the checkout with its ledger (A3)", async t => {

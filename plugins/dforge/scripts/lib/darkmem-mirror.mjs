@@ -223,6 +223,17 @@ export function recordCheckpointAt(state, workstream, at) {
   state.checkpointAt = record;
 }
 
+// The checkpoint of `existing` (a resume answer, or null) holding `hash` that
+// was filed after the one this mirror last recorded for `workstream`, or null:
+// a filing whose answer was lost, recorded rather than filed twice. The entry
+// recorded at that time is already acknowledged, so only a newer one counts.
+export async function checkpointFiledSince(client, state, workstream, existing, hash) {
+  if (!existing) return null;
+  const since = (checkpointAtOf(state, workstream) && isoMicros(checkpointAtOf(state, workstream))) ?? -Infinity;
+  return (await client.entries(existing.workstream.id, "checkpoint"))
+    .find(entry => isoMicros(entry.created_at) > since && sha256(Buffer.from(entry.body, "utf8")) === hash) ?? null;
+}
+
 // The mirror's handoff directory, beside the state file at the mirror's root.
 const handoffDirOf = stateFile => path.join(path.dirname(stateFile), "work", "handoff");
 
@@ -236,11 +247,16 @@ export function handoffMarker(text) {
   return { kind, subject: subject === "-" ? null : subject };
 }
 
+// The handoff key rule: the state's own key rule, and never "latest".
+export function usableHandoffKey(key) {
+  return validKey(key) && key !== "latest";
+}
+
 // The key a mirror handoff's checkpoint hash is kept under: its file name;
 // null for a name the key rule refuses, which is no handoff.
 export function handoffKey(name) {
   const key = name.slice(0, -".md".length);
-  return validKey(key) && key !== "latest" ? key : null;
+  return usableHandoffKey(key) ? key : null;
 }
 
 // The key the migration gives a handoff of the older layout (one whose name is
@@ -248,7 +264,7 @@ export function handoffKey(name) {
 function subjectKey(text) {
   const subject = handoffMarker(text)?.subject;
   const key = subject && path.posix.basename(subject.replace(/\\/g, "/"), ".md");
-  return key && validKey(key) && key !== "latest" ? key : null;
+  return key && usableHandoffKey(key) ? key : null;
 }
 
 // The key of the mirror handoff whose content hashes to `hash`; null for none.

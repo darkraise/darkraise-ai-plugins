@@ -8,8 +8,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { HttpError, failItem } from "./darkmem-client.mjs";
 import {
-  DOC_PREFIX, EMPTY_SHA, MAX_ENTRIES_PER_APPEND, MAX_ENTRY_CHARS, UsageError, archiveUri, caseGroups, checkpointAtOf, checkpointTarget, decodeUtf8, handoffKey, handoffMarker,
-  familiesOf, isArchiveUri, isoMicros, ledgerEntries, ledgerFiles, ledgerPlanPath, listDocumentFiles, pathToUri, propertiesFor, sha256, splitAtLimit,
+  DOC_PREFIX, EMPTY_SHA, MAX_ENTRIES_PER_APPEND, MAX_ENTRY_CHARS, UsageError, archiveUri, caseGroups, checkpointFiledSince, checkpointTarget, decodeUtf8, handoffKey, handoffMarker,
+  familiesOf, isArchiveUri, ledgerEntries, ledgerFiles, ledgerPlanPath, listDocumentFiles, pathToUri, propertiesFor, sha256, splitAtLimit,
   recordCheckpointAt, unsupportedPlanDirs, uriFamily, uriProblem, uriToLocal, utcStamp, utf8Fault, validKey,
 } from "./darkmem-mirror.mjs";
 import { remoteLedger } from "./darkmem-pull.mjs";
@@ -446,10 +446,7 @@ async function sendCheckpoint({ cfg, client, roots, state, persist, report }, na
   // checkpoint or this mirror's push to another workstream) is recorded, not
   // filed twice. The entry recorded at that time is already acknowledged, so
   // only a newer one can be a lost answer.
-  const existing = await client.resume(cfg.project, workstream);
-  const since = (checkpointAtOf(state, workstream) && isoMicros(checkpointAtOf(state, workstream))) ?? -Infinity;
-  const filed = existing && (await client.entries(existing.workstream.id, "checkpoint"))
-    .find(entry => isoMicros(entry.created_at) > since && sha256(Buffer.from(entry.body, "utf8")) === hash);
+  const filed = await checkpointFiledSince(client, state, workstream, await client.resume(cfg.project, workstream), hash);
   if (filed) {
     synced();
     recordCheckpointAt(state, workstream, filed.created_at);

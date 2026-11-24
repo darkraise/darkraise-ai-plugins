@@ -6,7 +6,7 @@ import path from "node:path";
 import { failItem } from "./darkmem-client.mjs";
 import {
   DOC_PREFIX, caseGroups, checkpointAtOf, familiesOf, handoffMarker, isArchiveUri, isoMicros, newestCheckpointAt, recordCheckpointAt, refuseLinkedDirs, sha256, uriFamily, uriProblem,
-  uriToLocal, validKey, writeFileAtomic,
+  uriToLocal, usableHandoffKey, validKey, writeFileAtomic,
 } from "./darkmem-mirror.mjs";
 import { readRegular } from "./darkmem-progress-move.mjs";
 
@@ -236,7 +236,7 @@ export function pulledKey(body, createdAt) {
   const at = (last && / at=(-?\d+) -->/.exec(last)?.[1]) ?? (micros === null ? null : String(Math.floor(micros / 1e6)));
   const subject = handoffMarker(body)?.subject;
   const key = named ?? (subject ? path.posix.basename(subject.replace(/\\/g, "/"), ".md") : at === null ? null : `adhoc-legacy-${at}`);
-  return validKey(key) && key !== "latest" ? key : null;
+  return usableHandoffKey(key) ? key : null;
 }
 
 // Each open workstream's newest checkpoint is its handoff, written to
