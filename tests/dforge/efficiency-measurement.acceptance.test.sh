@@ -1005,5 +1005,18 @@ WAB_CLAUDE_CONFIG="$CFG" WAB_CLAUDE="$WT/claude-version" bash "$WAB/prepare" dfo
 check "A21: the next harness command restores settings.json byte for byte" "$(cmp -s "$CFG/settings.json" "$WT/settings.orig" && echo same || echo differ)" "same"
 fi
 
+# --- A9, A10: the skill and instruction text, read independently of the cases above ---
+SK=$(tr -d '\r' < "$P/skills/executing-plans/SKILL.md")
+check "A9: a Lookups heading of any level lies within the first 15,000 characters" "$(head -c 15000 <<<"$SK" | grep -Ec '^#{1,6}[[:space:]]+Lookups[[:space:]]*$')" "1"
+check "A9: the skill never claims the session already read the code" \
+  "$(has "$(flat <<<"$SK")" 'has read the code')/$(has "$(flat <<<"$SK")" 'already read the code')" "no/no"
+check "A9: the skill says an auto run starts in a cleared session" "$(has "$(flat <<<"$SK")" 'auto run starts in a cleared session')" "yes"
+for src in "cockpit:$(tr -d '\r' < "$P/hooks/cockpit/register.tsx" | grep -A1 '^const AUTO_COMPACT_INSTRUCTIONS' | flat)" \
+           "session-budget:$(tr -d '\r' < "$P/reference/session-budget.md" | awk '/^# Compact instructions$/ { f = 1; next } f && /^```/ { exit } f' | flat)"; do
+  n=${src%%:*}; t=${src#*:}
+  check "A10: the $n instructions cap the summary at 1,500 words" "$(has "$t" '1,500 words')" "yes"
+  check "A10: the $n instructions keep rulings only for the task in flight and plan-wide ones" "$(has "$t" 'task in flight')/$(has "$t" 'plan-wide')" "yes/yes"
+done
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
