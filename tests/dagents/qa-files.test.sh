@@ -80,8 +80,17 @@ check "clean: a refused restore names git's reason and leaves the path" \
   "$(grep -c '^qa-files: could not undo kept.txt: .*index.lock' "$TMP/qa-err"):$(grep -c '^qa-files: left kept.txt$' <<<"$out")" "1:1"
 git checkout -q -- kept.txt
 
+# A directory that was already empty when QA began is the person's, even
+# after QA's file inside it is removed.
+mkdir -p mine/empty
 bash "$QA" begin "$WS"
-check "a re-dispatch starts with an empty manifest" "$(wc -c < "$WS/qa-touched.txt" | tr -d ' ')" "0"
+printf 'mine/empty/c.sh\n' >> "$WS/qa-touched.txt"; printf 'x\n' > mine/empty/c.sh
+out=$(bash "$QA" clean "$WS")
+check "clean: a directory empty before QA stays" "$([ -e mine/empty/c.sh ] && echo kept || echo gone):$([ -d mine/empty ] && echo kept || echo gone)" "gone:kept"
+rm -rf mine
+
+bash "$QA" begin "$WS"
+check "a re-dispatch) starts with an empty manifest" "$(wc -c < "$WS/qa-touched.txt" | tr -d ' ')" "0"
 rm -f "$WS/qa-touched.txt"; printf 'z\n' > z.txt
 out=$(bash "$QA" clean "$WS")
 check "no manifest: nothing is cleaned" "$(cat z.txt):$(grep -c '^qa-files: left z.txt$' <<<"$out")" "z:1"
