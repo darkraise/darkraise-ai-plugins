@@ -682,5 +682,146 @@ check "A18: the finishing text prints the counters, the per-task summary and the
   "$(has "$FIN" 'auto-run counters')/$(has "$FIN" 'usage summary missing')/$(has "$FIN" 'segment-only')" "yes/yes/yes"
 check "A18: the finishing text names the CLAUDE.md follow-up" "$(has "$FIN" "update each repository's claude.md compact instructions")" "yes"
 
+# --- A14: the review panel's availability memory in an auto run ---
+PANEL="$P/scripts/run-review-panel"
+PN="$TMP/panel"; mkdir -p "$PN"
+printf '# review prompt\n' > "$PN/prompt.md"
+cat > "$PN/codex-gate" <<'EOF'
+#!/usr/bin/env bash
+echo 'codex-gate usable=true reason=ok review=true resets_at=- source=cache'
+EOF
+cat > "$PN/agy-gate" <<'EOF'
+#!/usr/bin/env bash
+echo 'agy-gate usable=false reason=setting review=false resets_at=- claude=on claude_resets_at=- source=setting'
+EOF
+cat > "$PN/codex-runner" <<EOF
+#!/usr/bin/env bash
+out=""; while [ \$# -gt 0 ]; do case "\$1" in --out) out="\$2"; shift 2 ;; *) shift ;; esac; done
+echo x >> "$PN/launches"
+line=\$(cat "$PN/next-line" 2>/dev/null)
+case "\$line" in *"status=OK"*) printf '{}' > "\$out" ;; esac
+printf '%s\n' "\${line//@OUT@/\$out}"
+EOF
+chmod +x "$PN/codex-gate" "$PN/agy-gate" "$PN/codex-runner"
+export PANEL_CODEX_GATE="$PN/codex-gate" PANEL_AGY_GATE="$PN/agy-gate" PANEL_CODEX_RUNNER="$PN/codex-runner"
+launches() { wc -l < "$PN/launches" 2>/dev/null | tr -d ' ' | sed 's/^$/0/'; }
+panel() { # panel REPO — one task panel from REPO as session pr1
+  rm -rf "$PN/out"
+  (cd "$1" && CLAUDE_CODE_SESSION_ID=pr1 bash "$PANEL" --kind task --tier heavy --cwd "$1" --out-dir "$PN/out" --prompt "$PN/prompt.md" 2>/dev/null)
+}
+quota_line() { printf 'codex-judge gpt-6-astra/xhigh status=FAILED exit=1 out=- evidence=none reason=quota%s\n' "${1:+ until=$1}" > "$PN/next-line"; }
+skips() { jq -c '.reviewSkips // []' "$1/.dforge/sdd/auto-run.json" 2>/dev/null; }
+
+RPA="$TMP/rpa"; newrepo "$RPA"
+arrun "$RPA" pr1 start --spec docs/s.md --register docs/r.md >/dev/null 2>&1
+rm -f "$PN/launches"
+UNTIL=$(( $(date +%s) + 3 ))
+quota_line "$UNTIL"
+out=$(panel "$RPA")
+check "A14: the quota failure's line is printed" "$(grep -c 'codex-judge .* status=FAILED .* reason=quota' <<<"$out")" "1"
+check "A14: the failure is recorded under reviewSkips with its family and until" \
+  "$(skips "$RPA" | jq -c --argjson u "$UNTIL" '[.[0].family, .[0].until, (.[0].failedAt | type)] | . == ["codex", $u, "number"]')" "true"
+check "A14: the runner ran once" "$(launches)" "1"
+out=$(panel "$RPA")
+check "A14: inside the window the family is skipped as quota-skip" "$(grep -c 'codex-judge none/none status=SKIPPED .* reason=quota-skip' <<<"$out")" "1"
+check "A14: inside the window nothing was launched" "$(launches)" "1"
+sleep 4
+printf 'codex-judge gpt-6-astra/xhigh status=OK exit=0 out=@OUT@ evidence=none\n' > "$PN/next-line"
+out=$(panel "$RPA")
+check "A14: after the until epoch the family launches again" "$(launches):$(grep -c 'status=OK' <<<"$out")" "2:1"
+# a second quota failure skips the family for the rest of the run
+quota_line "$(( $(date +%s) + 2 ))"
+out=$(panel "$RPA")
+quota_line "$(( $(date +%s) + 2 ))"
+sleep 3
+out=$(panel "$RPA")
+LAUNCHES=$(launches)
+sleep 3
+out=$(panel "$RPA")
+check "A14: after a second quota failure the family stays skipped past its named reset" "$(launches):$(grep -c 'reason=quota-skip' <<<"$out")" "$LAUNCHES:1"
+# no reset named: 5 hours
+RPB="$TMP/rpb"; newrepo "$RPB"
+arrun "$RPB" pr1 start --spec docs/s.md --register docs/r.md >/dev/null 2>&1
+quota_line ""
+panel "$RPB" >/dev/null
+check "A14: with no reset named the skip lasts 5 hours" "$(skips "$RPB" | jq -c '(.[0].until - .[0].failedAt) | . >= 17990 and . <= 18010')" "true"
+# outside an auto run
+RPC="$TMP/rpc"; newrepo "$RPC"
+before=$(launches)
+panel "$RPC" >/dev/null
+check "A14: outside an auto run no skip is recorded" "$([ -f "$RPC/.dforge/sdd/auto-run.json" ] && echo file || echo none)" "none"
+panel "$RPC" >/dev/null
+check "A14: outside an auto run the family launches every time" "$(( $(launches) - before ))" "2"
+# a denied-command review: a panel failure, never a run-long skip
+RPD="$TMP/rpd"; newrepo "$RPD"
+arrun "$RPD" pr1 start --spec docs/s.md --register docs/r.md >/dev/null 2>&1
+printf 'codex-judge gpt-6-astra/xhigh status=FAILED exit=1 out=- evidence=none reason=denied\n' > "$PN/next-line"
+before=$(launches)
+panel "$RPD" >/dev/null
+panel "$RPD" >/dev/null
+check "A14: a reason=denied review is counted as a panel failure each time" "$(jq -c '.totals.panelFailures' "$RPD/.dforge/sdd/auto-run.json")" "2"
+check "A14: a reason=denied review sets no skip, so the family launches again" "$(skips "$RPD"):$(( $(launches) - before ))" "[]:2"
+unset PANEL_CODEX_GATE PANEL_AGY_GATE PANEL_CODEX_RUNNER
+
+# --- A15: task-step verdict reads 71-76(diff) as lines 71-76 ---
+RT="$TMP/rt"; git init -q -b main "$RT"; git -C "$RT" config user.name Darkraise; git -C "$RT" config user.email dark@example.invalid
+mkdir -p "$RT/docs"
+printf '# P\n\n**Goal:** G.\n\n## Global Constraints\n\n- None.\n\n### Task 1: a\n\n**Files:** `x.sh`\n\n**Risk:** 3\n\n**Implementer:** `dforge:impl-sonnet-high`\n\nBody.\n' > "$RT/docs/plan.md"
+git -C "$RT" add docs; git -C "$RT" commit -q -m init
+(cd "$RT" && bash "$BRIEF" --open docs/plan.md 1 >/dev/null 2>&1)
+printf 'x\n' > "$RT/x.sh"; git -C "$RT" add x.sh; git -C "$RT" commit -q -m x
+(cd "$RT" && bash "$P/scripts/task-step" review docs/plan.md 1 >/dev/null 2>&1)
+WS="$RT/.dforge/sdd/plan"
+cat > "$WS/task-1-review-report.md" <<'EOF'
+## Verdict
+spec: pass
+quality: changes
+scores: spec 15 / scope 15 / verification 12 / quality 9
+
+## Findings
+- [Important] plugins/x.sh:71-76(diff) — off by one
+- [Minor] plugins/y.sh:3(diff) — naming
+
+## Cannot verify
+- none
+EOF
+ROUND0=$(jq -c .round "$WS/task-1-step.json")
+FILES0=$(ls "$WS" | wc -l | tr -d ' ')
+VOUT=$(cd "$RT" && bash "$P/scripts/task-step" verdict docs/plan.md 1 2>&1); st=$?
+check "A15: the verdict is accepted (exit 0)" "$st" "0"
+check "A15: the finding is recorded as lines 71-76" "$(grep -c 'plugins/x.sh:71-76 — off by one' <<<"$VOUT")" "1"
+check "A15: the parenthetical is not kept in the recorded line" "$(grep -c '71-76(diff)' <<<"$VOUT")" "0"
+check "A15: the fix list names lines 71-76" "$(grep -c '^- plugins/x.sh:71-76: off by one' "$WS/task-1-fix-1.md" 2>/dev/null)" "1"
+check "A15: no new dispatch: the round count is unchanged and only the fix file is added" \
+  "$(jq -c .round "$WS/task-1-step.json"):$(( $(ls "$WS" | wc -l | tr -d ' ') - FILES0 ))" "$ROUND0:1"
+
+# --- A16: a UI proof report passes the implementer stop gate; others without ## Verdict do not ---
+GATE_IN() { # GATE_IN AGENT_ID REPORT — the SubagentStop input naming a report
+  jq -nc --arg id "$1" --arg cwd "$TMP/gate-cwd" --arg m "$(printf '**Status:** DONE\nReport: %s' "$2")" \
+    '{session_id:"11111111-2222-4333-8444-555555555555",cwd:$cwd,agent_id:$id,agent_type:"dforge:impl-sonnet-high",hook_event_name:"SubagentStop",stop_hook_active:false,last_assistant_message:$m}'
+}
+mkdir -p "$TMP/gate-cwd"; git -C "$TMP/gate-cwd" init -q 2>/dev/null
+export XDG_STATE_HOME="$TMP/xdg"
+gate() { GATE_IN "$1" "$2" | bash "$P/scripts/impl-stop-gate" 2>"$TMP/gate.err"; GST=$?; }
+printf '# UI proof: dashboard\n\nScreenshots taken.\n' > "$TMP/proof.md"
+gate g-proof "$TMP/proof.md"
+check "A16: a proof report with no ## Verdict passes" "$GST:$(wc -c < "$TMP/gate.err" | tr -d ' ')" "0:0"
+printf '\n  \n# UI proof: dashboard\n\nbody\n' > "$TMP/proof-blank.md"
+gate g-proof2 "$TMP/proof-blank.md"
+check "A16: blank lines before the proof heading still pass" "$GST" "0"
+printf '# Notes\n\nNo verdict here.\n' > "$TMP/other.md"
+gate g-other "$TMP/other.md"
+check "A16: any other report without the heading is refused (exit 2)" "$GST" "2"
+printf '# UI proofs\n\nbody\n' > "$TMP/near.md"
+gate g-near "$TMP/near.md"
+check "A16: a heading that only resembles the proof heading is refused" "$GST" "2"
+printf '## Notes\n\n# UI proof: late\n' > "$TMP/late.md"
+gate g-late "$TMP/late.md"
+check "A16: a proof heading that is not the first non-empty line is refused" "$GST" "2"
+printf '## Verdict\npass: 1\n' > "$TMP/qa.md"
+gate g-qa "$TMP/qa.md"
+check "A16: a QA report that opens with ## Verdict still passes" "$GST" "0"
+unset XDG_STATE_HOME
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
