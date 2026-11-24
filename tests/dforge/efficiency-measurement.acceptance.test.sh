@@ -983,7 +983,7 @@ check "A21: the clone still has no remote after the launch" "$(git -C "$CL" remo
 wprep dforge 5
 MAXS=2 wlaunch dforge 5
 check "A21: a run past its limit exits 0 and is marked timed-out" "$LST:$(cat "$WAB_ROOT/dforge-5/state" 2>/dev/null)" "0:timed-out"
-check "A21: the bound run was told to stop" "$(grep -c -- ' stop$' "$WT/auto-run.log")" "1"
+check "A21: the bound run was told to stop" "$(grep -c -- ' stop --reason workflow-ab: timed-out$' "$WT/auto-run.log")" "1"
 check "A21: the harness killed its own tmux session" "$(grep -c '^kill-session -t =wab-dforge-5' "$WT/tmux.log")" "1"
 sleep 1
 check "A21: the nested session's process is gone" "$(kill -0 "$(cat "$WT/claude.pid")" 2>/dev/null && echo alive || echo gone)" "gone"
