@@ -489,7 +489,7 @@ function quality(opts, rowsOut, closeRows, planText) {
   const finish = Math.max(...closeRows.map((r) => ms(r.time)).filter(Number.isFinite));
   const files = [...new Set([...planText.matchAll(/^### Task (\d+):/gm)].flatMap((m) => planFiles(planText, m[1])))];
   for (const repo of opts.repo) {
-    if (!Number.isFinite(finish) || !files.length) break;
+    if (!Number.isFinite(finish) || !files.length || q.fixCommits === null) break;
     const inRange = new Set();
     for (const r of closeRows) {
       if (!/^[0-9a-f]+\.\.[0-9a-f]+$/.test(r.range || '')) continue;

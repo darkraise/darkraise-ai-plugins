@@ -343,6 +343,10 @@ check "quality_unknowns: a range whose commits are gone still counts later fixes
 mkdir -p "$TMP/notrepo"
 check "quality_unknowns: no repository is unknown, not zero" "$(qrun "$QA..$QB" "$TMP/notrepo" "$FX/quality/record.md")" '[{"Critical":1,"Important":2},null]'
 check "quality_unknowns: an unreadable record is unknown, not zero" "$(qrun "$QA..$QB" "$QR" "$TMP/absent.md")" '[null,1]'
+check "quality_unknowns: one unreadable repository of several leaves the count unknown" \
+  "$(node "$REPORT" --markers "$TMP/q2-markers.tsv" --transcripts "$FX/quality/proj" --plan "$FX/quality/plans/p.md" \
+    --review-record "$FX/quality/record.md" --register "$FX/quality/reg.md" --repo "$TMP/notrepo" --repo "$QR" --format json 2>/dev/null \
+    | jq -c '.plans[0].quality | [.findings, .fixCommits]')" '[{"Critical":1,"Important":2},null]'
 
 # --- prices_unreadable ---
 mkdir -p "$TMP/noprices/lib"
