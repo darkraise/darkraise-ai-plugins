@@ -159,6 +159,7 @@ rm -rf "$REPO/.superpowers"
 # --- the Handoff section recomputes the stored block ---
 H="$TMP/handoff"
 git init -q -b main "$H"
+H_ROOT="$(git -C "$H" rev-parse --show-toplevel)"
 mkdir -p "$H/docs/dagents/plans" "$H/.dagents/sdd/2026-11-01-p" "$H/.dagents/handoff"
 printf '.dagents/\n' > "$H/.gitignore"
 printf '# P\n\n**Spec:** docs/dagents/specs/p.md\n**Execution:** inline — `claude --model sonnet --effort high` — x\n\n### Task 1: One\n\n### Task 2: Two\n\n### Task 3: Three\n' \
@@ -176,7 +177,7 @@ has "handoff: the recomputed Next line" "$SECTION" "- **Next:** Resume at Task 3
 # An adhoc block is never superseded (C10); a finished plan's is.
 printf '# Completed plans\n\n- 2026-11-01 — `docs/dagents/plans/2026-11-01-p.md` — merged\n' > "$H/docs/dagents/plans/completed.md"
 hstored "<!-- next-step: kind=plan done=0 closed=0 subject=docs/dagents/plans/2026-11-01-p.md at=1 -->"
-has "handoff: a finished plan's block is removed" "$(handoff_section)" "- removed finished handoff $H/.dagents/handoff/2026-11-01-p.md — the plan is finished: docs/dagents/plans/2026-11-01-p.md"
+has "handoff: a finished plan's block is removed" "$(handoff_section)" "- removed finished handoff $H_ROOT/.dagents/handoff/2026-11-01-p.md — the plan is finished: docs/dagents/plans/2026-11-01-p.md"
 hstored "<!-- next-step: kind=plan done=1 closed=0 subject=docs/dagents/plans/missing.md at=1 -->"
 SECTION=$(handoff_section)
 has "handoff: a failed recompute is named" "$SECTION" "- stored, not recomputed: next-step: no such file"

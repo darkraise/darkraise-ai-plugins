@@ -194,7 +194,7 @@ ohandoff adhoc-0000aaaa adhoc s-own "own adhoc note" '1 hour ago'
 ohandoff P plan s-other "other plan note" '1 minute ago'
 out=$(snapshot_latest "$OREPO" s-own)
 has "A12: this session's newest handoff is shown" "$out" "**Next:** own adhoc note"
-has "A12: headed with its path" "$out" "### From \`$OH/adhoc-0000aaaa.md\`"
+has "A12: headed with its path" "$out" "### From \`$(git -C "$OREPO" rev-parse --show-toplevel)/.dagents/handoff/adhoc-0000aaaa.md\`"
 lacks "A12: another session's newer handoff is not" "$out" "other plan note"
 lacks "A12: the older claimed handoff is not" "$out" "draft note"
 rm -f "$OH/adhoc-0000aaaa.md"
