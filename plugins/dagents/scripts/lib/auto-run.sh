@@ -192,6 +192,27 @@ ar_start() {
 AR_PLUGIN_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 ar_plugin_version() { ar_jq -r '.version // empty' < "$AR_PLUGIN_ROOT/.claude-plugin/plugin.json"; }
 
+# ar_version_check — warn once on stderr when this plugin's version differs
+# from the one the run bound to AR_SESSION recorded, and record the first
+# mismatch. The guard variable keeps the caller's child auto-run calls silent.
+# A run recorded before versions were kept skips the check, and a different
+# root with the same version is no mismatch.
+ar_version_check() {
+  [ "${AR_VERSION_CHECKED:-}" != 1 ] || return 0
+  export AR_VERSION_CHECKED=1
+  local path run mine
+  ar_bound || return 0
+  path=$(ar_path) || return 0
+  run=$(ar_jq -r '.version // empty' < "$path" 2>/dev/null)
+  [ -n "$run" ] || return 0
+  mine=$(ar_plugin_version 2>/dev/null)
+  [ -n "$mine" ] && [ "$mine" != "$run" ] || return 0
+  printf 'auto run: plugin version mismatch — run %s at %s, this call %s at %s\n' \
+    "$run" "$(ar_jq -r '.root // "unknown"' < "$path" 2>/dev/null)" "$mine" "$AR_PLUGIN_ROOT" >&2
+  dr_locked "$path" ar_put "$path" 'if .mismatch then . else .mismatch = {run: .version, root: .root, call: $v, callRoot: $r, at: $now} end' \
+    --arg v "$mine" --arg r "$AR_PLUGIN_ROOT" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >/dev/null 2>&1 || true
+}
+
 # ar_resume — reactivate the stopped run for AR_SESSION (reference/auto-run.md
 # §Resuming). Return 2 without a live cockpit, 4 with the reason on stderr
 # when the run cannot resume.

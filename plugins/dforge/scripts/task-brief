@@ -206,6 +206,7 @@ if [ -n "$n" ]; then
 fi
 # The budget line's call writes the task's open marker (scripts/lib/usage-marker.sh).
 if [ "$open" -eq 1 ]; then
+  AR_SESSION=${AR_SESSION:-${CLAUDE_CODE_SESSION_ID:-}} ar_version_check
   export USAGE_MARK=open USAGE_MARK_PLAN="$plan" USAGE_MARK_TASKS="$n" USAGE_MARK_CALLER="task-brief:$n"
 fi
 DFORGE_BUDGET_CALLER="task-brief:${n:-header}" bash "$HERE/context-size" ${budget_mode[@]+"${budget_mode[@]}"} 2>/dev/null || true

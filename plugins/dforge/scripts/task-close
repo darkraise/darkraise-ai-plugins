@@ -95,6 +95,7 @@ budget() {
 }
 
 rc=0 auto=0 budget_out=""
+AR_SESSION=${AR_SESSION:-${CLAUDE_CODE_SESSION_ID:-}} ar_version_check
 if bash "$HERE/auto-run" status >/dev/null 2>&1; then
   auto=1
   # Measured before the completion is recorded, so the close row comes first;
@@ -106,7 +107,7 @@ if bash "$HERE/auto-run" status >/dev/null 2>&1; then
     echo "auto run: stopped at this completion"
     rc=5
   fi
-  pending=$(bash "$HERE/auto-run" decision list 2>&1) || true
+  pending=$(bash "$HERE/auto-run" decision list 2>/dev/null) || true
   [ -z "$pending" ] || printf 'auto run decisions waiting:\n%s\n' "$pending"
 fi
 

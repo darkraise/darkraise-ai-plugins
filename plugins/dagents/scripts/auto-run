@@ -51,6 +51,8 @@ export AR_SESSION
 cmd=$1
 shift
 
+case $cmd in start | stop | resume) ;; *) ar_version_check ;; esac
+
 bound() { ar_bound || { echo "auto-run: no auto run is bound to this session" >&2; exit 3; }; }
 reason_arg() { # sets reason from [--reason TEXT]
   reason=""

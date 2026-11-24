@@ -998,5 +998,67 @@ rs_state "$D" '.active = false | .stopped = "x" | .phase = "spec" | .plan = null
 rs_resume "$D"
 check "resume_early_phase: an in-place run stopped in the spec phase resumes without its branch" "$status" "0"
 
+# --- one plugin version per run: copies of this plugin at other roots ---
+vcopy() { # vcopy DIR VERSION — this plugin's scripts and manifest at DIR, with VERSION
+  mkdir -p "$1/.claude-plugin"
+  cp -R "$PROOT/scripts" "$PROOT/reference" "$1/"
+  jq --arg v "$2" '.version = $v' "$PROOT/.claude-plugin/plugin.json" > "$1/.claude-plugin/plugin.json"
+}
+vcopy "$TMP/R2" 5.2.0
+vcopy "$TMP/R3" 5.1.1
+R2=$(cd "$TMP/R2" && pwd) R3=$(cd "$TMP/R3" && pwd)
+vrepo() { # vrepo DIR [FILTER] — a repository on branch b with a two-task plan and a run of s1 recorded at 5.1.1 in R1
+  rs_repo "$1"
+  mkdir -p "$1/docs"
+  printf '# V\n\n**Goal:** v.\n\n**Execution:** inline — `claude --model opus --effort high` — v\n\n**Task check:** none — full suite every 3 tasks\n\n### Task 1: one\n\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0\n\n### Task 2: two\n\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0\n' > "$1/docs/p.md"
+  git -C "$1" add docs/p.md && git -C "$1" commit -q -m plan
+  rs_state "$1" '.pending = null | .launch = null | .stalls = 0 | .compactionsSinceTask = 0 | .version = "5.1.1" | .root = "R1"'
+  [ -z "${2:-}" ] || { jq "$2" "$1/.dforge/sdd/auto-run.json" > "$TMP/st" && mv "$TMP/st" "$1/.dforge/sdd/auto-run.json"; }
+}
+vcall() { # vcall DIR ROOT SCRIPT ARGS… — sets out and the count of warnings on stderr
+  local d=$1 root=$2 script=$3
+  shift 3
+  beat s1
+  out=$(cd "$d" && CLAUDE_CODE_SESSION_ID=s1 bash "$root/scripts/$script" "$@" 2>"$TMP/verr")
+  warned=$(grep -c '^auto run: plugin version mismatch' "$TMP/verr")
+}
+WARN="auto run: plugin version mismatch — run 5.1.1 at R1, this call 5.2.0 at $R2"
+
+# --- version_mismatch_warns_once ---
+D="$TMP/v1"; vrepo "$D"
+vcall "$D" "$R2" task-brief --open docs/p.md 1
+check "version_mismatch_warns_once: task-brief --open warns once" "$warned" "1"
+check "version_mismatch_warns_once: the warning names both versions and roots" "$(grep '^auto run: plugin' "$TMP/verr")" "$WARN"
+check "version_mismatch_warns_once: the first mismatch is recorded" \
+  "$(jq -c '[.mismatch.run, .mismatch.root, .mismatch.call, .mismatch.callRoot, (.mismatch.at | type)]' "$D/.dforge/sdd/auto-run.json")" \
+  "[\"5.1.1\",\"R1\",\"5.2.0\",\"$R2\",\"string\"]"
+first_at=$(jq -r .mismatch.at "$D/.dforge/sdd/auto-run.json")
+printf 'x\n' > "$D/x.txt"; git -C "$D" add x.txt; git -C "$D" commit -q -m x
+vcall "$D" "$R2" task-close docs/p.md 1 'done: x; verified: none; remaining: none; discovered: none; assumptions: none'
+check "version_mismatch_warns_once: task-close warns once" "$warned" "1"
+check "version_mismatch_warns_once: task-close lists no warning as a decision" "$(grep -c '^auto run decisions waiting:' <<<"$out")" "0"
+check "version_mismatch_warns_once: the mismatch keeps the call version" "$(jq -r .mismatch.call "$D/.dforge/sdd/auto-run.json")" "5.2.0"
+vcall "$D" "$R2" auto-run status
+check "version_mismatch_warns_once: a direct auto-run call warns once" "$warned" "1"
+check "version_mismatch_warns_once: a later call keeps the first record" "$(jq -r .mismatch.at "$D/.dforge/sdd/auto-run.json")" "$first_at"
+vcall "$D" "$R2" task-brief --open docs/p.md 2
+check "version_mismatch_warns_once: task-brief --open for task 2 warns once" "$warned" "1"
+vcall "$D" "$R2" auto-run stop --reason x
+check "version_mismatch_warns_once: stop does not check" "$warned" "0"
+
+# --- same_version_other_root_silent ---
+D="$TMP/v2"; vrepo "$D"
+vcall "$D" "$R3" task-brief --open docs/p.md 1
+check "same_version_other_root_silent: task-brief --open prints nothing" "$warned" "0"
+vcall "$D" "$R3" auto-run status
+check "same_version_other_root_silent: auto-run status prints nothing" "$warned" "0"
+check "same_version_other_root_silent: no mismatch recorded" "$(jq -r 'has("mismatch")' "$D/.dforge/sdd/auto-run.json")" "false"
+
+# --- legacy_run_skips ---
+D="$TMP/v3"; vrepo "$D" 'del(.version, .root)'
+vcall "$D" "$R2" auto-run status
+check "legacy_run_skips: a run with no version prints nothing" "$warned" "0"
+check "legacy_run_skips: and records nothing" "$(jq -r 'has("mismatch")' "$D/.dforge/sdd/auto-run.json")" "false"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

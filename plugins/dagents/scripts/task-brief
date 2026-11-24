@@ -126,6 +126,7 @@ echo "wrote ${out}: $(wc -l < "$out" | tr -d ' ') lines"
 budget_mode=()
 if [ -n "$n" ]; then
   . "$HERE/lib/context.sh"
+  AR_SESSION=${AR_SESSION:-${CLAUDE_CODE_SESSION_ID:-}} ar_version_check
   read -r -a budget_mode <<<"$(ctx_plan_mode "$src" "$(dagents_ledger_dir "$(basename "$plan" .md)" "$(_plan_ctx "$plan")")/progress.md")"
 fi
 # The budget line's call writes the task's open marker

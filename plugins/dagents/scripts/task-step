@@ -554,6 +554,11 @@ cmd_rereview() (
   plan_budget_line "$here" task-step:rereview "$src" "$(dagents_ledger_dir "$(basename "$plan" .md)" "$(_plan_ctx "$plan")")/progress.md" || true
 )
 
+# One version check per call (lib/auto-run.sh); the task-brief, auto-run and
+# context-size calls it makes stay silent.
+(AR_SESSION=${AR_SESSION:-${CLAUDE_CODE_SESSION_ID:-}}; . "$HERE/lib/auto-run.sh" && ar_version_check)
+export AR_VERSION_CHECKED=1
+
 if [ "${1:-}" = rereview ]; then
   shift
   cmd_rereview "$@"
