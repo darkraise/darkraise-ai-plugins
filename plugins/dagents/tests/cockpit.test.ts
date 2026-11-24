@@ -6967,12 +6967,22 @@ describe('auto run', () => {
   })
 
   test('run row shows mismatch', async ($, on) => {
-    const files = autoFiles({ pending: null, mismatch: { run: '5.1.1', root: 'R1', call: '5.2.0', callRoot: 'R2', at: '2026-01-01T00:00:00Z' } })
+    const files = autoFiles({ pending: null, version: '5.1.1', mismatch: { run: '5.1.1', root: 'R1', call: '5.2.0', callRoot: 'R2', at: '2026-01-01T00:00:00Z' } })
     world(on, { ...SIGNED_IN, autoFile: files[AUTO] })
     signedIn(on, files)
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /^version mismatch — run 5\.1\.1, this call 5\.2\.0$/ })).toBeDefined()
+  })
+
+  test('run row drops the mismatch once a resume records the new version', async ($, on) => {
+    const files = autoFiles({ pending: null, version: '5.2.0', mismatch: { run: '5.1.1', root: 'R1', call: '5.2.0', callRoot: 'R2', at: '2026-01-01T00:00:00Z' } })
+    world(on, { ...SIGNED_IN, autoFile: files[AUTO] })
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Auto run · execute/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /version mismatch/ })).toBeUndefined()
   })
 
   test('run row has no mismatch line without a recorded mismatch', async ($, on) => {

@@ -1686,7 +1686,11 @@ export function autoRunFor(text: string, sessionId: string): CockpitAutoRun | nu
     resumePrompt: word(s.resumePrompt),
     stalledAt: typeof s.stalledAt === 'number' && Number.isFinite(s.stalledAt) ? s.stalledAt : null,
     launch: typeof launch.model === 'string' && typeof launch.effort === 'string' ? { model: launch.model, effort: launch.effort } : null,
-    mismatch: typeof mismatch.run === 'string' && typeof mismatch.call === 'string' ? { run: mismatch.run, call: mismatch.call } : null,
+    // A resume rewrites the run's version: the first mismatch stays in the
+    // state for the finishing counters but is no longer live.
+    mismatch: typeof mismatch.run === 'string' && typeof mismatch.call === 'string' && !(typeof s.version === 'string' && s.version !== mismatch.run)
+      ? { run: mismatch.run, call: mismatch.call }
+      : null,
   }
 }
 
