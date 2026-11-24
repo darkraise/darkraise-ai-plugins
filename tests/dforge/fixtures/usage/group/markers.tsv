@@ -1,0 +1,4 @@
+2026-01-01T00:00:05Z	open	dforge	5.1.1	/plugin	docs/plans/p.md	4	g1		335	1	task-step:4		
+2026-01-01T00:00:15Z	open	dforge	5.1.1	/plugin	docs/plans/p.md	5	g1		667	2	task-step:5		
+2026-01-01T00:00:25Z	close	dforge	5.1.1	/plugin	docs/plans/p.md	5	g1		999	3	auto-run:task-complete	e..f	
+2026-01-01T00:00:35Z	close	dforge	5.1.1	/plugin	docs/plans/p.md	4	g1		1331	4	auto-run:task-complete	f..g	

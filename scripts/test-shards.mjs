@@ -122,6 +122,7 @@ export const windowsSeconds = {
   'tests/dforge/ui-ux-skill.acceptance.test.sh': 330,
   'tests/dforge/ui-ux-skill.test.sh': 10,
   'tests/dforge/usage-marker.test.sh': 30,
+  'tests/dforge/usage-report.test.sh': 15,
   'tests/dforge/with-timeout.test.sh': 20,
   'tests/dforge/working-directory.test.sh': 82,
   'tests/dforge/worktree-instructions.test.sh': 10,
