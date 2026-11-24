@@ -206,6 +206,12 @@ if bash "$WAB/sandbox" --check -w "$sb/rw" >/dev/null 2>&1; then
     "$(tr '\n' ' ' <<<"$got")" "rw ro 0 0 tmp "
   check "sandbox: its /tmp is private" "$([ -e "/tmp/$probe" ] && echo shared || echo private)" "private"
   check "sandbox: the hidden files are untouched outside" "$(cat "$sb/secret/id" "$sb/netrc" | tr '\n' ' ')" "key token "
+  got=$(bash "$WAB/sandbox" -w "$sb/rw" -h "$sb/secret" -- bash -c "
+    mount -o remount,rw / 2>/dev/null && echo remounted || echo locked
+    umount '$sb/secret' 2>/dev/null && echo unhidden || echo hidden
+    [ -e /proc/$$ ] && echo host-pid-visible || echo host-pid-hidden" 2>&1)
+  check "sandbox: the command cannot undo its mounts or see a host process" \
+    "$(tr '\n' ' ' <<<"$got")" "locked hidden host-pid-hidden "
   bash "$WAB/sandbox" -w "$sb/secret/x" -h "$sb/secret" -- true 2>/dev/null
   check "sandbox: a writable directory under a hidden one is refused" "$?" "1"
   bash "$WAB/sandbox" -w /tmp -- true 2>/dev/null

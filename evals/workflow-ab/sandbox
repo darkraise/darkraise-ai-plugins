@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
 # sandbox [--check] [-w DIR]... [-h PATH]... -- COMMAND [ARGS...] — run COMMAND
-# in a private mount namespace: every mount read-only except each -w DIR, a
-# fresh /tmp and /run, and each -h PATH that exists covered by an empty one.
-# The network is shared: the nested session needs the API. --check only probes
-# that the namespace can be made. Exit: COMMAND's status; 1 when the sandbox
+# in private mount and pid namespaces: every mount read-only except each -w
+# DIR, a fresh /proc, /tmp, /run and /dev/shm, and each -h PATH that exists
+# covered by an empty one. COMMAND runs in a further user namespace, so it can
+# neither undo those mounts nor see a host process. The network is shared: the
+# nested session needs the API. --check makes the namespaces and exits. Exit: COMMAND's status; 1 when the sandbox
 # cannot be made; 2 usage.
 set -uo pipefail
 
 die() { printf 'workflow-ab sandbox: %s\n' "$2" >&2; exit "$1"; }
 
 if [ "${WAB_SANDBOX_INSIDE:-}" != 1 ]; then
-  flags=(--mount --propagation private)
+  # --kill-child: the namespace's init ignores TERM, so it is killed when
+  # unshare is.
+  flags=(--mount --propagation private --pid --fork --kill-child)
   # Without root, a user namespace grants the mount rights; files written
   # stay owned by the caller.
   [ "$(id -u)" -eq 0 ] || flags=(--user --map-root-user "${flags[@]}")
@@ -55,7 +58,9 @@ for w in "${writable[@]}"; do
   mount -o remount,bind,rw "$w" || die 1 "cannot keep $w writable"
 done
 # The fresh /run also drops the sockets under it (docker.sock among them).
+mount -t proc -o nosuid,nodev,noexec proc /proc || die 1 "cannot mount a private /proc"
 mount -t tmpfs -o mode=1777,nosuid,nodev tmpfs /tmp || die 1 "cannot mount a private /tmp"
+mount -t tmpfs -o mode=1777,nosuid,nodev tmpfs /dev/shm || die 1 "cannot mount a private /dev/shm"
 mount -t tmpfs -o mode=755,nosuid,nodev tmpfs /run || die 1 "cannot mount a private /run"
 if [ -n "$resolv_copy" ]; then
   mkdir -p "$(dirname "$resolv")" && printf '%s\n' "$resolv_copy" > "$resolv" || die 1 "cannot restore $resolv"
@@ -69,5 +74,6 @@ for h in "${hidden[@]}"; do
 done
 mount -o remount,bind,ro /run || die 1 "cannot remount /run read-only"
 
-[ "$check" -eq 0 ] || exit 0
-exec "$@"
+# Mounts a less privileged user namespace inherits are locked.
+[ "$check" -eq 0 ] || set -- true
+exec unshare --user --map-current-user --mount -- "$@"

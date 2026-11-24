@@ -80,10 +80,11 @@ it) it stops the bound run, kills its tmux session and the session's process
 tree, and writes `timed-out`. A launch killed by a signal stops the run the
 same way and writes `stopped`.
 
-**The sandbox** (`sandbox`, a private mount namespace made with `unshare`)
-leaves writable only the run directory, the owner's Claude config directory
+**The sandbox** (`sandbox`, private mount and pid namespaces made with
+`unshare`, the command in a further user namespace so it cannot undo the
+mounts or see a host process) leaves writable only the run directory, the owner's Claude config directory
 and each `WAB_WRITABLE` directory; every other mount is read-only. `/tmp` and
-`/run` are fresh and private (so no host socket under `/run`, `docker.sock`
+`/run`, `/dev/shm` and `/proc` are fresh and private (so no host socket under `/run`, `docker.sock`
 among them, is reachable), and `.ssh`, `.gnupg`, `.config/gh`, `.aws`,
 `.docker`, `.kube`, `.dforge`, `.netrc` and `.git-credentials` under the
 owner's home read as empty. The network is shared: the session needs the API,
