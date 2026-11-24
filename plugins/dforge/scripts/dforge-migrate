@@ -418,11 +418,12 @@ rewrite_moved() {
   if cmp -s "$tmp" "$file"; then rm -f "$tmp"; else mv -- "$tmp" "$file"; fi
 }
 
-# migrate_latest FILE — FILE (a latest.md) renamed to the key its marker
+# migrate_latest FILE [AS] — FILE (a latest.md) renamed to the key its marker
 # gives, as next-step keys a handoff: the plan's or draft's basename from its
-# subject, else adhoc-legacy-<marker at, else mtime>.
+# subject, else adhoc-legacy-<marker at, else mtime>. AS, in a dry run, is the
+# path FILE takes once its state directory moves; the lines name it.
 migrate_latest() {
-  local f=$1 m kind subject at key target word
+  local f=$1 as=${2:-$1} m kind subject at key target word
   m=$(marker_of "$f")
   kind=""
   # Words are read by name (C9), never by position; set -f keeps them unglobbed.
@@ -436,7 +437,7 @@ migrate_latest() {
     key=${subject//\\//}; key=${key##*/}; key=${key%.md}
     [ "$kind" = draft ] || kind=plan
     if [[ ! $key =~ ^[A-Za-z0-9._-]+$ ]] || ! dforge_handoff_key_check "$kind" "$key"; then
-      printf 'dforge-migrate: %s names %s, which is no usable handoff key; migrated as unplanned\n' "$f" "$subject"
+      printf 'dforge-migrate: %s names %s, which is no usable handoff key; migrated as unplanned\n' "$as" "$subject"
       key=""
     fi
   fi
@@ -445,15 +446,16 @@ migrate_latest() {
       || { refuse "could not read the modification time of $f"; return; }
     key="adhoc-legacy-$at"
   fi
-  target=${f%/*}/$key.md
+  target=${as%/*}/$key.md
   # FILE is <checkout>/<state>/handoff/latest.md or <mirror>/work/handoff/latest.md:
   # nothing is renamed through a link out of its checkout or mirror.
   if ! writable "${f%/*/*/*}" "$f"; then
     refuse "$f is reached through a symbolic link; rename it to $key.md by hand"
-  elif [ -e "$target" ] || [ -L "$target" ]; then
-    refuse "$f is the handoff for $key, and $target already exists; keep one by hand, then run dforge-migrate again"
+  elif [ -e "$target" ] || [ -L "$target" ] \
+    || { [ "$as" != "$f" ] && { [ -e "${f%/*}/$key.md" ] || [ -L "${f%/*}/$key.md" ]; }; }; then
+    refuse "$as is the handoff for $key, and $target already exists; keep one by hand, then run dforge-migrate again"
   elif [ "$dry" -eq 1 ] || mv -- "$f" "$target"; then
-    done_move "$f" "$target"
+    done_move "$as" "$target"
     [ "$dry" -eq 1 ] || rewrite_moved "$target" "$f" \
       || printf 'dforge-migrate: %s could not be rewritten to name itself; its first prompt still names %s\n' "$target" "$f"
   else
@@ -550,6 +552,18 @@ if legacy=$(legacy_handoffs); then
   done <<<"$legacy"
 else
   refuse "the handoff files could not be listed, so no latest.md was renamed; run dforge-migrate again once dforge-config reads the settings"
+fi
+
+# A dry run moved no state directory: an older one's latest.md is listed at
+# the path the state move gives it.
+if [ "$dry" -eq 1 ]; then
+  for wt in "${checkouts[@]}"; do
+    [ ! -e "$wt/.dforge/handoff/latest.md" ] && [ ! -L "$wt/.dforge/handoff/latest.md" ] || continue
+    for old in .superpowers .forge; do
+      note="$wt/$old/handoff/latest.md"
+      if [ -f "$note" ] && would_move "$note"; then migrate_latest "$note" "$wt/.dforge/handoff/latest.md"; break; fi
+    done
+  done
 fi
 
 [ "$dry" -eq 1 ] || for note in "${commit_notes[@]+"${commit_notes[@]}"}"; do printf 'commit: %s\n' "$note"; done

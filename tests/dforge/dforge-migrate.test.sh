@@ -684,5 +684,24 @@ NEW="$RT/.dforge/handoff/adhoc-legacy-1700001100.md"
 check "renamed Codex handoff names its key: exit 0" "$code" "0"
 check "renamed Codex handoff names its key: in the prompt" "$(grep -cF "enter it first. When you hand off, pass \`--key adhoc-legacy-1700001100\` to next-step. Continue the unplanned work recorded in \`$NEW\`" "$NEW")" "1"
 
+
+# A dry run lists the rename of a latest.md the state move would bring along.
+DL="$TMP/dlrepo"; repo "$DL"; DLT=$(git -C "$DL" rev-parse --show-toplevel)
+mkdir -p "$DL/.forge/handoff"
+marked plan docs/dforge/plans/p3.md 1700001200 > "$DL/.forge/handoff/latest.md"
+out=$(HOME="$TMP/rh-home" migrate "$FM" --dry-run "$DL")
+check "dry: the rename of an older state directory's latest.md listed" "$(grep -cxF "would move $DLT/.dforge/handoff/latest.md -> $DLT/.dforge/handoff/p3.md" <<<"$out")" "1"
+check "dry: that latest.md is not moved" "$(exists "$DL/.forge/handoff/latest.md") $(exists "$DL/.dforge")" "yes no"
+out=$(HOME="$TMP/rh-home" migrate "$FM" "$DL")
+check "the real run renames it as the dry run said" "$(grep -cxF "moved $DLT/.dforge/handoff/latest.md -> $DLT/.dforge/handoff/p3.md" <<<"$out")" "1"
+# The dry run refuses the rename the real run refuses: the older directory already holds the key.
+DK="$TMP/dkrepo"; repo "$DK"; DKT=$(git -C "$DK" rev-parse --show-toplevel)
+mkdir -p "$DK/.forge/handoff"
+marked plan docs/dforge/plans/p3.md 1700001300 > "$DK/.forge/handoff/latest.md"
+printf '# Handoff p3\n' > "$DK/.forge/handoff/p3.md"
+out=$(HOME="$TMP/rh-home" migrate "$FM" --dry-run "$DK")
+check "dry: a latest.md whose key the older directory holds is refused" "$(grep -c "refused: $DKT/.dforge/handoff/latest.md is the handoff for p3" <<<"$out") $(grep -c "would move $DKT/.dforge/handoff/latest.md" <<<"$out")" "1 0"
+out=$(HOME="$TMP/rh-home" migrate "$FM" "$DK")
+check "the real run refuses it too" "$(grep -c "refused: $DKT/.dforge/handoff/latest.md is the handoff for p3" <<<"$out")" "1"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
