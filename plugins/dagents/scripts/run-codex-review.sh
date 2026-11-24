@@ -182,14 +182,17 @@ plugin_root=${plugin_line#*root=}
 # --rawfile, not --arg "$(cat ...)": a reviewer prompt carries a whole branch
 # diff and passing it as an argument blows the 32,767-character Windows
 # CreateProcess limit.
+# Every prompt opens with this line, so a reviewer does not spend its turn on
+# shell commands the read-only sandbox denies. The --prompt file is not changed.
+HEADLESS='headless mode denies shell commands; review from the files given'
 run_seat() { # run_seat <model> <effort> <seconds> <log-prefix>; echoes the result JSON
   local request
   request=$(jq -nc \
     --arg kind "$kind" --arg cwd "$cwd" --arg model "$1" --arg effort "$2" \
-    --rawfile prompt "${prompt:-/dev/null}" --arg schema "${schema:-}" \
+    --rawfile prompt "${prompt:-/dev/null}" --arg schema "${schema:-}" --arg headless "$HEADLESS" \
     --argjson deadline "$(( $3 * 1000 ))" \
     '{op:"turn", kind:$kind, cwd:$cwd, model:$model, effort:$effort,
-      prompt:$prompt,
+      prompt:($headless + "\n\n" + $prompt),
       schemaPath:(if $schema == "" then null else $schema end),
       sandbox:"read-only", resumeThreadId:null, persistThread:false,
       threadName:null, deadlineMs:$deadline}')

@@ -303,5 +303,17 @@ open_session
 STUB_TURN_STATUS=1 STUB_FINAL_MESSAGE='the diff mentions an unsupported model'   seat final --out "$TMP/o.md" --base main >/dev/null
 check "an ordinary failure leaves the session on" "$(jq -r '.usable | tostring' "$SFILE" | tr -d '\r')" "true"
 
+# --- prompt_says_headless: the prompt the CLI gets opens with the headless line ---
+printf 'review this\n' > "$TMP/hp.txt"
+hp_sum=$(cksum < "$TMP/hp.txt")
+STUB_PROMPT_LOG="$TMP/sent-prompt" seat task --out "$TMP/o.json" --prompt "$TMP/hp.txt" >/dev/null
+check "prompt_says_headless: the prompt sent opens with the headless line" "$(head -n 1 "$TMP/sent-prompt" 2>/dev/null)" \
+  "headless mode denies shell commands; review from the files given"
+check "prompt_says_headless: and carries the --prompt text after it" "$(tail -n 1 "$TMP/sent-prompt" 2>/dev/null)" "review this"
+check "prompt_says_headless: the --prompt file is unchanged" "$(cksum < "$TMP/hp.txt")" "$hp_sum"
+STUB_PROMPT_LOG="$TMP/sent-final" seat final --out "$TMP/o.md" --base main >/dev/null
+check "prompt_says_headless: a composed final prompt opens with it too" "$(head -n 1 "$TMP/sent-final" 2>/dev/null)" \
+  "headless mode denies shell commands; review from the files given"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

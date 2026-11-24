@@ -151,21 +151,36 @@ fi
 
 # The final round ships no prompt of its own: its criteria and the branch diff
 # are written next to --out. Headless plan mode denies every shell command, so
-# a prompt that sent agy to run git would come back with no review.
+# a prompt that sent agy to run git would come back with no review, and every
+# prompt agy reads opens with a line saying so. A --prompt file is copied there,
+# never changed; its own directory stays readable for the files it names.
+headless='headless mode denies shell commands; review from the files given'
+prompt_dir=""
 if [ "$kind" = final ]; then
   if ! git -C "$cwd" diff "$base...HEAD" > "$out.diff" 2> "$out.diff.err"; then
     status "$model" "$effort" FAILED 0 error
     printf 'run-agy-review: cannot diff %s...HEAD in %s\n' "$base" "$cwd" >&2
     exit 1
   fi
-  prompt="$out.prompt"
-  {
+else
+  prompt_dir=$(dirname "$prompt")
+fi
+{
+  printf '%s\n\n' "$headless"
+  if [ "$kind" = final ]; then
     cat "$FINAL_CRITERIA"
     printf '\n## The diff under review\n\n'
     printf '%s\n' '```diff'
     cat "$out.diff"
     printf '%s\n' '```'
-  } > "$prompt" || die "cannot write the final-review prompt: $prompt"
+  else
+    cat "$prompt"
+  fi
+} > "$out.prompt.tmp" && mv -f "$out.prompt.tmp" "$out.prompt" || die "cannot write the prompt agy reads: $out.prompt"
+prompt="$out.prompt"
+add_dirs=(--add-dir "$(dr_native_path "$(dirname "$prompt")")")
+if [ -n "$prompt_dir" ] && ! [ "$prompt_dir" -ef "$(dirname "$prompt")" ]; then
+  add_dirs+=(--add-dir "$(dr_native_path "$prompt_dir")")
 fi
 
 snapdir=$(mktemp -d) || die "cannot create a snapshot directory"
@@ -238,7 +253,7 @@ pointer="Your complete instructions are in $(dr_native_path "$prompt"). Read the
 
 run_row() { # run_row <model> <effort> <seconds> <log-prefix>; sets agy_rc
   local args=(--mode plan --output-format json --json-schema "$(dr_native_path "$agy_schema")"
-    --model "$1" --effort "$2" --add-dir "$(dr_native_path "$(dirname "$prompt")")"
+    --model "$1" --effort "$2" "${add_dirs[@]}"
     --print-timeout "${3}s" -p "$pointer")
   # Job control is off in a script, so setsid execs in place: the job's pid is
   # also the process group id of agy and everything it starts.

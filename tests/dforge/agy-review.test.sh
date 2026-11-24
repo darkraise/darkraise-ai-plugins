@@ -187,5 +187,17 @@ has "git 2.31 with a Windows suffix passes the floor" "$out" "status=OK"
 run --kind task
 check "a task review without --prompt is a usage error" "$rc" "2"
 
+# --- prompt_says_headless: the file agy is pointed at opens with the headless line ---
+mkdir -p "$TMP/pd"; printf 'review this\n' > "$TMP/pd/hp.md"
+hp_sum=$(cksum < "$TMP/pd/hp.md")
+rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/pd/hp.md"
+sent=$(sed -n 's/^Your complete instructions are in \(.*\)\. Read the whole file first and follow it\.$/\1/p' "$TMP/args" | head -n 1)
+check "prompt_says_headless: the file agy reads opens with the headless line" "$(head -n 1 "$sent" 2>/dev/null)" \
+  "headless mode denies shell commands; review from the files given"
+check "prompt_says_headless: and carries the --prompt text after it" "$(tail -n 1 "$sent" 2>/dev/null)" "review this"
+check "prompt_says_headless: the --prompt file is unchanged" "$(cksum < "$TMP/pd/hp.md")" "$hp_sum"
+check "prompt_says_headless: agy may still read the --prompt file's directory" "$(grep -cxF "$TMP/pd" "$TMP/args")" "1"
+check "prompt_says_headless: the review still runs" "$(grep -c 'status=OK' <<<"$out")" "1"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
