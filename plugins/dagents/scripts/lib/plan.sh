@@ -518,7 +518,8 @@ plan_amendments_ready() {
       printf '%s: could not move %s beside the ledger, to %s\n' "$me" "$old" "$file" >&2
       exit 2
     fi
-    rm -f -- "$old"
+    rm -f -- "$old" \
+      || printf '%s: moved %s beside the ledger but could not remove it\n' "$me" "$old" >&2
     if [ -f "$ledger" ] && ! grep -qxF -- "$moved" "$ledger"; then
       printf '%s\n' "$moved" >> "$ledger"
     fi
