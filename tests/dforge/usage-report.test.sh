@@ -8,10 +8,14 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# node.exe reads a Git Bash path such as /d/a/... as D:\d\a\..., and
+# MSYS_NO_PATHCONV below stops Git Bash from converting it.
+if command -v cygpath >/dev/null 2>&1; then HERE=$(cygpath -m "$HERE"); fi
 REPORT="$HERE/../../plugins/dforge/scripts/lib/usage-report.mjs"
 FX="$HERE/fixtures/usage"
 export MSYS_NO_PATHCONV=1
 TMP=$(mktemp -d)
+if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export GIT_CONFIG_NOSYSTEM=1
 
