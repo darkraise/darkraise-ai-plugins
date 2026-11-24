@@ -4,6 +4,7 @@
 // one row per task (or per group of tasks whose slices overlap).
 // Arguments, exit codes and the JSON shape: the plugin's usage-report wrapper.
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -205,6 +206,42 @@ function subagentFiles(transcript) {
   });
 }
 
+const FAMILIES = [[/run-codex-task\.sh/g, 'codex-task'], [/run-agy-task\.sh/g, 'agy-task'],
+  [/run-codex-review\.sh/g, 'codex-review'], [/run-agy-review\.sh/g, 'agy-review'],
+  [/run-review-panel/g, 'review-panel'], [/run-api-judge/g, 'api-judge']];
+
+// C15: task bounds from the task-brief, task-step start and task-close calls
+// in a transcript's Bash commands, with $VAR and ${VAR} resolved from
+// assignments earlier in the same command.
+export function inferBounds(entries) {
+  const opens = [];
+  const closes = [];
+  for (const { offset, entry: e } of entries) {
+    for (const b of toolUses(e)) {
+      if (b.name !== 'Bash' || !b.input || typeof b.input.command !== 'string') continue;
+      const vars = {};
+      for (const part of b.input.command.split(/\n|;|&&|\|\|/)) {
+        const cmd = part.trim().replace(/\$\{(\w+)\}|\$(\w+)/g, (m, a, c) => (vars[a || c] ?? m));
+        const as = /^([A-Za-z_]\w*)=("[^"]*"|'[^']*'|\S*)\s*$/.exec(cmd);
+        if (as) { vars[as[1]] = as[2].replace(/^["']|["']$/g, ''); continue; }
+        const unq = (x) => x.replace(/^["']|["']$/g, '');
+        let m = /task-brief(?:\s+--open)?\s+("[^"]+"|'[^']+'|[^\s-]\S*)\s+(\d+)\b/.exec(cmd);
+        if (m) opens.push({ plan: unq(m[1]), task: Number(m[2]), start: offset });
+        m = /task-step\s+start\s+("[^"]+"|'[^']+'|\S+)((?:\s+\d+)+)/.exec(cmd);
+        if (m) for (const n of m[2].trim().split(/\s+/)) opens.push({ plan: unq(m[1]), task: Number(n), start: offset });
+        m = /task-close\s+("[^"]+"|'[^']+'|\S+)\s+(\d+)\b/.exec(cmd);
+        if (m) closes.push({ plan: unq(m[1]), task: Number(m[2]), at: offset });
+      }
+    }
+  }
+  const size = entries.size ?? (entries.length ? entries[entries.length - 1].offset + 1 : 0);
+  return opens.map((o) => {
+    const close = closes.find((c) => c.plan === o.plan && c.task === o.task && c.at >= o.start);
+    const next = opens.find((x) => x.start > o.start);
+    return { plan: o.plan, task: o.task, start: o.start, end: close ? close.at + 1 : next ? next.start : size };
+  });
+}
+
 const LOOKUP_WORDS = new Set(['grep', 'rg', 'cat', 'head', 'tail']);
 const toolUses = (e) => (e && e.type === 'assistant' && e.message && Array.isArray(e.message.content)
   ? e.message.content.filter((b) => b && b.type === 'tool_use') : []);
@@ -248,7 +285,9 @@ function lookupMetrics(entries, files) {
   const readIds = new Set();
   const wholeRead = new Set();
   const bg = new Map();
-  let lookups = 0; let repeatReads = 0; let inFiles = 0; let readTokens = 0; let waitSeconds = 0;
+  let lookups = 0; let repeatReads = 0; let inFiles = 0; let readTokens = 0; let waitSeconds = 0; let fixRounds = 0;
+  const dispatches = {};
+  const bump = (k) => { dispatches[k] = (dispatches[k] || 0) + 1; };
   const hit = (t) => t && files.some((f) => t === f || t.endsWith(`/${f}`));
   for (const { entry: e } of entries) {
     for (const b of toolUses(e)) {
@@ -263,7 +302,11 @@ function lookupMetrics(entries, files) {
           if (wholeRead.has(inp.file_path)) repeatReads++;
           wholeRead.add(inp.file_path);
         }
+      } else if ((b.name === 'Agent' || b.name === 'Task') && inp.subagent_type) {
+        bump(inp.subagent_type);
       } else if (b.name === 'Bash' && typeof inp.command === 'string') {
+        for (const [re, fam] of FAMILIES) for (let k = (inp.command.match(re) || []).length; k > 0; k--) bump(fam);
+        fixRounds += (inp.command.match(/task-step\S*\s+rereview\b/g) || []).length;
         const l = lookupTarget(inp.command);
         if (l) { lookups++; if (hit(l.target)) inFiles++; }
         if (inp.run_in_background) bg.set(b.id, { at: ms(e.timestamp), task: null });
@@ -288,7 +331,7 @@ function lookupMetrics(entries, files) {
       }
     }
   }
-  return { lookups, readTokens, repeatReads, filesLookupShare: lookups && files.length ? round6(inFiles / lookups) : null, waitSeconds };
+  return { lookups, readTokens, repeatReads, filesLookupShare: lookups && files.length ? round6(inFiles / lookups) : null, waitSeconds, dispatches, fixRounds };
 }
 
 // Context growth: the sum of rises between consecutive main-chain requests.
@@ -312,6 +355,94 @@ function taskSpans(rows, dirs) {
     for (const x of segments(t.opens, t.close, dirs)) spans.set(x.file, [...(spans.get(x.file) || []), { start: x.start, end: x.end }]);
   }
   return spans;
+}
+
+function transcriptFiles(dirs) {
+  const out = [];
+  for (const d of dirs) {
+    let list = [];
+    try { list = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
+    for (const x of list) {
+      if (x.isFile() && x.name.endsWith('.jsonl')) out.push(path.join(d, x.name));
+      else if (x.isDirectory()) {
+        try { for (const y of fs.readdirSync(path.join(d, x.name))) if (y.endsWith('.jsonl')) out.push(path.join(d, x.name, y)); } catch { /* skip */ }
+      }
+    }
+  }
+  return out;
+}
+
+function ledgerUnmarked(ledger, marked, plan, dirs) {
+  let text;
+  if (!ledger) return [];
+  try { text = fs.readFileSync(ledger, 'utf8'); } catch { return []; }
+  const out = [];
+  let bounds = null;
+  for (const line of text.split(/\r?\n/)) {
+    const m = /^Task (\d+): complete \((.*)/.exec(line);
+    if (!m || marked.has(m[1]) || /^deferred by the auto run\)/.test(m[2])) continue;
+    if (!bounds) {
+      bounds = [];
+      for (const f of transcriptFiles(dirs)) for (const b of inferBounds(readEntries(f) || [])) bounds.push({ ...b, file: f });
+    }
+    const n = Number(m[1]);
+    const segs = bounds.filter((b) => b.task === n && path.basename(b.plan) === path.basename(plan)).map((b) => {
+      const inside = (readEntries(b.file) || []).filter((x) => x.offset >= b.start && x.offset < b.end && x.entry && x.entry.timestamp);
+      return { file: b.file, start: b.start, end: b.end, from: inside.length ? ms(inside[0].entry.timestamp) : NaN, to: inside.length ? ms(inside[inside.length - 1].entry.timestamp) : NaN };
+    });
+    const range = /^commits ([^,)]+)/.exec(m[2]);
+    out.push({ n, opens: [], close: { range: range ? range[1] : '', context: '', time: '' }, segs, unmarked: true });
+  }
+  return out;
+}
+
+// Quality pairing for a plan: final-review findings, fix rounds, breaker
+// items, deferred register rows, follow-up plan size and later fix commits.
+function quality(opts, rowsOut, closeRows, planText) {
+  const q = { findings: {}, fixRounds: rowsOut.reduce((s, r) => s + r.fixRounds, 0), breakerItems: 0, deferredRows: 0, followUpTasks: 0, fixCommits: 0 };
+  const read = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return null; } };
+  const record = opts.reviewRecord && read(opts.reviewRecord);
+  if (record) for (const m of record.matchAll(/\[(Critical|Important|Minor)\]/g)) q.findings[m[1]] = (q.findings[m[1]] || 0) + 1;
+  const progress = opts.workspace && read(path.join(opts.workspace, 'progress.md'));
+  if (progress) q.breakerItems = (progress.match(/^Task \d+: fix round 3\/3 \(.*still failing\)/gm) || []).length;
+  const register = opts.register && read(opts.register);
+  if (register) {
+    q.deferredRows = register.split(/\r?\n/).filter((l) => /^\|/.test(l) && l.split('|').some((c) => c.trim() === 'deferred')).length;
+    const reg = path.basename(opts.register, '.md');
+    if (opts.plan) {
+      let names = [];
+      try { names = fs.readdirSync(path.dirname(opts.plan)).filter((n) => n.endsWith('.md')); } catch { /* none */ }
+      for (const n of names) {
+        const f = path.join(path.dirname(opts.plan), n);
+        if (path.resolve(f) === path.resolve(opts.plan)) continue;
+        const t = read(f) || '';
+        if (/^\*\*Items:\*\*.*$/m.test(t) && t.split(/\r?\n/).some((l) => l.startsWith('**Items:**') && l.includes(reg))) {
+          q.followUpTasks += (t.match(/^### Task \d+:/gm) || []).length;
+        }
+      }
+    }
+  }
+  const finish = Math.max(...closeRows.map((r) => ms(r.time)).filter(Number.isFinite));
+  const files = [...new Set([...planText.matchAll(/^### Task (\d+):/gm)].flatMap((m) => planFiles(planText, m[1])))];
+  for (const repo of opts.repo) {
+    if (!Number.isFinite(finish) || !files.length) break;
+    try {
+      const inRange = new Set();
+      for (const r of closeRows) {
+        if (!/^[0-9a-f]+\.\.[0-9a-f]+$/.test(r.range || '')) continue;
+        for (const h of execFileSync('git', ['-C', repo, 'rev-list', r.range], { encoding: 'utf8' }).split('\n')) if (h) inRange.add(h);
+      }
+      const log = execFileSync('git', ['-C', repo, 'log', '--format=%x00%H %s', '--name-only',
+        `--since=@${Math.floor(finish / 1000)}`, `--until=@${Math.floor(finish / 1000) + 7 * 86400}`], { encoding: 'utf8' });
+      for (const chunk of log.split('\0').slice(1)) {
+        const [head, ...paths] = chunk.split('\n').filter(Boolean);
+        const [hash, ...subject] = head.split(' ');
+        if (inRange.has(hash) || !/^fix(\(|:|!)/.test(subject.join(' '))) continue;
+        if (paths.some((p) => files.some((f) => p === f || p.endsWith(`/${f}`)))) q.fixCommits++;
+      }
+    } catch { /* not a repository */ }
+  }
+  return q;
 }
 
 export function reportPlan(plan, rows, opts, prices, foreign = new Map()) {
@@ -339,6 +470,11 @@ export function reportPlan(plan, rows, opts, prices, foreign = new Map()) {
     t.segs = segments(t.opens, t.close, dirs);
     closed.push(t);
   }
+  // A ledger complete line with no markers: bounded by the transcripts' own
+  // task-brief / task-step start / task-close calls.
+  let unmarked = 0;
+  for (const u of ledgerUnmarked(opts.ledger, tasks, plan, dirs)) { closed.push(u); unmarked++; }
+  closed.sort((a, b) => a.n - b.n);
   // Tasks whose segments overlap in one transcript form one group.
   const parent = new Map(closed.map((t) => [t.n, t.n]));
   const find = (n) => (parent.get(n) === n ? n : find(parent.get(n)));
@@ -404,7 +540,7 @@ export function reportPlan(plan, rows, opts, prices, foreign = new Map()) {
     const lastClose = members.map((t) => t.close).sort((a, b) => (a.time < b.time ? 1 : -1))[0];
     outRows.push({
       tasks: members.map((t) => t.n).sort((a, b) => a - b),
-      label: 'marked',
+      label: members.some((t) => t.unmarked) ? 'unmarked' : 'marked',
       group: members.length > 1,
       range: members.map((t) => t.close.range).filter(Boolean).join(', '),
       turns: main.turns,
@@ -424,6 +560,8 @@ export function reportPlan(plan, rows, opts, prices, foreign = new Map()) {
       compactions,
       lookupsAfterCompaction: null,
       waitSeconds: lm.waitSeconds,
+      dispatches: lm.dispatches,
+      fixRounds: lm.fixRounds,
       start: Math.min(...segs.map((x) => (Number.isFinite(x.from) ? x.from : Infinity))),
       firstSeg: segs.map((x) => ({ file: x.file, start: x.start })),
       subagents,
@@ -487,9 +625,11 @@ export function reportPlan(plan, rows, opts, prices, foreign = new Map()) {
     costPerTaskSegments: completed ? round6(segCost / completed) : null,
     completed,
     unclosed,
+    unmarked,
     excluded,
     byModel,
     byRepo: repo ? { [repo]: planTotal } : {},
+    quality: quality(opts, outRows, rows.filter((r) => r.event === 'close'), planText),
     asOf: null,
   };
 }

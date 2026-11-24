@@ -11,6 +11,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPORT="$HERE/../../plugins/dforge/scripts/lib/usage-report.mjs"
 FX="$HERE/fixtures/usage"
 export MSYS_NO_PATHCONV=1
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+export GIT_CONFIG_NOSYSTEM=1
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -99,6 +102,52 @@ check "splits_and_all_plans: by repository" "$(q "$J" '.plans[0].byRepo | to_ent
 # --- wait_seconds ---
 J=$(rep wait)
 check "wait_seconds: from the background call to its notification" "$(q "$J" '.plans[0].tasks[0].waitSeconds')" "90"
+
+# --- dispatches_from_transcript ---
+J=$(rep dispatch)
+check "dispatches_from_transcript: families and agent types" "$(q "$J" '.plans[0].tasks[0].dispatches')" \
+  '{"codex-task":1,"review-panel":1,"api-judge":1,"dforge:judge-sonnet-high":2}'
+check "dispatches_from_transcript: fix rounds from rereview calls" "$(q "$J" '.plans[0].tasks[0].fixRounds')" "2"
+
+# --- ledger_gone: the close rows alone carry each task's range ---
+J=$(rep misc)
+check "ledger_gone: closed tasks with their ranges, the deferred one excluded" \
+  "$(q "$J" '[[.plans[0].tasks[] | [.tasks[0], .range]], (.plans[0].excluded | map(select(test("deferred"))))]')" \
+  '[[[7,"h..i"]],["Task 6: deferred by the auto run"]]'
+
+# --- unmarked_ledger_line ---
+J=$(node "$REPORT" --markers "$FX/unmarked/markers.tsv" --transcripts "$FX/unmarked/proj" --ledger "$FX/unmarked/progress.md" --format json 2>/dev/null)
+check "unmarked_ledger_line: a row from the inferred bounds" \
+  "$(q "$J" '.plans[0].tasks[] | select(.tasks == [6]) | [.label, .range, .input]')" '["unmarked","c..d",30]'
+check "unmarked_ledger_line: counted" "$(q "$J" '.plans[0].unmarked')" "1"
+B=$(cd "$HERE/../../plugins/dforge/scripts/lib" && node --input-type=module -e '
+  import { inferBounds } from "./usage-report.mjs";
+  const e = { type: "assistant", message: { content: [{ type: "tool_use", id: "t", name: "Bash",
+    input: { command: "P=docs/p.md; bash task-step start \"$P\" 2 3" } }] } };
+  console.log(JSON.stringify(inferBounds([{ offset: 0, entry: e }]).map((b) => [b.plan, b.task])));' 2>&1)
+check "unmarked_ledger_line: a batch start with a variable" "$B" '[["docs/p.md",2],["docs/p.md",3]]'
+
+# --- quality_pairing ---
+QR="$TMP/qrepo"
+git init -q "$QR"
+qc() { # qc DATE SUBJECT FILE
+  printf '%s\n' "$2" >> "$QR/$3"
+  git -C "$QR" add -A
+  GIT_AUTHOR_DATE=$1 GIT_COMMITTER_DATE=$1 git -C "$QR" -c user.name=t -c user.email=t@example.invalid commit -q -m "$2"
+}
+qc 2025-12-31T00:00:00Z "feat: base" a.sh
+QA=$(git -C "$QR" rev-parse --short HEAD)
+qc 2026-01-02T00:00:00Z "fix(x): inside the task range" a.sh
+QB=$(git -C "$QR" rev-parse --short HEAD)
+qc 2026-01-02T12:00:00Z "feat: not a fix" a.sh
+qc 2026-01-03T00:00:00Z "fix(y): after the finish" a.sh
+qc 2026-01-03T01:00:00Z "fix: another file" z.sh
+qc 2026-01-20T00:00:00Z "fix: too late" a.sh
+printf '2026-01-01T00:00:00Z\topen\tdforge\t5.1.1\t/plugin\tdocs/plans/p.md\t1\tq1\t\t0\t1\ttask-brief:1\t\t\n2026-01-01T00:10:00Z\tclose\tdforge\t5.1.1\t/plugin\tdocs/plans/p.md\t1\tq1\t\t\t2\ttask-close:1\t%s..%s\t\n' "$QA" "$QB" > "$TMP/q-markers.tsv"
+J=$(node "$REPORT" --markers "$TMP/q-markers.tsv" --transcripts "$FX/quality/proj" --plan "$FX/quality/plans/p.md" \
+  --review-record "$FX/quality/record.md" --register "$FX/quality/reg.md" --repo "$QR" --format json 2>/dev/null)
+check "quality_pairing: the plan's quality" "$(q "$J" '.plans[0].quality')" \
+  '{"findings":{"Critical":1,"Important":2},"fixRounds":0,"breakerItems":0,"deferredRows":2,"followUpTasks":3,"fixCommits":1}'
 
 # --- usage errors ---
 node "$REPORT" --format csv >/dev/null 2>&1
