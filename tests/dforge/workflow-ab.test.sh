@@ -31,7 +31,7 @@ mkdir -p "$HOME"
 git config --global user.name Tester
 git config --global user.email tester@localhost
 git config --global init.defaultBranch main
-unset DFORGE_BUDGET CLAUDE_CONFIG_DIR
+unset DFORGE_BUDGET CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION
 printf '#!/bin/sh\necho "9.9.9 (Claude Code)"\n' > "$TMP/claude"
 chmod +x "$TMP/claude"
 mkdir -p "$TMP/claude-config"
