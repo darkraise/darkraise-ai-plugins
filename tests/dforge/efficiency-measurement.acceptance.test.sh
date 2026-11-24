@@ -715,7 +715,7 @@ skips() { jq -c '.reviewSkips // []' "$1/.dforge/sdd/auto-run.json" 2>/dev/null;
 RPA="$TMP/rpa"; newrepo "$RPA"
 arrun "$RPA" pr1 start --spec docs/s.md --register docs/r.md >/dev/null 2>&1
 rm -f "$PN/launches"
-UNTIL=$(( $(date +%s) + 3 ))
+UNTIL=$(( $(date +%s) + 3600 ))
 quota_line "$UNTIL"
 out=$(panel "$RPA")
 check "A14: the quota failure's line is printed" "$(grep -c 'codex-judge .* status=FAILED .* reason=quota' <<<"$out")" "1"
@@ -725,7 +725,9 @@ check "A14: the runner ran once" "$(launches)" "1"
 out=$(panel "$RPA")
 check "A14: inside the window the family is skipped as quota-skip" "$(grep -c 'codex-judge none/none status=SKIPPED .* reason=quota-skip' <<<"$out")" "1"
 check "A14: inside the window nothing was launched" "$(launches)" "1"
-sleep 4
+# Past the until epoch without waiting for it: a slow runner made a short
+# real window expire before the second panel ran.
+jq '.reviewSkips[0].until = 1' "$RPA/.dforge/sdd/auto-run.json" > "$TMP/ar.json" && mv "$TMP/ar.json" "$RPA/.dforge/sdd/auto-run.json"
 printf 'codex-judge gpt-6-astra/xhigh status=OK exit=0 out=@OUT@ evidence=none\n' > "$PN/next-line"
 out=$(panel "$RPA")
 check "A14: after the until epoch the family launches again" "$(launches):$(grep -c 'status=OK' <<<"$out")" "2:1"
