@@ -6,6 +6,11 @@
 # once; a family whose gate does not say review=true is skipped. Every open
 # family's runner starts in the background, and a watchdog ends any runner
 # still going at the bound, so one hung reviewer cannot hold the others' lists.
+# In an auto run bound to this session in --cwd's checkout, a family whose
+# runner failed on quota is recorded (auto-run review-skip, until the line's
+# until= epoch, else 5 hours) and skipped as reason=quota-skip while that
+# lasts. An agy quota on a claude-* row is not recorded: agy-gate then routes
+# the family to its Gemini row, which has its own quota.
 #
 # Usage: run-review-panel --kind task|plan|final [--tier heavy] --cwd DIR
 #          --out-dir DIR (--prompt FILE | --base SHA)
@@ -92,6 +97,11 @@ first_secs() { # first_secs <block>
 open_ids=() lines_by_id=()
 bound=0
 for id in $ids; do
+  if (cd "$cwd" && bash "$HERE/auto-run" review-skipped "$id") >/dev/null 2>&1; then
+    rm -f "$out_dir/$id.$ext"
+    lines_by_id+=("$id|$id-judge none/none status=SKIPPED exit=0 out=- evidence=none reason=quota-skip")
+    continue
+  fi
   gate=$(seam "$id" GATE)
   if [ -z "$gate" ]; then
     gate=$(bash "$HERE/executors" path "$id" gate) || gate=""
@@ -238,6 +248,14 @@ for i in "${!open_ids[@]}"; do
   # A runner can leave a partial or empty out file behind, and the judges read
   # any file that exists as that reviewer's list.
   case "$line" in *" status=OK "*|*" status=FALLBACK "*) ;; *) rm -f "$out" ;; esac
+  if [ "$(field reason "$line")" = quota ]; then
+    model=$(awk '{ print $2 }' <<<"$line")
+    if [ "$id" != agy ] || [[ "${model%%/*}" != claude-* ]]; then
+      until=$(field until "$line")
+      [[ $until =~ ^[0-9]+$ ]] || until=""
+      (cd "$cwd" && bash "$HERE/auto-run" review-skip "$id" ${until:+--until "$until"}) >/dev/null 2>&1 || true
+    fi
+  fi
   lines_by_id+=("$id|$line")
 done
 

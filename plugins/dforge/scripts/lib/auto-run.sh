@@ -282,6 +282,24 @@ _ar_resume_locked() {
     --arg s "$AR_SESSION" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg version "$(ar_plugin_version)" --arg root "$AR_PLUGIN_ROOT"
 }
 
+# ar_review_skip FAMILY [UNTIL] — record a review family's quota failure in
+# the run: skipped until UNTIL (epoch), or for 5 hours when none is known. A
+# second quota failure of the family skips it for the rest of the run (until
+# null).
+ar_review_skip() {
+  ar_update '.reviewSkips = ((.reviewSkips // []) as $s
+    | if any($s[]; .family == $f)
+      then $s | map(if .family == $f then .failedAt = $now | .until = null else . end)
+      else $s + [{family: $f, failedAt: $now, until: ($until // ($now + 18000)), kind: "quota"}] end)' \
+    --arg f "$1" --argjson now "$(date +%s)" --argjson until "${2:-null}"
+}
+
+# ar_review_skipped FAMILY — true while the family's recorded skip lasts.
+ar_review_skipped() {
+  ar_state | ar_jq -e --arg f "$1" --argjson now "$(date +%s)" \
+    'any((.reviewSkips // [])[]; .family == $f and (.until == null or .until > $now))' >/dev/null 2>&1
+}
+
 ar_status() {
   ar_state | ar_jq -r '"auto run: \(.phase) — regime \(.regime) — pending \(.pending // "none") — \(.compactions) compactions — \(.resumes) resumes — \(.decisions | length) pending decisions — spec \(.spec) — plan \(.plan // "none") — base \(.base // "none") — register \(.register) — isolation \(.isolation // "worktree")\(if .branch then " — branch \(.branch)" else "" end)\(if .setupDue == true then " — setup due" else "" end)"'
 }

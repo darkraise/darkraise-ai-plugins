@@ -139,6 +139,18 @@ check "a Gemini quota turns agy off" "$(field usable)/$(field reason)" "false/qu
 rm -rf "$DR_AGY_SESSION_DIR"; GATE_LINE=${GATE_ON/claude=on/claude=off} STUB_AGY_MODE=error STUB_AGY_ERROR='RESOURCE_EXHAUSTED quota. Resets in 1d2h3m4s' run --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "a Gemini quota's reset counts days, hours, minutes and seconds" "$(near "$(field resets_at_epoch)" 93784)" "near"
 
+# --- quota_until: the real agy quota error, which agy writes to .error and stderr ---
+rm -rf "$DR_AGY_SESSION_DIR"
+t0=$(date -u +%s)
+STUB_AGY_MODE=error STUB_AGY_ERROR='Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 71h34m17s.' \
+  run --kind task --tier heavy --prompt "$TMP/prompt.md"
+until_at=$(sed -n 's/.* reason=quota until=\([0-9][0-9]*\)$/\1/p' <<<"$out")
+check "quota_until: the status line ends reason=quota until=<epoch>" "$([ -n "$until_at" ] && echo yes || echo "[$out]")" "yes"
+check "quota_until: until is the reset, 71h34m17s ahead within 5 s" \
+  "$([ -n "$until_at" ] && [ "$until_at" -ge $((t0 + 257657)) ] && [ "$until_at" -le $((t0 + 257662)) ] && echo yes || echo "$until_at")" "yes"
+rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_MODE=error STUB_AGY_ERROR='RESOURCE_EXHAUSTED quota' run --kind task --tier heavy --prompt "$TMP/prompt.md"
+lacks "quota_until: a quota with no reset prints no until=" "$out" "until="
+
 rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_MODE=plan-review run --kind plan --prompt "$TMP/prompt.md"
 has "a plan review uses the plan schema" "$(args)" "codex-plan-review-schema.json"
 has "a plan review takes the heavy row" "$out" "claude-opus-5-5/high status=OK"

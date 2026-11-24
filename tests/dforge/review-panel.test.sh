@@ -193,5 +193,72 @@ PATH="$NOPGREP_PATH" PANEL_NO_SETSID=1 PANEL_BOUND_SECONDS=3 PANEL_AGY_RUNNER="$
 check "no setsid or pgrep: the panel says the runner's children were not stopped" "$(grep -c 'neither setsid nor pgrep is on PATH' "$TMP/err")" "1"
 while read -r p; do kill -KILL "$p" 2>/dev/null; done < "$TMP/tree-pids"
 
+# --- quota skips in an auto run: a runner whose status line names a quota ---
+for fam in codex agy; do
+  cat > "$TMP/$fam-quota-runner" <<EOF
+#!/usr/bin/env bash
+echo x >> "$TMP/$fam.calls"
+printf '%s-judge %s status=FAILED exit=1 out=- evidence=none reason=quota%s\n' $fam "\${${fam^^}_MODEL:-m/high}" "\${${fam^^}_UNTIL:+ until=\${${fam^^}_UNTIL}}"
+EOF
+  chmod +x "$TMP/$fam-quota-runner"
+done
+calls() { wc -l < "$TMP/$1.calls" | tr -d ' '; }
+qn=0
+runrepo() { # runrepo [STATE] — a fresh checkout Q, with an auto run of s1 when STATE is given; resets the call counts
+  qn=$((qn + 1)); Q="$TMP/q$qn"; QS="$Q/.dforge/sdd/auto-run.json"
+  git init -q "$Q"
+  [ -z "${1:-}" ] || { mkdir -p "$Q/.dforge/sdd"; printf '%s\n' "$1" > "$QS"; }
+  : > "$TMP/codex.calls"; : > "$TMP/agy.calls"
+}
+RUN='{"active":true,"session":"s1","phase":"execute","decisions":[],"rulings":[]}'
+qpanel() { # qpanel — the panel with --cwd Q
+  out=$(HOME="$TMP/home" DFORGE_NO_SETTINGS=1 bash "$PANEL" --cwd "$Q" --out-dir "$TMP/qout$qn" --kind task --tier heavy --prompt "$TMP/prompt.md" 2>"$TMP/err"); rc=$?
+}
+skips() { jq -c '[(.reviewSkips // [])[] | [.family, .kind, (if .until == null then null else .until - .failedAt end)]]' "$QS"; }
+past() { jq '.reviewSkips[0].until = 1' "$QS" > "$QS.t" && mv "$QS.t" "$QS"; }
+
+# --- quota_skip_in_run ---
+runrepo "$RUN"
+now=$(date +%s)
+CODEX_UNTIL=$((now + 3600)) PANEL_CODEX_RUNNER="$TMP/codex-quota-runner" qpanel
+check "quota_skip_in_run: the quota failure records a codex skip until the line's until=" \
+  "$(jq -c --argjson u $((now + 3600)) '[.reviewSkips[] | [.family, .until == $u, .kind]]' "$QS")" '[["codex",true,"quota"]]'
+PANEL_CODEX_RUNNER="$TMP/codex-quota-runner" qpanel
+check "quota_skip_in_run: a second panel within the hour skips codex" "$(grep '^codex-judge' <<<"$out")" \
+  "codex-judge none/none status=SKIPPED exit=0 out=- evidence=none reason=quota-skip"
+check "quota_skip_in_run: and never runs the codex runner" "$(calls codex)" "1"
+check "quota_skip_in_run: the other family still runs" "$(grep -c '^agy-judge claude-opus-5-5/high status=OK' <<<"$out")" "1"
+past
+PANEL_CODEX_RUNNER="$TMP/codex-quota-runner" qpanel
+check "quota_skip_in_run: with until in the past codex runs again" "$(calls codex)" "2"
+runrepo "$RUN"
+PANEL_CODEX_RUNNER="$TMP/codex-quota-runner" qpanel
+check "quota_skip_in_run: with no until the skip lasts 5 hours" "$(skips)" '[["codex","quota",18000]]'
+
+# --- second_quota_failure_skips_run ---
+runrepo "$RUN"
+CODEX_UNTIL=$(( $(date +%s) + 60 )) PANEL_CODEX_RUNNER="$TMP/codex-quota-runner" qpanel
+past
+CODEX_UNTIL=$(( $(date +%s) + 60 )) PANEL_CODEX_RUNNER="$TMP/codex-quota-runner" qpanel
+check "second_quota_failure_skips_run: the second quota failure skips codex for the rest of the run" "$(skips)" '[["codex","quota",null]]'
+PANEL_CODEX_RUNNER="$TMP/codex-quota-runner" qpanel
+check "second_quota_failure_skips_run: a later panel skips codex" \
+  "$(calls codex):$(grep -c 'codex-judge none/none status=SKIPPED .* reason=quota-skip' <<<"$out")" "2:1"
+
+# --- agy_claude_quota: the gate routes agy to its Gemini row, so nothing is recorded ---
+runrepo "$RUN"
+AGY_MODEL=claude-opus-5-5/high AGY_UNTIL=$(( $(date +%s) + 3600 )) PANEL_AGY_RUNNER="$TMP/agy-quota-runner" qpanel
+check "agy_claude_quota: a Claude-row quota records no skip" "$(skips)" '[]'
+AGY_MODEL=gemini-4-argon/high PANEL_AGY_RUNNER="$TMP/agy-quota-runner" qpanel
+check "agy_claude_quota: the next panel runs agy again" "$(calls agy)" "2"
+check "agy_claude_quota: a Gemini-row quota records the agy skip" "$(skips)" '[["agy","quota",18000]]'
+
+# --- no_run_no_record ---
+runrepo
+PANEL_CODEX_RUNNER="$TMP/codex-quota-runner" qpanel
+check "no_run_no_record: outside an auto run a quota failure writes no state file" "$([ -e "$QS" ] && echo written || echo none)" "none"
+PANEL_CODEX_RUNNER="$TMP/codex-quota-runner" qpanel
+check "no_run_no_record: and the next panel runs codex" "$(calls codex)" "2"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

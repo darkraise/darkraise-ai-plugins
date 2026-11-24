@@ -286,6 +286,8 @@ open_session
 out=$(STUB_MODE=quota seat task --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
 present "a quota error is FAILED on the model that ran" "$out" "codex-judge gpt-6-astra/high status=FAILED exit=1"
 check "a quota error exits 1" "$rc" "1"
+check "quota_no_until: the line ends reason=quota with no until=, so the panel's 5-hour default applies" \
+  "$(grep -c ' reason=quota$' <<<"$out"):$(grep -c 'until=' <<<"$out")" "1:0"
 check "a quota error is never a refusal: no second seat" "$(calls)" "1"
 check "a quota error turns Codex off for the session" \
   "$(jq -r '[.usable, .review, .reason] | map(tostring) | join("/")' "$SFILE" | tr -d '\r')" "false/false/quota"

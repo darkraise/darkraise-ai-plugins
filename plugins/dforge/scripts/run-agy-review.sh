@@ -7,7 +7,8 @@
 # --dry-run prints the request it would send and its status line, and starts
 # no agy run.
 # Output: agy-judge <model>/<effort> status=<OK|FALLBACK|TIMEOUT|FAILED>
-#           exit=<n> out=<path> evidence=<e>[ reason=<token>]
+#           exit=<n> out=<path> evidence=<e>[ reason=<token>][ until=<epoch>]
+# until= follows reason=quota when agy named the quota's reset.
 # Exit: 0 on OK or FALLBACK, 1 on TIMEOUT or FAILED, 2 on a usage error.
 set -uo pipefail
 
@@ -94,9 +95,12 @@ back_effort=$(printf '%s\n' "$judge" | tail -1 | awk '{print $2}')
 secs_of() { printf '%s\n' "$judge" | awk -v m="$1" -v e="$2" '$1 == m && $2 == e {print $3; exit}'; }
 
 evidence=none
+quota_until=''
 status() { # status <model> <effort> <state> <exit> [reason]
-  printf 'agy-judge %s/%s status=%s exit=%s out=%s evidence=%s%s\n' \
-    "$1" "$2" "$3" "$4" "$out" "$evidence" "${5:+ reason=$5}"
+  local until=''
+  [ "${5:-}" != quota ] || until=$quota_until
+  printf 'agy-judge %s/%s status=%s exit=%s out=%s evidence=%s%s%s\n' \
+    "$1" "$2" "$3" "$4" "$out" "$evidence" "${5:+ reason=$5}" "${until:+ until=$until}"
 }
 
 rm -f "$out" "$out.wrote"
@@ -281,6 +285,7 @@ is_quota() { grep -qiE 'quota|rate.?limit|RESOURCE_EXHAUSTED|(^|[^[:alnum:]])429
 
 classify() { # classify <model> <log-prefix>; sets result and reason (empty when the answer is usable)
   local outer=no raw=no err finished ok=yes cause stderr_cause='' epoch=''
+  quota_until=''
   [ "$agy_rc" -eq 124 ] || [ "$agy_rc" -eq 137 ] && outer=yes
   if jq -se 'length == 1 and (.[0] | type == "object")' < "$2.stdout" >/dev/null 2>&1; then
     result=$(jq -c . < "$2.stdout")
@@ -305,6 +310,7 @@ classify() { # classify <model> <log-prefix>; sets result and reason (empty when
       epoch=$(( $(date -u +%s) + 10#${BASH_REMATCH[2]:-0} * 86400 + 10#${BASH_REMATCH[4]:-0} * 3600 \
         + 10#${BASH_REMATCH[6]:-0} * 60 + 10#${BASH_REMATCH[8]:-0} ))
     fi
+    quota_until=$epoch
     # Antigravity counts Claude and Gemini against separate limits, so a quota
     # marks only the family that hit it.
     if [[ "$1" == claude-* ]]; then

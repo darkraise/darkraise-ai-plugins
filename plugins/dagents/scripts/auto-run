@@ -25,6 +25,7 @@ usage: auto-run [--session ID] start --spec P [--register R] [--isolation worktr
        auto-run [--session ID] stop [--reason TEXT] | stop --stale
        auto-run [--session ID] verdict --tokens T --budget B --window W [--wave N]
        auto-run [--session ID] after-compact
+       auto-run [--session ID] review-skip FAMILY [--until EPOCH] | review-skipped FAMILY
 pending prints compact, after-compact, handoff, clear, resume, switch or none.
 clear --phase is for a phase transition (the switch, finishing, or a plan that
       left inline mode before this change: a ledger executing-plans' recovery.md
@@ -32,6 +33,8 @@ clear --phase is for a phase transition (the switch, finishing, or a plan that
       clear is one, and the third in a row stops the run (exit 5).
 stop --stale stops a run whose owner session is gone, from any session, and
       prints its pending decisions and rulings; exit 3 while the owner lives.
+review-skipped exits 0 while the review family is skipped after a quota
+      failure (review-skip records one), 1 when it is not.
 Exit: 0 done; 1 failed (no handoff file, or jq or mktemp failed); 2 usage; 3 no run bound to this session;
       4 refused; 5 the run stopped, or handoff; 6 compact.
 EOF
@@ -101,6 +104,17 @@ case $cmd in
     bound; ar_set_phase "$1"
     ;;
   task-complete) [ $# -eq 0 ] || usage; bound; ar_task_complete ;;
+  review-skip)
+    [ $# -ge 1 ] && [ -n "$1" ] || usage
+    family=$1 until=""
+    shift
+    if [ $# -gt 0 ]; then
+      [ $# -eq 2 ] && [ "$1" = --until ] && [[ $2 =~ ^[0-9]+$ ]] || usage
+      until=$2
+    fi
+    bound; ar_review_skip "$family" "$until"
+    ;;
+  review-skipped) [ $# -eq 1 ] && [ -n "$1" ] || usage; bound; ar_review_skipped "$1" ;;
   setup-branch) [ $# -eq 1 ] && [ -n "$1" ] || usage; bound; ar_setup_branch "$1" ;;
   carried) [ $# -eq 0 ] || usage; bound; ar_carried ;;
   stalled) [ $# -eq 0 ] || usage; bound; ar_stalled ;;

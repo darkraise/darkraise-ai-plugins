@@ -88,6 +88,16 @@ back_model=$(printf '%s\n' "$judge" | tail -1 | awk '{print $1}')
 back_effort=$(printf '%s\n' "$judge" | tail -1 | awk '{print $2}')
 secs_of() { printf '%s\n' "$judge" | awk -v m="$1" -v e="$2" '$1 == m && $2 == e {print $3; exit}'; }
 
+# In an auto run, a family that failed on quota is skipped for the window
+# auto-run review-skip recorded; outside one nothing is recorded or read. The
+# run is the one in --cwd's checkout, not the caller's.
+if (cd "$cwd" && bash "$HERE/auto-run" review-skipped codex) >/dev/null 2>&1; then
+  printf 'codex-judge none/none status=SKIPPED exit=0 out=- evidence=none reason=quota-skip\n'
+  printf 'run-codex-review: codex failed on quota earlier in this auto run; skipped\n' >&2
+  exit 1
+fi
+quota_skip() { (cd "$cwd" && bash "$HERE/auto-run" review-skip codex) >/dev/null 2>&1 || true; }
+
 # The session gate is the usability guard, on every kind and on a dry run: a
 # Codex this session may not use is never selected or run. Only `usable` is
 # read, never the review surface, so a shipping gate can still exercise an
@@ -246,6 +256,7 @@ fi
 
 if [ "$(jq -r '.quota' <<<"$result")" = true ]; then
   executor_session_mark_off codex quota
+  quota_skip
   status "$model" "$effort" FAILED "$rc"; exit 1
 fi
 
@@ -268,7 +279,7 @@ if [ "$(jq -r '.refusal' <<<"$result")" = true ] \
   if [ "$rc" -eq 0 ] && valid_output; then
     status "$back_model" "$back_effort" FALLBACK "$rc"; exit 0
   fi
-  [ "$(jq -r '.quota' <<<"$result")" = true ] && executor_session_mark_off codex quota
+  [ "$(jq -r '.quota' <<<"$result")" = true ] && { executor_session_mark_off codex quota; quota_skip; }
   status "$back_model" "$back_effort" FAILED "$rc"; exit 1
 fi
 

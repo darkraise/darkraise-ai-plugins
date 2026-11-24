@@ -296,5 +296,26 @@ open_session
 STUB_TURN_STATUS=1 STUB_FINAL_MESSAGE='the diff mentions an unsupported model'   seat final --out "$TMP/o.md" --base main >/dev/null
 check "an ordinary failure leaves the session on" "$(jq -r '.usable | tostring' "$SFILE" | tr -d '\r')" "true"
 
+# --- quota_skip_in_run: an auto run of session s1 in the work tree ---
+RUNSTATE="$TMP/work/.dagents/sdd/auto-run.json"
+mkdir -p "$(dirname "$RUNSTATE")"
+jq -n '{active: true, session: "s1", phase: "execute", decisions: [], rulings: []}' > "$RUNSTATE"
+open_session
+CLAUDE_CODE_SESSION_ID=s1 STUB_MODE=quota seat task --out "$TMP/o.json" --prompt "$TMP/p.txt" >/dev/null
+check "quota_skip_in_run: a quota failure records a five-hour codex skip" \
+  "$(jq -c '[.reviewSkips[] | [.family, .kind, (.until - .failedAt)]]' "$RUNSTATE")" '[["codex","quota",18000]]'
+open_session
+out=$(CLAUDE_CODE_SESSION_ID=s1 seat task --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
+check "quota_skip_in_run: called again within the window it is SKIPPED" "$out" \
+  "codex-judge none/none status=SKIPPED exit=0 out=- evidence=none reason=quota-skip"
+check "quota_skip_in_run: and exits 1 without launching" "$rc:$(calls)" "1:0"
+jq '.reviewSkips[0].until = 1' "$RUNSTATE" > "$RUNSTATE.tmp" && mv "$RUNSTATE.tmp" "$RUNSTATE"
+out=$(CLAUDE_CODE_SESSION_ID=s1 seat task --out "$TMP/o.json" --prompt "$TMP/p.txt")
+check "quota_skip_in_run: after the window it launches again" "$(grep -c SKIPPED <<<"$out"):$(calls)" "0:1"
+rm -rf "$TMP/work/.dagents"
+open_session
+CLAUDE_CODE_SESSION_ID=s1 STUB_MODE=quota seat task --out "$TMP/o.json" --prompt "$TMP/p.txt" >/dev/null
+check "quota_skip_in_run: outside an auto run a quota failure writes no state" "$(ls -A "$TMP/work/.dagents/sdd" 2>/dev/null | grep -c auto-run)" "0"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
