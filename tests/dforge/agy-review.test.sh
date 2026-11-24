@@ -198,7 +198,9 @@ check "prompt_says_headless: the file agy reads opens with the headless line" "$
   "headless mode denies shell commands; review from the files given"
 check "prompt_says_headless: and carries the --prompt text after it" "$(tail -n 1 "$sent" 2>/dev/null)" "review this"
 check "prompt_says_headless: the --prompt file is unchanged" "$(cksum < "$TMP/pd/hp.md")" "$hp_sum"
-check "prompt_says_headless: agy may still read the --prompt file's directory" "$(grep -cxF "$TMP/pd" "$TMP/args")" "1"
+pd_native=$TMP/pd
+command -v cygpath >/dev/null 2>&1 && pd_native=$(cygpath -m "$TMP/pd")
+check "prompt_says_headless: agy may still read the --prompt file's directory" "$(grep -cxF "$pd_native" "$TMP/args")" "1"
 check "prompt_says_headless: the review still runs" "$(grep -c 'status=OK' <<<"$out")" "1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
