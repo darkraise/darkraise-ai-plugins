@@ -189,17 +189,19 @@ plugin_root=${plugin_line#*root=}
 # --rawfile, not --arg "$(cat ...)": a reviewer prompt carries a whole branch
 # diff and passing it as an argument blows the 32,767-character Windows
 # CreateProcess limit.
-# Every prompt opens with this line, so a reviewer does not spend its turn on
-# shell commands the read-only sandbox denies. The --prompt file is not changed.
-HEADLESS='headless mode denies shell commands; review from the files given'
+# Every prompt opens with this line. The read-only sandbox still runs shell
+# reads, and a task or plan prompt names its diff by path: told that shell is
+# denied, Codex reads nothing and answers with an unread review. The --prompt
+# file is not changed.
+READ_ONLY='this sandbox is read-only: read each file this prompt names with a shell command such as cat; nothing can be written'
 run_seat() { # run_seat <model> <effort> <seconds> <log-prefix>; echoes the result JSON
   local request
   request=$(jq -nc \
     --arg kind "$kind" --arg cwd "$cwd" --arg model "$1" --arg effort "$2" \
-    --rawfile prompt "${prompt:-/dev/null}" --arg schema "${schema:-}" --arg headless "$HEADLESS" \
+    --rawfile prompt "${prompt:-/dev/null}" --arg schema "${schema:-}" --arg opening "$READ_ONLY" \
     --argjson deadline "$(( $3 * 1000 ))" \
     '{op:"turn", kind:$kind, cwd:$cwd, model:$model, effort:$effort,
-      prompt:($headless + "\n\n" + $prompt),
+      prompt:($opening + "\n\n" + $prompt),
       schemaPath:(if $schema == "" then null else $schema end),
       sandbox:"read-only", resumeThreadId:null, persistThread:false,
       threadName:null, deadlineMs:$deadline}')

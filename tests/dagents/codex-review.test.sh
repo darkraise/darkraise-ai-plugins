@@ -317,17 +317,17 @@ open_session
 CLAUDE_CODE_SESSION_ID=s1 STUB_MODE=quota seat task --out "$TMP/o.json" --prompt "$TMP/p.txt" >/dev/null
 check "quota_skip_in_run: outside an auto run a quota failure writes no state" "$(ls -A "$TMP/work/.dagents/sdd" 2>/dev/null | grep -c auto-run)" "0"
 
-# --- prompt_says_headless: the prompt the CLI gets opens with the headless line ---
+# --- prompt_says_headless: the prompt the CLI gets opens with the opening line ---
 printf 'review this\n' > "$TMP/hp.txt"
 hp_sum=$(cksum < "$TMP/hp.txt")
 STUB_PROMPT_LOG="$TMP/sent-prompt" seat task --out "$TMP/o.json" --prompt "$TMP/hp.txt" >/dev/null
-check "prompt_says_headless: the prompt sent opens with the headless line" "$(head -n 1 "$TMP/sent-prompt" 2>/dev/null)" \
-  "headless mode denies shell commands; review from the files given"
+check "prompt_says_headless: the prompt sent opens with the opening line" "$(head -n 1 "$TMP/sent-prompt" 2>/dev/null)" \
+  "this sandbox is read-only: read each file this prompt names with a shell command such as cat; nothing can be written"
 check "prompt_says_headless: and carries the --prompt text after it" "$(tail -n 1 "$TMP/sent-prompt" 2>/dev/null)" "review this"
 check "prompt_says_headless: the --prompt file is unchanged" "$(cksum < "$TMP/hp.txt")" "$hp_sum"
 STUB_PROMPT_LOG="$TMP/sent-final" seat final --out "$TMP/o.md" --base main >/dev/null
 check "prompt_says_headless: a composed final prompt opens with it too" "$(head -n 1 "$TMP/sent-final" 2>/dev/null)" \
-  "headless mode denies shell commands; review from the files given"
+  "this sandbox is read-only: read each file this prompt names with a shell command such as cat; nothing can be written"
 
 # --- failures_book_total: a seat that ran and failed books the run's total ---
 mkdir -p "$(dirname "$RUNSTATE")"
