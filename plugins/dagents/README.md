@@ -902,8 +902,10 @@ runs past its budget pays for it on each turn after. In a session running
 agents), **Hand off** queues a prompt asking the controller to finish the task
 in flight and hand off with the `handoff` skill. Past the budget the mod also
 adds one note to the conversation saying the same, so a controller deep in a
-long turn sees it before its next task. A compaction clears the reading until
-the next response, and re-arms the note.
+long turn sees it before its next task. While that note stands, the Stop hook
+holds each turn once that ends without the next-step block or a question, plan
+or not. A compaction clears the reading until the next response, and re-arms
+the note.
 
 **Discord notifications.** The mod can post to a Discord channel when the
 session needs you, which works the same over ssh and tmux. Create a webhook

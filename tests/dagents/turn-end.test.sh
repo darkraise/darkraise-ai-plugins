@@ -592,5 +592,50 @@ printf -- '- 2026-11-18 `docs/dagents/plans/2026-11-18-x.md` — merged into `ma
 wt_block 'other' 'Other next.'
 check "A16: a completed plan stays held after another worktree writes" "$(decision "$(stop s-wf 'All done.')")" "block"
 
+# --- a budget note said handoff: the turn ends on next-step's block, plan or not ---
+# The cockpit writes `due` beside the turn stamp when it tells the model to hand
+# off, and empties the file when the note no longer stands.
+HO="$TMP/handoff-repo"
+git init -q "$HO"
+handoff_due() { # handoff_due <session> <content>
+  mkdir -p "$HOME/.claude/dagents/sessions/turns"
+  printf '%s' "$2" > "$HOME/.claude/dagents/sessions/turns/$1.handoff"
+}
+stop_ho() { # stop_ho <session> <last message> [stop_hook_active] [transcript]
+  jq -n --arg sid "$1" --arg cwd "$HO" --arg msg "$2" --argjson active "${3:-false}" --arg tp "${4:-}" \
+    '{hook_event_name:"Stop",session_id:$sid,cwd:$cwd,transcript_path:$tp,stop_hook_active:$active,last_assistant_message:$msg}' | bash "$END"
+}
+POINTER='Done. Start a fresh session to continue the fixes.'
+sleep 1; prompt s-ho "$HO"
+check "no handoff marker: a no-plan ending passes silently" "$(stop_ho s-ho "$POINTER" 2>&1)" ""
+handoff_due s-ho ''
+check "an emptied handoff marker: a no-plan ending passes" "$(stop_ho s-ho "$POINTER")" ""
+handoff_due s-ho due
+out=$(stop_ho s-ho "$POINTER")
+check "handoff due: a no-plan ending without the block is held" "$(decision "$out")" "block"
+check "handoff due: names the handoff skill, next-step and ask" \
+  "$(r=$(jq -r .reason <<<"$out"); for w in 'dagents:handoff' 'next-step' 'scripts/ask'; do grep -qF -- "$w" <<<"$r" && printf y || printf n; done)" "yyy"
+check "handoff due: tells the user why" "$(jq -r .systemMessage <<<"$out" | grep -c 'a budget note said handoff')" "1"
+check "handoff due: the retry passes" "$(stop_ho s-ho "$POINTER" true)" ""
+HO_BLOCK=$'Done.\n\n## Next session\n\n**Status:** Unplanned work.\n**Next:** Continue the fixes.'
+check "handoff due: a hand-typed block is held" "$(decision "$(stop_ho s-ho "$HO_BLOCK")")" "block"
+turn_rec s-ho 'Unplanned work.' 'Continue the fixes.'
+check "handoff due: the block next-step wrote this turn passes" "$(stop_ho s-ho "$HO_BLOCK")" ""
+sleep 1; prompt s-ho "$HO"
+check "handoff due: still held on the next turn" "$(decision "$(stop_ho s-ho "$POINTER")")" "block"
+sleep 1; : > "$HOME/.claude/dagents/sessions/turns/s-ho.asked"
+check "handoff due: a question asked through scripts/ask passes" "$(stop_ho s-ho 'Should I hand off now?')" ""
+sleep 1; prompt s-ho "$HO"
+HO_BG="$TMP/handoff-bg.jsonl"
+jq -nc '{type:"user",message:{role:"user",content:[{type:"tool_result",tool_use_id:"toolu_hb",content:"Command running in background with ID: hb1. Output is being written to: /tmp/hb1.output."}]}}' > "$HO_BG"
+check "handoff due: a plain stop over running work passes" "$(stop_ho s-ho 'Waiting on the build.' false "$HO_BG")" ""
+check "handoff due: the finishing menu passes" "$(stop_ho s-ho 'Which option?')" ""
+sleep 1; prompt s-hp
+handoff_due s-hp due
+write_ledger 'Task 1: complete (commits a..b, review clean)'
+out=$(stop s-hp 'Task 1 is done.')
+check "handoff due, a plan advanced: the plan's own reason stands" \
+  "$(jq -r .reason <<<"$out" | grep -c 'advanced without a next step'):$(jq -r .reason <<<"$out" | grep -c 'budget note')" "1:0"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

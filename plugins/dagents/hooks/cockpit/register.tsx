@@ -538,6 +538,7 @@ export const register: Register = on => {
     if (e.agentId === undefined && e.trigger !== 'precompute' && 'messages' in done && done.messages !== undefined) {
       await update($, budget, () => null)
       await update($, isNudged, () => false)
+      await markHandoff($, false)
       // The turns before a compaction say nothing about the context after it.
       await update($, turnTokens, () => [])
       // The estimate stands in until the next response; the old one is the window before.
@@ -2568,6 +2569,8 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
 // What the hooks share beyond $.state: settings read at load, facts read at
 // the start, and the timers and S.waits in flight. A reload starts it over.
 const S = {
+  // The handoff mark last written beside the turn stamp, as `<session>:<due>`.
+  handoffMark: '',
   // Saved or environment values the settings in force ignored, for the settings view.
   settingProblems: [] as string[],
   // The session read's steps that threw: the slow poll tick runs each again.
@@ -3042,6 +3045,7 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
       if ('skip' in done && typeof done.skip === 'string') throw new Error(done.skip)
       await update($, budget, () => null)
       await update($, isNudged, () => false)
+      await markHandoff($, false)
       // The compaction happened: never repeat it. Unbooked, pending stays
       // compact and no later stage would run, so stop the run instead. Exit 5
       // is the script's own stop: the compaction cap was reached.
@@ -4009,21 +4013,38 @@ async function refresh(
   // Finishing the plan past the budget is no handoff.
   const isPast = level === 'handoff' && !isFinishing
   const reading = { now: { tokens, limit, window, compactWindow: compactWindow ?? null, usd, isFinishing }, isPast }
+  // An auto run compacts at its limit rather than handing off: no note.
+  const isToldHere = nudgeModel && !isAuto && (await read($, isPlanSession)) && !(await read($, isFastMode))
   if (!isPast) {
     if (await read($, isNudged)) await update($, isNudged, () => false)
-    return reading
+  } else if (isToldHere && !(await read($, isNudged))) {
+    await update($, isNudged, () => true)
+    const note = `dagents: budget: ${kTokens(tokens)} of ${kTokens(limit)} — handoff. ${HANDOFF_PROMPT}`
+    try {
+      await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: note }] } })
+    } catch {
+      // The host would not take the row: say it to the person instead.
+      $.ui.toast(note)
+    }
   }
-  // An auto run compacts at its limit rather than handing off: no note.
-  if (!nudgeModel || isAuto || (await read($, isNudged)) || !(await read($, isPlanSession)) || (await read($, isFastMode))) return reading
-  await update($, isNudged, () => true)
-  const note = `dagents: budget: ${kTokens(tokens)} of ${kTokens(limit)} — handoff. ${HANDOFF_PROMPT}`
-  try {
-    await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: note }] } })
-  } catch {
-    // The host would not take the row: say it to the person instead.
-    $.ui.toast(note)
-  }
+  await markHandoff($, isToldHere && (await read($, isNudged)))
   return reading
+}
+
+// scripts/turn-end.sh holds every turn that ends without the next-step block
+// while this file beside the turn stamp says `due`.
+async function markHandoff($: EngineInterface, isDue: boolean) {
+  try {
+    const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
+    if (!home) return
+    const session = (await $.session.id()).replace(/[^A-Za-z0-9]/g, '-')
+    const mark = `${session}:${isDue}`
+    if (S.handoffMark === mark) return
+    await $.fs.write(`${home.replace(/[\\/]+$/, '')}/.claude/dagents/sessions/turns/${session}.handoff`, isDue ? 'due' : '')
+    S.handoffMark = mark
+  } catch {
+    // Unwritten, the stop is not held: the note still stands in the transcript.
+  }
 }
 
 /** What the pane asks the surface for under a layout: the band's rows unless it is full. */
