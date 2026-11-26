@@ -85,7 +85,9 @@ primary checkout, with five tab-separated columns: the UTC time, the event
 a detail (the spec, the primary, the new session or phase, `phase` or
 `resume` for a clear, the stop reason). A new `start` keeps the file, so a
 stopped run's history survives the next run. `scripts/auto-run log` prints
-it, bound or not; exit 3 when the checkout has none.
+it, bound or not: the log of the run the session's binding names in another
+checkout, as every command resolves it, else this checkout's; exit 3 when
+there is none.
 
 ## Preflight
 
