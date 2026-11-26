@@ -73,6 +73,17 @@ check "worktree: the probe leaves no worktree" \
   "$status|$(sed -n 1p <<<"$out")|$(git -C "$REPO" worktree list | wc -l | tr -d ' ')|$([ -e "$REPO/.worktrees" ] && echo left || echo gone)" \
   "0|preflight: ok|1|gone"
 
+# --- review ---
+# A family whose setting is on, and whose gate cannot answer.
+mkdir -p "$HOME/.dforge"
+printf '{"agyReview": true}\n' > "$HOME/.dforge/config.json"
+out=$(unset DFORGE_NO_SETTINGS; DR_AGY_POLICY="$TMP/no-policy.json" DFORGE_PREFLIGHT_FREE=0 pf --isolation in-place); status=$?
+rm -f "$HOME/.dforge/config.json"
+review=$(sed -n '2,$p' <<<"$out" | sed -E 's/^(preflight: review codex: usable=false reason=setting ).* — setting off$/\1… — setting off/')
+check "review: a setting that is on, and a gate that cannot answer (A7)" "$status|$review" \
+  "0|preflight: review agy: gate failed: agy-gate: policy file not found: $TMP/no-policy.json — setting on
+preflight: review codex: usable=false reason=setting … — setting off"
+
 # --- usage ---
 pf --isolation nowhere >/dev/null; s1=$?
 e1=$(cat "$TMP/err")

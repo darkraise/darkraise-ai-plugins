@@ -64,10 +64,18 @@ preflight_run() {
   while IFS= read -r id; do
     id=${id//$'\r'/}
     [ -n "$id" ] || continue
-    gate=$(bash "$scripts/$id-gate" 2>/dev/null | _preflight_first)
     setting=off
     [ "$(dforge_setting "${id}Review" false)" != true ] || setting=on
-    printf 'preflight: review %s: %s — setting %s\n' "$id" "${gate#"$id-gate "}" "$setting"
+    # A gate that could not answer is said so, with its own first error line
+    # (asked again for it: a failing gate ends at once).
+    if gate=$(bash "$scripts/$id-gate" 2>/dev/null) && [ -n "$gate" ]; then
+      gate=$(_preflight_first <<<"$gate")
+      gate=${gate#"$id-gate "}
+    else
+      gate=$(bash "$scripts/$id-gate" 2>&1 >/dev/null | _preflight_first)
+      gate="gate failed: ${gate:-no answer}"
+    fi
+    printf 'preflight: review %s: %s — setting %s\n' "$id" "$gate" "$setting"
   done < <(bash "$scripts/executors" ranked 2>/dev/null)
   return 0
 }
