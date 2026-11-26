@@ -40,7 +40,9 @@ ar_in_primary() {
 
 # ar_path — the state file's path, whether or not it exists: the working
 # directory's when its run is the caller's, else the one the caller's binding
-# names when that run is the caller's, else the working directory's.
+# names when that run is the caller's, else the working directory's. An
+# active run the binding names goes before a run of the caller's that ended
+# in the working directory, which would otherwise hide it.
 # AR_RESOLVE=local takes the working directory's at once.
 ar_path() {
   local primary="" here="" sid=${AR_SESSION:-${CLAUDE_CODE_SESSION_ID:-}} bfile bound_primary there
@@ -62,8 +64,9 @@ ar_path() {
       bound_primary=$(ar_binding_get "$sid" primary)
       if [ -n "$bound_primary" ]; then
         there="$(dforge_dir state "$bound_primary")/sdd/auto-run.json"
-        if [ "$there" != "$here" ] && ! { [ -n "$here" ] && _ar_session_is "$here" "$sid"; } \
-           && _ar_session_is "$there" "$sid"; then
+        if [ "$there" != "$here" ] && _ar_session_is "$there" "$sid" \
+           && { ! { [ -n "$here" ] && _ar_session_is "$here" "$sid"; } \
+                || { ! _ar_active_for "$here" "$sid" && _ar_active_for "$there" "$sid"; }; }; then
           printf '%s\n' "$there"
           return 0
         fi
@@ -76,6 +79,10 @@ ar_path() {
 
 _ar_session_is() { # _ar_session_is PATH SID
   [ -f "$1" ] && ar_jq -e --arg s "$2" '.session == $s' < "$1" >/dev/null 2>&1
+}
+
+_ar_active_for() { # _ar_active_for PATH SID
+  [ -f "$1" ] && ar_jq -e --arg s "$2" '.session == $s and .active == true' < "$1" >/dev/null 2>&1
 }
 
 # ar_run_primary — the primary checkout holding the resolved state file
@@ -171,16 +178,18 @@ ar_seen_ok() { # ar_seen_ok SID — the cockpit has read this binding
     'length == 2 and (.[0].nonce | type == "string") and .[0].primary == .[1].primary and .[0].nonce == .[1].nonce' >/dev/null 2>&1
 }
 
-# ar_ack_wait SID — wait up to DFORGE_BIND_WAIT seconds (10 by default) for
-# the cockpit to echo SID's binding.
+# ar_ack_wait SID — wait DFORGE_BIND_WAIT seconds (10 by default) for the
+# cockpit to echo SID's binding. The wait is measured on the clock, not in
+# passes: a pass costs two process starts, which are slow on Windows. SECONDS
+# counts whole seconds, so the wait ends within a second after its length.
 ar_ack_wait() {
-  local wait=${DFORGE_BIND_WAIT:-10} n
+  local wait=${DFORGE_BIND_WAIT:-10} end
   case $wait in '' | *[!0-9]*) wait=10 ;; esac
-  n=$(( wait * 20 ))
+  end=$SECONDS
+  [ "$wait" -eq 0 ] || end=$(( SECONDS + wait + 1 ))
   while :; do
     ar_seen_ok "$1" && return 0
-    [ "$n" -gt 0 ] || return 1
-    n=$(( n - 1 ))
+    [ "$SECONDS" -lt "$end" ] || return 1
     sleep 0.05
   done
 }
@@ -903,8 +912,12 @@ ar_rebind() { # ar_rebind ID
 ar_rebind_locked() { # ar_rebind_locked PATH ID
   ar_jq -e '.active == true and .rebind == true' < "$1" >/dev/null 2>&1 \
     || { echo "auto-run: no clear is waiting for its session" >&2; return 4; }
-  ar_put "$1" '.session = $id | .rebind = false | .pending = "resume" | .failures = 0 | .regime = "normal"' --arg id "$2" || return
-  ar_binding_write "$2" "$(ar_primary_root)" >/dev/null || return
+  # The binding first: a failed write must leave the state with the session
+  # that can still stop the run. It names the run's primary, which is not the
+  # working directory's when the call comes from another repository.
+  ar_binding_write "$2" "$(dirname "$(dirname "$(dirname "$1")")")" >/dev/null || return
+  ar_put "$1" '.session = $id | .rebind = false | .pending = "resume" | .failures = 0 | .regime = "normal"' --arg id "$2" \
+    || { local rc=$?; rm -f "$(ar_binding_file "$2")"; return "$rc"; }
   ar_log rebind "$2"
 }
 
@@ -926,7 +939,8 @@ ar_progress_mark() {
   head=$(git -C "$(ar_checkout 2>/dev/null)" rev-parse HEAD 2>/dev/null | tr -d '\r')
   [ -n "$primary" ] || { printf '%s|%s|' "$lines" "$head"; return 0; }
   if [ -n "$plan" ]; then
-    file=$(cd "$primary" && plan_ledger "$(plan_locate "$plan")" 2>/dev/null)
+    # A worktree run keeps its ledger in the plan's worktree.
+    file=$(plan_ledger_any "$primary" "$plan" 2>/dev/null | cut -f1)
     [ -z "$file" ] || [ ! -f "$file" ] || lines=$(wc -l < "$file" | tr -d ' ')
   fi
   if [ -n "$spec" ]; then

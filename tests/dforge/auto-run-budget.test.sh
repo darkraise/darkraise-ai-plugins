@@ -79,6 +79,23 @@ printf 'Task 1: implementer inline (assigned; base abc1234)\n' >> "$LEDGER"
 b=$(compactions 2)
 check "progress: a ledger line restarts the count (A9)" "$a$b|$(field compactionsSinceProgress)|$(field active)" "0000|2|true"
 
+# A worktree run keeps its ledger in the plan's worktree.
+mv "$LEDGER" "$TMP/ledger.kept"
+git -C "$REPO" worktree add -q -b side "$TMP/side"
+WLEDGER="$TMP/side/.dforge/sdd/2026-11-26-widget/progress.md"
+mkdir -p "$(dirname "$WLEDGER")"
+printf '# SDD ledger — plan: docs/dforge/plans/2026-11-26-widget.md\n' > "$WLEDGER"
+ar --session s-p start --spec "$SPEC" --force >/dev/null 2>&1
+ar --session s-p attach --plan docs/dforge/plans/2026-11-26-widget.md
+setf '.phase = "final"'
+a=$(compactions 2)
+printf 'Review depth: full (spec)\n' >> "$WLEDGER"
+b=$(compactions 2)
+check "progress: a ledger line in the plan's worktree restarts the count (A9)" "$a$b|$(field compactionsSinceProgress)|$(field active)" "0000|2|true"
+git -C "$REPO" worktree remove --force "$TMP/side"
+git -C "$REPO" branch -q -D side
+mv "$TMP/ledger.kept" "$LEDGER"
+
 ar --session s-p start --spec "$SPEC" --force >/dev/null 2>&1
 ar --session s-p phase plan >/dev/null 2>&1
 a=$(compactions 2)

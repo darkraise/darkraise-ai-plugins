@@ -60,6 +60,15 @@ jq '.rebind = true' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
 ar --session s-b2 rebind --to s-b2 >/dev/null 2>&1
 check "binding: rebind writes the new session's" "$(bfield s-b2 primary)|$(jq -r .session "$STATE")" "$REPO|s-b2"
 
+# A binding that cannot be written leaves the run with the session that can still stop it.
+jq '.rebind = true | .pending = null' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+HB="$TMP/home-b"
+mkdir -p "$HB/.claude/dforge/sessions"
+printf 'x\n' > "$HB/.claude/dforge/sessions/run"
+(cd "$REPO" && HOME="$HB" bash "$AR" --session s-b9 rebind --to s-b9 >/dev/null 2>&1); status=$?
+check "binding: a rebind whose binding cannot be written leaves the state" \
+  "$status|$(jq -r '"\(.session) \(.rebind) \(.pending)"' "$STATE")" "1|s-b2 true null"
+
 ar --session 'a/b:c' start --spec "$SPEC" --force >/dev/null 2>&1
 check "binding: a session id is made file-safe" "$([ -f "$RUN/a-b-c.json" ] && echo yes)|$(bfield a-b-c primary)" "yes|$REPO"
 
@@ -96,7 +105,11 @@ check "resolver: after-compact from another repository" "$there|$(jq -r .pending
 setf '.pending = "compact"'
 out=$(cd "$TMP" && bash "$AR" --session s-x pending 2>&1)
 check "resolver: outside any repository" "$out" "compact"
-setf '.pending = null'
+setf '.pending = null | .rebind = true'
+a --session s-x rebind --to s-y >/dev/null 2>&1; status=$?
+check "resolver: rebind from another repository binds the new session to the run's primary" \
+  "$status|$(bfield s-y primary)|$(jq -r .session "$STATE")" "0|$REPO|s-y"
+setf '.session = "s-x" | .pending = null'
 
 cp "$STATE" "$TMP/b.before"
 err=$(a --session s-x task-complete 2>&1 >/dev/null); status=$?
@@ -139,6 +152,14 @@ check "resolver: start ignores a binding to a finished run (A49)" \
   "$(jq -r .session "$ASTATE" 2>/dev/null)|$(cmp -s "$STATE" "$TMP/b.before" && echo same)" "s-x|same"
 jq -n --arg p "$REPO" '{primary: $p, nonce: "n", at: 0}' > "$RUN/s-x.json"
 check "resolver: a local run of the caller wins" "$(a --session s-x status | head -n 1 | grep -c 'spec docs/a-spec.md')" "1"
+
+# A run of the caller's that ended here must not hide the active one its binding names.
+a --session s-x stop >/dev/null 2>&1
+setf '.active = true | .stopped = null | .pending = "compact"'
+out=$(a --session s-x pending 2>&1); status=$?
+setf '.active = false'
+out2=$(a --session s-x pending 2>&1); s2=$?
+check "resolver: an active bound run goes before an ended local run" "$out|$status|$s2" "compact|0|3"
 
 a --session s-old start --spec docs/old.md --force >/dev/null 2>&1
 beat s-old && printf '%s\n' "$(( $(date +%s) - 1000 ))" > "$HOME/.claude/dforge/sessions/cockpit/s-old"
