@@ -1545,6 +1545,26 @@ describe('handoff reading', () => {
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     expect(notes).toHaveLength(2)
   })
+
+  // scripts/turn-end.sh holds a stop while this mark says due.
+  test('marks the handoff due beside the turn stamp while the note stands', async ($, on) => {
+    const MARK = '/home/me/.claude/dforge/sessions/turns/sess-1.handoff'
+    const written: Record<string, string> = {}
+    const w: World = { tokens: 470_000, written, env: { HOME: '/home/me' } }
+    world(on, w)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(written[MARK]).toBe('due')
+    w.tokens = 300_000
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(written[MARK]).toBe('')
+    w.tokens = 480_000
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(written[MARK]).toBe('due')
+    await $.session.compact({ trigger: 'manual', messages: [SUMMARY] })
+    expect(written[MARK]).toBe('')
+  })
 })
 
 describe('cockpit pane', () => {
@@ -9450,6 +9470,19 @@ describe('fast mode scope', () => {
     w.tokens = 470_000
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     expect(notes.filter(text => /— handoff\./.test(text))).toEqual([])
+  })
+
+  test('fast mode empties the handoff mark a note set', async ($, on) => {
+    const MARK = '/home/me/.claude/dforge/sessions/turns/sess-1.handoff'
+    const written: Record<string, string> = {}
+    world(on, { tokens: 470_000, written, env: { HOME: '/home/me' } })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:brainstorming' })
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(written[MARK]).toBe('due')
+    await said($, 'Process: fast — a one-line fix', 1)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(written[MARK]).toBe('')
   })
 
   test('relaxed mode keeps the final-phase exemption once every task is complete', async ($, on) => {

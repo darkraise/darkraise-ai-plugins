@@ -616,6 +616,7 @@ export const register: Register = on => {
     if (e.agentId === undefined && e.trigger !== 'precompute' && 'messages' in done && done.messages !== undefined) {
       await update($, budget, () => null)
       await update($, isNudged, () => false)
+      await markHandoff($, false)
       // The turns before a compaction say nothing about the context after it.
       await update($, turnTokens, () => [])
       // The estimate stands in until the next response; the old one is the window before.
@@ -2808,6 +2809,8 @@ const S = {
   autoDueFailedAt: null as number | null,
   // The note at hard in a plan's tail or final phase, once per crossing.
   isHardNoted: false,
+  // The handoff mark last written beside the turn stamp, as `<session>:<due>`.
+  handoffMark: '',
   // The pane's Compact runs: it books its compaction itself.
   isPaneCompacting: false,
   // Ledger events already seen, by the plan the ledger names; the first read
@@ -3372,6 +3375,7 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
       if ('skip' in done && typeof done.skip === 'string') throw new Error(done.skip)
       await update($, budget, () => null)
       await update($, isNudged, () => false)
+      await markHandoff($, false)
       // The compaction happened: never repeat it. Unbooked, pending stays
       // compact and no later stage would run, so stop the run instead. Exit 5
       // is the script's own stop: the compaction cap was reached.
@@ -4544,13 +4548,29 @@ async function refresh(
   }
   if (!isPast) {
     if (await read($, isNudged)) await update($, isNudged, () => false)
-    return reading
+  } else if (!isAuto && !(await read($, isNudged)) && isToldHere) {
+    // An auto run compacts at its limit rather than handing off: no handoff note.
+    await update($, isNudged, () => true)
+    await tell($, `dforge: budget: ${kTokens(tokens)} of ${kTokens(limit)} — handoff. ${HANDOFF_PROMPT}`)
   }
-  // An auto run compacts at its limit rather than handing off: no handoff note.
-  if (isAuto || (await read($, isNudged)) || !isToldHere) return reading
-  await update($, isNudged, () => true)
-  await tell($, `dforge: budget: ${kTokens(tokens)} of ${kTokens(limit)} — handoff. ${HANDOFF_PROMPT}`)
+  await markHandoff($, isToldHere && !isAuto && ((await read($, isNudged)) || S.isHardNoted))
   return reading
+}
+
+// scripts/turn-end.sh holds every turn that ends without the next-step block
+// while this file beside the turn stamp says `due`.
+async function markHandoff($: EngineInterface, isDue: boolean) {
+  try {
+    const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
+    if (!home) return
+    const session = (await $.session.id()).replace(/[^A-Za-z0-9]/g, '-')
+    const mark = `${session}:${isDue}`
+    if (S.handoffMark === mark) return
+    await $.fs.write(`${home.replace(/[\\/]+$/, '')}/.claude/dforge/sessions/turns/${session}.handoff`, isDue ? 'due' : '')
+    S.handoffMark = mark
+  } catch {
+    // Unwritten, the stop is not held: the note still stands in the transcript.
+  }
 }
 
 // A note to the model as a session row.

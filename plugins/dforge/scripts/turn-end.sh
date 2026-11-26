@@ -25,6 +25,9 @@
 # next prompt, so its retries are held too, up to AUTO_HOLD_CAP in a row; past
 # that the run stops and one last hold asks for the attended ending. Every hold
 # also tells the user why the session went on (systemMessage).
+# A session the cockpit's budget note told to hand off (`due` in the stamp's
+# .handoff file) is held once per turn as well, plan or not, until a turn ends
+# on the next-step block or a question.
 set -uo pipefail
 
 AUTO_HOLD_CAP=3
@@ -127,7 +130,12 @@ if [ -f "$stamp" ]; then
     fi
   fi
 fi
-[ -d "$sdd" ] || [ -n "$auto_pending" ] || [ -n "$transition" ] || exit 0
+# The cockpit writes `due` beside the stamp when its budget note says handoff,
+# and empties the file once the note no longer stands (a compaction, a reading
+# back under the budget, fast mode).
+handoff_due=""
+[ -f "$stamp" ] && [ "$(tr -d '\r\n' 2>/dev/null < "$stamp.handoff")" = due ] && handoff_due=1
+[ -d "$sdd" ] || [ -n "$auto_pending" ] || [ -n "$transition" ] || [ -n "$handoff_due" ] || exit 0
 asked=0
 [ -f "$stamp" ] && ask_marker_released "$stamp" "$sdd" "$docs" && asked=1
 . "${SCRIPT_DIR}/lib/last-message.sh"
@@ -179,13 +187,19 @@ if [ -n "$transition" ]; then
     transition=""
   fi
 fi
+# A due handoff ends the same way, plan or not.
+if [ -n "$handoff_due" ]; then
+  if ends_with 'Which option?' "Type 'discard' to confirm" 'Must fix before completing' 'Worktree removal refused' || wrote_block || [ "$asked" = 1 ]; then
+    handoff_due=""
+  fi
+fi
 
 # The transcript scan below costs seconds on a long session, and its result is
 # read only when this stop could be held: an auto run is pending, a ledger
 # written this turn lacks its ending, or the message ends the session.
 case "$last" in
   *'## Next session'* | *'Which option?'*) ;;
-  *) [ -n "$auto_pending" ] || [ -n "$ledger" ] || [ -n "$transition" ] || exit 0 ;;
+  *) [ -n "$auto_pending" ] || [ -n "$ledger" ] || [ -n "$transition" ] || [ -n "$handoff_due" ] || exit 0 ;;
 esac
 
 root_shown=$PLUGIN_ROOT
@@ -264,8 +278,14 @@ if [ -n "$auto_pending" ]; then
   exit 0
 fi
 
-[ -n "$ledger" ] || [ -n "$transition" ] || exit 0
+[ -n "$ledger" ] || [ -n "$transition" ] || [ -n "$handoff_due" ] || exit 0
 inflight_queued "$transcript_path" "$since" && exit 0
+
+if [ -z "$ledger" ] && [ -z "$transition" ]; then
+  hold "A budget note said handoff. Finish the task in flight, run dforge:handoff, and end with the block \`bash \"${root_shown}/scripts/next-step\"\` prints, verbatim. To ask your human partner first, run \`bash \"${root_shown}/scripts/ask\" \"<question>\"\` and end on the question." \
+    "dforge held the stop: a budget note said handoff, and the message ends without the next step"
+  exit 0
+fi
 
 if [ -z "$ledger" ]; then
   if [ "$transition" = project ]; then
