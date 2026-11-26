@@ -53,6 +53,7 @@ usage: auto-run [--session ID] start --spec P [--register R] [--isolation worktr
        auto-run [--session ID] api-error [--clear]
        auto-run [--session ID] total compactionSeconds|holds|stalls|apiErrors|reconcilePrompts|panelFailures
        auto-run [--session ID] counters | log
+       auto-run preflight --isolation worktree|in-place
 pending prints compact, after-compact, handoff, clear, resume, switch or none.
 clear --phase is for a phase transition (the switch or finishing) and never a
       self-resume; a plain clear is one, and the third in a row stops the run
@@ -69,6 +70,10 @@ cd-prefix prints "cd '<checkout>' && " when the run's checkout (or DIR) is
 task-complete, phase execute|final|finish, setup-branch, clear and switch
       change nothing outside the run's repository: they exit 7 and print the
       command to run instead.
+preflight prints what would stop an unattended run (free space below
+      DFORGE_PREFLIGHT_FREE percent, default 15; a refused git write; with
+      --isolation worktree a refused scratch worktree), or preflight: ok, then
+      one line per review family; it needs no run and exits 0.
 review-skipped exits 0 while the review family is skipped after a quota
       failure (review-skip records one), 1 when it is not.
 Exit: 0 done; 1 failed (no handoff file, or jq or mktemp failed); 2 usage; 3 no run bound to this session;
@@ -91,6 +96,15 @@ cmd=$1
 shift
 # These act on the working directory's run, never on one a binding names.
 case "$cmd:${1:-}" in start:* | resume:* | stop:--stale) export AR_RESOLVE=local ;; esac
+
+# Needs no run: it runs before the spec review that starts one.
+if [ "$cmd" = preflight ]; then
+  [ $# -eq 2 ] && [ "$1" = --isolation ] && { [ "$2" = worktree ] || [ "$2" = in-place ]; } \
+    || { echo "auto-run: --isolation must be worktree or in-place" >&2; exit 2; }
+  . "$HERE/lib/preflight.sh"
+  preflight_run "$2"
+  exit 0
+fi
 
 case $cmd in start | stop | resume) ;; *) ar_version_check ;; esac
 

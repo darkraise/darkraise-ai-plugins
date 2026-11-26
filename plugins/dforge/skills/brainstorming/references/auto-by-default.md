@@ -30,8 +30,12 @@ Then:
    round 1 leaves a Blocker or High finding open, checking only those
    answers. Apply what Fable rules and list each ruling as one line in a
    `## Review rulings` section of the spec.
-5. **The spec review**, the one stop: one message, its questions asked with the
-   multiple-choice prompt, at most four per call:
+5. **The spec review**, the one stop. First run
+   `scripts/auto-run preflight --isolation <worktree|in-place>` (`worktree`
+   when the `worktree` setting is `always` or `ask`, `in-place` when it is
+   `never`) and show every line it prints at the top of the message, so a
+   blocker is met while your human partner is present. Then one message, its
+   questions asked with the multiple-choice prompt, at most four per call:
    - the spec path, `Depth: <d> — <reasons>` (the `depth=` and `reason=` of
      `scripts/depth-route --spec-triggers`, or `owner`), the `Critic: …` counts
      (at `light`, `Critic: skipped (depth light)`) and the number of Fable
