@@ -752,7 +752,9 @@ arrun "$RPB" pr1 start --spec docs/s.md --register docs/r.md >/dev/null 2>&1
 quota_line ""
 panel "$RPB" >/dev/null
 check "A14: with no reset named the skip lasts 5 hours" "$(skips "$RPB" | jq -c '(.[0].until - .[0].failedAt) | . >= 17990 and . <= 18010')" "true"
-# outside an auto run
+# outside an auto run: pr1's binding follows it to any repository while its
+# run is active, so that run ends first
+arrun "$RPB" pr1 stop >/dev/null 2>&1
 RPC="$TMP/rpc"; newrepo "$RPC"
 before=$(launches)
 panel "$RPC" >/dev/null
