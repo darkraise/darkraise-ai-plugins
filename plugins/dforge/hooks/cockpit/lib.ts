@@ -1703,6 +1703,25 @@ export function remoteRuns(clients: readonly { surface: string }[], setting: str
   return [{ text: '○ not connected', dim: true }]
 }
 
+/** A session binding file's primary and nonce (scripts/lib/auto-run.sh ar_binding_write); null unless both are non-empty strings. */
+export function bindingOf(text: string): { primary: string; nonce: string } | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return null
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null
+  const { primary, nonce } = parsed as Record<string, unknown>
+  return typeof primary === 'string' && primary !== '' && typeof nonce === 'string' && nonce !== '' ? { primary, nonce } : null
+}
+
+/** Where auto-run calls run: the bound primary when the session's checkout belongs to another repository, else the session's checkout. */
+export function runDirFor(checkout: string | null, checkoutPrimary: string | null, bound: string | null): string | null {
+  if (bound !== null && bound !== checkoutPrimary) return bound
+  return checkout ?? checkoutPrimary
+}
+
 /** The run in an auto-run state file when it is bound to `sessionId`, active or not; else null. */
 export function autoRunFor(text: string, sessionId: string): CockpitAutoRun | null {
   let parsed: unknown

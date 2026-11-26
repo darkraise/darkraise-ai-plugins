@@ -31,6 +31,7 @@ import {
   agentGroups,
   bar,
   billingLabel,
+  bindingOf,
   budgetFor,
   collapsedFrom,
   collapsedToggled,
@@ -79,6 +80,7 @@ import {
   markerOf,
   promptRegisters,
   hasUnresolvedRows,
+  runDirFor,
   runList,
   shellAge,
   runsCut,
@@ -170,9 +172,10 @@ const AUTO_STAGE_PENDING: Record<AutoStage, string> = {
   resume: 'resume',
   switch: 'switch',
 }
-function autoContinuePrompt(root: string, plan: string | null): string {
+function autoContinuePrompt(root: string, plan: string | null, prefix = ''): string {
   const where = plan === null ? '' : ` for plan ${plan}, through the After compaction steps of the execution skill its Execution line names`
-  return `Continue the auto run: run \`bash "${root}/scripts/auto-run" after-compact\` first, then continue the phase \`bash "${root}/scripts/auto-run" status\` names${where}, as reference/auto-run.md §After a compaction says.`
+  const checkout = prefix === '' ? '' : ` Run every command as \`${prefix} …\`.`
+  return `Continue the auto run: run \`bash "${root}/scripts/auto-run" after-compact\` first, then continue the phase \`bash "${root}/scripts/auto-run" status\` names${where}, as reference/auto-run.md §After a compaction says.${checkout}`
 }
 // The watchdog's period, and how long background work may defer a pending
 // stage before that books a failure. A bound run idle STALL_MS since its last
@@ -2751,13 +2754,17 @@ const S = {
   kinds: [] as NotifyKind[],
   isBrief: false,
   notifyAskAfter: 20,
-  where: { host: null, tmux: null, primary: null, checkout: null } as {
+  where: { host: null, tmux: null, primary: null, checkout: null, bound: null, echoed: '' } as {
     host: string | null
     tmux: string | null
     primary: string | null
     // The work tree the session is in: a linked worktree's own, where
     // $.session.repo() names the main working tree.
     checkout: string | null
+    // The primary checkout the session's run binding names, and the
+    // primary and nonce last echoed to its seen file.
+    bound: string | null
+    echoed: string
   },
   // An approval or question the person has not answered yet, by tool call: its
   // timer, the Discord message sent for it (edited once it is answered), and
@@ -3111,12 +3118,61 @@ async function endWait($: EngineInterface, id: string, outcome: string) {
   if (kind === 'background') await settleBackground($)
 }
 
-// The auto run state file in the primary checkout; null when there is none.
+// The auto run state file in the primary checkout, or, when that holds no run
+// of this session's, the one in the primary its binding names; null when there
+// is none.
 async function autoRunText($: EngineInterface): Promise<string | null> {
   const root = S.where.primary ?? (await read($, place))?.root ?? null
-  if (root === null) return null
-  const text = await $.fs.read(`${root}/.dforge/sdd/auto-run.json`).catch(() => null)
-  return typeof text === 'string' ? text : null
+  const stateAt = async (dir: string) => {
+    const text = await $.fs.read(`${dir}/.dforge/sdd/auto-run.json`).catch(() => null)
+    return typeof text === 'string' ? text : null
+  }
+  const local = root === null ? null : await stateAt(root)
+  const bound = S.where.bound
+  if (bound !== null && bound !== root) {
+    const id = await $.session.id()
+    if (local === null || autoRunFor(local, id) === null) {
+      const there = await stateAt(bound)
+      if (there !== null && autoRunFor(there, id) !== null) return there
+    }
+  }
+  return local
+}
+
+// The session's run binding (scripts/lib/auto-run.sh ar_binding_file): keeps
+// the primary it names, and echoes a new primary and nonce to the seen file,
+// which start and resume wait for. A read or write that fails leaves the
+// previous values.
+async function syncBinding($: EngineInterface) {
+  const base = await runFileBase($, await $.session.id())
+  if (base === null) return
+  const text = await $.fs.read(`${base}.json`).catch(() => null)
+  if (typeof text !== 'string') {
+    if ((await $.fs.exists(`${base}.json`).catch(() => true)) === false) S.where.bound = null
+    return
+  }
+  const binding = bindingOf(text)
+  S.where.bound = binding?.primary ?? null
+  if (binding === null) return
+  const pair = `${binding.primary}\n${binding.nonce}`
+  if (pair === S.where.echoed) return
+  if (await writeSeen(base, binding.primary, binding.nonce, $)) S.where.echoed = pair
+}
+
+// <home>/.claude/dforge/sessions/run/<id with each character outside A-Za-z0-9 a dash>
+async function runFileBase($: EngineInterface, sessionId: string): Promise<string | null> {
+  const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
+  if (!home) return null
+  return `${home.replace(/[\\/]+$/, '')}/.claude/dforge/sessions/run/${sessionId.replace(/[^A-Za-z0-9]/g, '-')}`
+}
+
+async function writeSeen(base: string, primary: string, nonce: string, $: EngineInterface): Promise<boolean> {
+  try {
+    await $.fs.write(`${base}.seen`, `${JSON.stringify({ primary, nonce })}\n`)
+    return true
+  } catch {
+    return false
+  }
 }
 
 // The auto run state file's run, as the run bound to this session; null when
@@ -3152,15 +3208,26 @@ async function isSessionAlive($: EngineInterface, sid: string): Promise<boolean 
 }
 
 // Runs scripts/auto-run as `sessionId` in the session's checkout, where its
-// handoff lives; resolves its exit code, 1 when it could not run.
-async function autoRunCall($: EngineInterface, sessionId: string, args: string[]): Promise<number> {
+// handoff lives, or in the bound primary when the run lives in another
+// repository; resolves its exit code, 1 when it could not run.
+async function autoRunCall($: EngineInterface, sessionId: string, args: string[], dir?: string): Promise<number> {
+  const ran = await $.process.run(await autoRunArgv($, sessionId, args, dir), { timeoutMs: 15_000 }).catch(() => null)
+  return ran?.exitCode ?? 1
+}
+
+async function autoRunArgv($: EngineInterface, sessionId: string, args: string[], dir?: string): Promise<string[]> {
   const session = S.where.checkout
   const isGone = session !== null && session !== S.where.primary && (await $.fs.stat(session).catch(() => null))?.kind !== 'dir'
-  const checkout = (isGone ? S.where.primary : session) ?? S.where.primary ?? '.'
+  const checkout = (isGone ? S.where.primary : session) ?? S.where.primary
+  const at = dir ?? runDirFor(checkout, S.where.primary, S.where.bound) ?? '.'
   // The directory travels in argv: no cockpit call passes $.process.run a cwd.
-  const argv = ['bash', '-c', 'cd -- "$1" && shift && exec bash "$@"', 'auto-run', checkout, `${$.plugin.root}/scripts/auto-run`, '--session', sessionId, ...args]
-  const ran = await $.process.run(argv, { timeoutMs: 15_000 }).catch(() => null)
-  return ran?.exitCode ?? 1
+  return ['bash', '-c', 'cd -- "$1" && shift && exec bash "$@"', 'auto-run', at, `${$.plugin.root}/scripts/auto-run`, '--session', sessionId, ...args]
+}
+
+// What auto-run cd-prefix prints for `sessionId`, trimmed; empty on any failure.
+async function autoCdPrefix($: EngineInterface, sessionId: string): Promise<string> {
+  const ran = await $.process.run(await autoRunArgv($, sessionId, ['cd-prefix']), { timeoutMs: 15_000 }).catch(() => null)
+  return ran?.exitCode === 0 ? ran.stdout.trim() : ''
 }
 
 // Keeps the pane's copy of the bound run, and says once on Discord when the
@@ -3289,7 +3356,8 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
       at = 'continue'
     }
     if (at === 'continue') {
-      await $.prompt.submit({ text: autoContinuePrompt($.plugin.root, auto.plan), asUser: true })
+      const prefix = await autoCdPrefix($, bound)
+      await $.prompt.submit({ text: autoContinuePrompt($.plugin.root, auto.plan, prefix), asUser: true })
       // Clears a failure booked before this retry; pending stays after-compact.
       await autoRunCall($, bound, ['resumed'])
       return
@@ -3300,14 +3368,22 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
       at = 'clear'
     }
     if (at === 'clear') {
+      // The cleared session has no binding yet: carry the run's primary over.
+      const boundPrimary = S.where.bound
       await $.command.run({ command: 'clear' })
       const cleared = await $.session.id()
-      if ((await autoRunCall($, cleared, ['rebind', '--to', cleared])) !== 0) {
+      const elsewhere = boundPrimary !== null && boundPrimary !== S.where.primary ? boundPrimary : undefined
+      if (boundPrimary !== null) {
+        const base = await runFileBase($, cleared)
+        if (base !== null) await writeSeen(base, boundPrimary, '', $)
+      }
+      if ((await autoRunCall($, cleared, ['rebind', '--to', cleared], elsewhere)) !== 0) {
         // The run is still bound to the session /clear ended: stop it from there.
         await endUnboundRun($, bound, 'the cleared session could not be bound')
         return
       }
       bound = cleared
+      await syncBinding($).catch(() => undefined)
       at = 'resume'
     }
     // /model and /effort would save the launch values as the person's
@@ -4702,6 +4778,7 @@ async function readSession($: EngineInterface, isStart: boolean) {
   await step(() => readNotifier($))
   S.runKey = ''
   S.finishKey = ''
+  await step(() => syncBinding($))
   // The run first: the resume offer is not recomputed while one is active.
   await step(() => trackAutoRun($))
   await step(() => readRun($))
@@ -4733,6 +4810,7 @@ async function pollTick($: EngineInterface) {
       return
     }
     if (seen === '' && id !== null) await update($, sessionRead, () => id)
+    await syncBinding($).catch(() => undefined)
     S.polls += 1
     const isSlowTick = S.polls % DETAIL_EVERY === 0
     // An age crossing LIVE_MS stops a once-a-second clock with no event to say so.

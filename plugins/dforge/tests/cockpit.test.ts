@@ -8,6 +8,7 @@ import {
   agentGroups,
   autoLimitFor,
   autoRunFor,
+  bindingOf,
   isAbsolutePath,
   isDforge,
   gitMessageTexts,
@@ -75,6 +76,7 @@ import {
   turnsToBudget,
   windowElapsed,
   writesGitText,
+  runDirFor,
 } from '../hooks/cockpit/lib'
 import type { ActivityInput, DenseInput, Run } from '../hooks/cockpit/lib'
 import {
@@ -319,6 +321,10 @@ type World = {
   autoRunExits?: Record<string, number>
   /** The auto-run state file the fake script updates, as the real one would. */
   autoFile?: { text: string }
+  /** The state file by the directory an auto-run call runs in; set, a call elsewhere updates none. */
+  autoFileAt?: Record<string, { text: string }>
+  /** What `auto-run cd-prefix` prints; empty unless said. */
+  cdPrefixOut?: string
   /** What `darkmem-config.mjs --mode` answers; `missing` rejects as a missing node does. Git porcelain with exit 0 unless said. */
   modeOut?: { exitCode: number; stdout: string; stderr: string } | 'missing' | 'rejects' | 'timeout'
   /** The directory each `--mode` call names. */
@@ -550,8 +556,9 @@ function world(on: On, w: World) {
       const words = call.split(' ')
       const word = words[2] ?? ''
       const exitCode = w.autoRunExits?.[word] ?? 0
-      if (w.autoFile !== undefined) {
-        const state = JSON.parse(w.autoFile.text) as Record<string, unknown>
+      const autoFile = w.autoFileAt === undefined ? w.autoFile : w.autoFileAt[e.argv[4] ?? '']
+      if (autoFile !== undefined) {
+        const state = JSON.parse(autoFile.text) as Record<string, unknown>
         if (exitCode === 0 && word === 'compacted') Object.assign(state, { pending: 'after-compact', compactions: Number(state.compactions) + 1 })
         if (exitCode === 0 && word === 'clear') Object.assign(state, { pending: 'clear', rebind: true })
         if (exitCode === 0 && word === 'rebind') Object.assign(state, { session: words[4], pending: 'resume', regime: 'normal' })
@@ -561,9 +568,10 @@ function world(on: On, w: World) {
         if (exitCode === 5 && word === 'compacted') Object.assign(state, { active: false, stopped: '3 compactions without a completed task', pending: null })
         if (exitCode === 0 && word === 'stalled') Object.assign(state, { stalls: Number(state.stalls ?? 0) + 1, stalledAt: Math.floor(clock.now() / 1000) })
         if (exitCode === 5 && word === 'stalled') Object.assign(state, { active: false, stopped: '3 stalls without a completed task', pending: null })
-        w.autoFile.text = JSON.stringify(state)
+        autoFile.text = JSON.stringify(state)
       }
-      const answer = { value: { exitCode, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+      const stdout = word === 'cd-prefix' ? (w.cdPrefixOut ?? '') : ''
+      const answer = { value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
       const during = w.onAutoRun?.(word)
       return during instanceof Promise ? during.then(() => answer) : answer
     }
@@ -7193,6 +7201,119 @@ describe('auto run', () => {
     const calls = (w.processRuns ?? []).filter(argv => argv.includes('/scripts/auto-run '))
     expect(calls.length).toBeGreaterThan(0)
     for (const argv of calls) expect(argv.startsWith(`bash -c cd -- "$1" && shift && exec bash "$@" auto-run ${WORKTREE} `)).toBe(true)
+  })
+
+  describe('a run bound from another repository', () => {
+    const DEPOT = '/home/me/code/depot'
+    const DEPOT_AUTO = `${DEPOT}/.dforge/sdd/auto-run.json`
+    const RUN_DIR = '/home/me/.claude/dforge/sessions/run'
+    const BINDING = `${RUN_DIR}/sess-1.json`
+    const IN_DEPOT = `bash -c cd -- "$1" && shift && exec bash "$@" auto-run ${DEPOT} `
+    const bound = (fields: Record<string, unknown> = {}): NonNullable<World['files']> => ({
+      [DEPOT_AUTO]: autoFiles(fields)[AUTO]!,
+      [BINDING]: { text: JSON.stringify({ primary: DEPOT, nonce: 'n1', at: 1 }) },
+    })
+    const autoCalls = (w: World) => (w.processRuns ?? []).filter(argv => argv.includes('/scripts/auto-run '))
+
+    test('bindingOf parses a binding', () => {
+      expect(bindingOf(JSON.stringify({ primary: DEPOT, nonce: 'n1', at: 1 }))).toEqual({ primary: DEPOT, nonce: 'n1' })
+      expect(bindingOf('{}')).toBeNull()
+      expect(bindingOf('not json')).toBeNull()
+    })
+
+    test('runDirFor keeps the session checkout inside the bound primary', () => {
+      expect(runDirFor('/home/me/code/depot-wt', DEPOT, DEPOT)).toBe('/home/me/code/depot-wt')
+      expect(runDirFor('/home/me/code/shop', '/home/me/code/shop', DEPOT)).toBe(DEPOT)
+      expect(runDirFor('/home/me/code/shop', '/home/me/code/shop', null)).toBe('/home/me/code/shop')
+    })
+
+    test('reads the bound run from another repository (A2)', async ($, on) => {
+      const files = bound({ pending: null, compactions: 3 })
+      const w: World = { ...SIGNED_IN, autoRuns: [], written: {}, autoFile: files[DEPOT_AUTO] }
+      const clock = world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      await clock.advance(2_000)
+      await settle(clock)
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      expect(await ui.find({ type: 'Text', text: /Auto run · execute · normal · 3 compactions · 0 resumes/ })).toBeDefined()
+    })
+
+    test('echoes the binding into the seen file', async ($, on) => {
+      const files = bound({ pending: null })
+      const w: World = { ...SIGNED_IN, autoRuns: [], written: {}, isPaneShut: true, autoFile: files[DEPOT_AUTO] }
+      const clock = world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      await clock.advance(2_000)
+      await settle(clock)
+      expect(JSON.parse(w.written?.[`${RUN_DIR}/sess-1.seen`] ?? 'null')).toEqual({ primary: DEPOT, nonce: 'n1' })
+      files[BINDING]!.text = JSON.stringify({ primary: DEPOT, nonce: 'n2', at: 2 })
+      await clock.advance(2_000)
+      await settle(clock)
+      expect(JSON.parse(w.written?.[`${RUN_DIR}/sess-1.seen`] ?? 'null')).toEqual({ primary: DEPOT, nonce: 'n2' })
+    })
+
+    test("a sentinel schedules the bound run's stage from another repository (A2)", async ($, on) => {
+      const files = bound({ pending: 'compact' })
+      const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], processRuns: [], written: {}, autoFileAt: { [DEPOT]: files[DEPOT_AUTO]! } }
+      const clock = world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+      await settle(clock)
+      expect(w.compacts).toHaveLength(1)
+      expect(autoCalls(w).length).toBeGreaterThan(0)
+      for (const argv of autoCalls(w)) expect(argv.startsWith(IN_DEPOT)).toBe(true)
+      expect(autoCalls(w).some(argv => argv.includes('--session sess-1 compacted'))).toBe(true)
+    })
+
+    test('rebinds the cleared session in the bound primary (A2)', async ($, on) => {
+      const files = bound({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.' })
+      const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], processRuns: [], written: {}, autoFileAt: { [DEPOT]: files[DEPOT_AUTO]! } }
+      let seenAtRebind: string | undefined
+      w.onAutoRun = word => {
+        if (word === 'rebind') seenAtRebind = w.written?.[`${RUN_DIR}/sess-2.seen`]
+      }
+      const clock = world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+      await settle(clock)
+      expect(w.commands).toEqual(['/clear'])
+      expect((JSON.parse(seenAtRebind ?? 'null') as { primary?: string } | null)?.primary).toBe(DEPOT)
+      expect(autoCalls(w).some(argv => argv.startsWith(IN_DEPOT) && argv.includes('--session sess-2 rebind --to sess-2'))).toBe(true)
+    })
+
+    for (const prefix of [`cd '${DEPOT}' && `, '']) {
+      test(`the after-compaction prompt names the checkout (A44): prefix "${prefix}"`, async ($, on) => {
+        const files = autoFiles()
+        const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO], cdPrefixOut: prefix }
+        const clock = world(on, w)
+        signedIn(on, files)
+        await $.session.start(START)
+        await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+        await settle(clock)
+        const prompt = w.prompts?.[0] ?? ''
+        if (prefix === '') expect(prompt).toMatch(/§After a compaction says\.$/)
+        else expect(prompt.endsWith(` Run every command as \`cd '${DEPOT}' && …\`.`)).toBe(true)
+        expect(w.autoRuns).toContain('--session sess-1 cd-prefix')
+      })
+    }
+
+    test('no binding leaves every call where it was', async ($, on) => {
+      const WORKTREE = '/home/me/code/shop-wt'
+      const files: NonNullable<World['files']> = { ...autoFiles(), [WORKTREE]: { text: '', kind: 'dir' as const } }
+      const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], processRuns: [], written: {}, files, autoFile: files[AUTO], checkout: WORKTREE }
+      const clock = world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+      await settle(clock)
+      expect(autoCalls(w).length).toBeGreaterThan(0)
+      for (const argv of autoCalls(w)) expect(argv.startsWith(`bash -c cd -- "$1" && shift && exec bash "$@" auto-run ${WORKTREE} `)).toBe(true)
+      expect(Object.keys(w.written ?? {}).filter(path => path.endsWith('.seen'))).toEqual([])
+    })
   })
 
   test("runs auto-run from the primary when the session's checkout is gone", async ($, on) => {
