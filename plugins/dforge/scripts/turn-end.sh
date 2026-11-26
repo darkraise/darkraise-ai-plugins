@@ -62,7 +62,19 @@ stamp="${HOME:-}/.claude/dforge/sessions/turns/$(printf '%s' "$session_id" | tr 
 . "${SCRIPT_DIR}/lib/turn-refs.sh"
 stamp_root() { turn_primary "$(head -n 1 "$stamp.refs" 2>/dev/null | tr -d '\r')"; }
 root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || root=$(stamp_root) || root=""
-auto_pending=$([ -n "$root" ] && cd "$root" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" pending 2>/dev/null) || auto_pending=""
+auto_pending=$([ -n "$root" ] && cd "$root" 2>/dev/null && AR_RESOLVE=local bash "${SCRIPT_DIR}/auto-run" --session "$session_id" pending 2>/dev/null) || auto_pending=""
+# A run of this session's in another repository: its binding names the
+# primary, which then stands in for the session's repository.
+if [ -z "$auto_pending" ]; then
+  bfile="${HOME:-}/.claude/dforge/sessions/run/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-').json"
+  bprimary=""
+  [ ! -f "$bfile" ] || bprimary=$(jq -r '.primary // empty | strings' < "$bfile" 2>/dev/null | tr -d '\r') || bprimary=""
+  if [ -n "$bprimary" ] && [ -d "$bprimary" ] \
+     && bound_pending=$(cd "$bprimary" && AR_RESOLVE=local bash "${SCRIPT_DIR}/auto-run" --session "$session_id" pending 2>/dev/null) \
+     && [ -n "$bound_pending" ]; then
+    root=$bprimary auto_pending=$bound_pending
+  fi
+fi
 [ -f "$stamp" ] || [ -n "$auto_pending" ] || exit 0
 [ -n "$root" ] || exit 0
 . "${SCRIPT_DIR}/lib/roots.sh"
@@ -232,7 +244,7 @@ if [ -n "$auto_pending" ]; then
   if [ "$holds" -gt "$AUTO_HOLD_CAP" ]; then
     rm -f "$stamp.holds" 2>/dev/null
     why="the turn ended ${AUTO_HOLD_CAP} times in a row without its sentinel line"
-    (cd "${cwd:-$PWD}" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" stop --reason "$why" >/dev/null 2>&1) || true
+    (cd "$root" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" stop --reason "$why" >/dev/null 2>&1) || true
     hold "The auto run stopped: ${why}. End as reference/auto-run.md §Stopping says." "dforge: the auto run stopped (${why})"
     exit 0
   fi
@@ -246,6 +258,8 @@ if [ -n "$auto_pending" ]; then
   if [ "$auto_pending" = handoff ]; then
     reason="An auto run is bound to this session and a compaction left too much behind (pending: handoff; see reference/auto-run.md §Clears), so this turn ends only on the clearing line, after the clear. Do not stop: finish the task in flight, run dforge:handoff, then \`bash \"${root_shown}/scripts/auto-run\" clear\` and end with the line \`Auto run: clearing\`. If the run must stop, run \`bash \"${root_shown}/scripts/auto-run\" stop --reason \"<why>\"\` first, then end as the attended flow would."
   fi
+  prefix=$(cd "$root" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" cd-prefix 2>/dev/null) || prefix=""
+  [ -z "$prefix" ] || reason="$reason Run every command as \`${prefix}…\`."
   hold "$reason" "dforge held the stop (auto run, hold ${holds} of ${AUTO_HOLD_CAP}): pending ${auto_pending}, and the turn did not end on its sentinel line"
   exit 0
 fi

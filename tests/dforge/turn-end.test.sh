@@ -639,5 +639,50 @@ check "A7: darkmem: the mirror's block written this turn releases" "$(stop s-wi 
 rm -rf "$REPO/.dforge/sdd/2026-10-12-dm"
 rm -f "$HOME/.dforge/config.json" "$HOME/.dforge/stores.json"
 
+# --- binding: the session's run lives in RB; the hook runs in RA ---
+RA="$TMP/ra" RB="$TMP/rb" NOGIT="$TMP/nogit"
+for r in "$RA" "$RB"; do
+  git init -q "$r"
+  git -C "$r" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m init
+done
+mkdir -p "$NOGIT"
+date +%s > "$HOME/.claude/dforge/sessions/cockpit/s-h"
+(cd "$RB" && bash "$AR" --session s-h start --spec docs/s.md --register docs/r.md >/dev/null)
+BSTATE="$RB/.dforge/sdd/auto-run.json" ASTATE="$RA/.dforge/sdd/auto-run.json"
+BIND="$HOME/.claude/dforge/sessions/run/s-h.json" BYID="$HOME/.claude/dforge/sessions/by-id/s-h.json"
+setj() { jq "$2" "$1" > "$1.tmp" && mv "$1.tmp" "$1"; }
+has_reason() { jq -r --arg t "$2" '(.reason // "") | contains($t)' <<<"${1:-{\}}" 2>/dev/null; }
+setj "$BSTATE" '.pending = "compact"'
+o=$(stop_in "$RA" s-h 'Done.')
+check "binding: holds a turn without its sentinel (A1)" "$(decision "$o"):$(has_reason "$o" 'pending: compact')" "block:true"
+check "binding: books the hold in B" "$(jq -r '.totals.holds' "$BSTATE")" "1"
+o=$(stop_in "$RA" s-h $'Done.\n\nAuto run: compacting'); status=$?
+check "binding: passes a turn that ends on its sentinel (A1)" "$status:$o" "0:"
+o=$(stop_in "$NOGIT" s-h 'Done.')
+check "binding: holds from outside any repository (A1)" "$(decision "$o"):$(has_reason "$o" 'pending: compact')" "block:true"
+
+no_binding() { mv "$BIND" "$BIND.away"; stop_in "$RA" s-h 'Done.'; mv "$BIND.away" "$BIND"; }
+setj "$BSTATE" '.active = false'
+check "binding: a stopped run changes nothing (A1)" "$(stop_in "$RA" s-h 'Done.')" "$(no_binding)"
+setj "$BSTATE" '.active = true | .session = "s-other"'
+check "binding: a run bound to another session changes nothing" "$(stop_in "$RA" s-h 'Done.')" "$(no_binding)"
+setj "$BSTATE" '.session = "s-h"'
+
+mkdir -p "${BYID%/*}"
+jq -n --arg c "$RA" '{cwd: $c}' > "$BYID"
+o1=$(stop_in "$RA" s-h 'Done.')
+jq -n --arg c "$RB" '{cwd: $c}' > "$BYID"
+o2=$(stop_in "$RA" s-h 'Done.')
+check "binding: the hold message names the checkout (A44)" "$(has_reason "$o1" "cd '$RB' &&"):$(has_reason "$o2" "cd '")" "true:false"
+rm -f "$BYID"
+
+(cd "$RA" && bash "$AR" --session s-h start --spec docs/a.md --register docs/r.md >/dev/null)
+setj "$ASTATE" '.pending = "clear"'
+jq -n --arg p "$RB" '{primary: $p, nonce: "n", at: 0}' > "$BIND"
+cp "$BSTATE" "$TMP/b.before"
+o=$(stop_in "$RA" s-h 'Done.')
+check "binding: a local run of the session wins" \
+  "$(has_reason "$o" 'pending: clear'):$(jq -r '.totals.holds' "$ASTATE"):$(cmp -s "$BSTATE" "$TMP/b.before" && echo same)" "true:1:same"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
