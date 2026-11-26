@@ -61,7 +61,9 @@ applied its own one-shot fallback. `lists=0` means the Claude seat reviews
 alone: say so aloud, with each reviewer's reason.
 
 The non-`OK` reason tokens are `gate`, `refused`, `quota`, `quota-stderr`,
-`timeout`, `wrote`, `schema` and `error`. A `wrote` run changed the worktree,
+`timeout`, `wrote`, `schema`, `unread` and `error`. An `unread` review is
+schema-valid but scores every criterion 1 with no finding: the reviewer read
+nothing, so it is no list. A `wrote` run changed the worktree,
 `HEAD`, the stash list, the git config or a hook: it never counts as a list,
 and what changed is named in `<out>.wrote`. Before any commit the session
 undoes a changed path or `HEAD` in the panel's `--cwd`; a final round's

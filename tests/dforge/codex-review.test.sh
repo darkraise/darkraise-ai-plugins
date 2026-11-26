@@ -152,6 +152,19 @@ present "a schema-shaped task report is OK" "$out" "status=OK"
 out=$(seat task --out "$TMP/o.json" --prompt "$TMP/p.txt")
 present "task output that is not schema-shaped is FAILED" "$out" "status=FAILED"
 
+# A reviewer that read nothing still answers in the schema: every score 1 and
+# no finding to justify any of them.
+UNREAD_TASK='{"spec":1,"scope":1,"verification":1,"quality":1,"spec_verdict":"issues","task_quality":"needs_fixes","findings":[],"cannot_verify":["the diff was not read"]}'
+out=$(STUB_FINAL_MESSAGE="$UNREAD_TASK" seat task --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
+present "an unread task review is FAILED as unread" "$out" "status=FAILED exit=0 out=$TMP/o.json evidence=none reason=unread"
+check "an unread task review exits 1" "$rc" "1"
+out=$(STUB_FINAL_MESSAGE='{"executability":1,"coherence":1,"coverage":1,"assumptions":1,"findings":[]}' seat plan --out "$TMP/o.json" --prompt "$TMP/p.txt")
+present "an unread plan review is FAILED as unread" "$out" "reason=unread"
+out=$(STUB_FINAL_MESSAGE='{"spec":1,"scope":1,"verification":1,"quality":1,"spec_verdict":"issues","task_quality":"needs_fixes","findings":[{"severity":"Critical","file":"a.sh","line":3,"summary":"x"}],"cannot_verify":[]}' seat task --out "$TMP/o.json" --prompt "$TMP/p.txt")
+present "all scores 1 with a finding is a review" "$out" "status=OK"
+out=$(STUB_FINAL_MESSAGE='{"spec":2,"scope":1,"verification":1,"quality":1,"spec_verdict":"issues","task_quality":"needs_fixes","findings":[],"cannot_verify":[]}' seat task --out "$TMP/o.json" --prompt "$TMP/p.txt")
+present "one score above 1 without findings is a review" "$out" "status=OK"
+
 out=$(STUB_MODE=hang seat final --out "$TMP/o.md" --base main); rc=$?
 present "a run past its deadline is TIMEOUT, never a model change" "$out" "status=TIMEOUT"
 check "TIMEOUT exits 1" "$rc" "1"
@@ -213,6 +226,8 @@ done
 out=$(STUB_REFUSE_ONCE=1 STUB_FINAL_MESSAGE='{}' seat task --out "$TMP/o.json" --prompt "$TMP/p.txt")
 present "malformed fallback is FAILED" "$out" 'status=FAILED'
 present "the malformed report came from the fallback seat" "$out" "codex-judge gpt-6.1-sol/high status=FAILED"
+out=$(STUB_REFUSE_ONCE=1 STUB_FINAL_MESSAGE="$UNREAD_TASK" seat task --out "$TMP/o.json" --prompt "$TMP/p.txt")
+present "an unread fallback review is FAILED as unread" "$out" "codex-judge gpt-6.1-sol/high status=FAILED exit=0 out=$TMP/o.json evidence=none reason=unread"
 
 # --- task and plan kinds -----------------------------------------------------
 out=$(run --kind task --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
