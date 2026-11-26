@@ -35,6 +35,7 @@ export const windowsSeconds = {
   'tests/dforge/auto-default.test.sh': 10,
   'tests/dforge/auto-run-binding.test.sh': 100,
   'tests/dforge/auto-run-budget.test.sh': 80,
+  'tests/dforge/auto-run-cleanup-and-long-runs.acceptance.test.sh': 460,
   'tests/dforge/auto-run-preflight.test.sh': 10,
   'tests/dforge/auto-run-skills.test.sh': 10,
   'tests/dforge/auto-run-worktree-setting-qa.acceptance.test.sh': 420,
