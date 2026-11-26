@@ -183,8 +183,8 @@ run extra
 check "usage: exit 2" "$status" "2"
 
 # --- strict: the final phase and a plan's last tasks keep the task budget ---
-# They are measured against it but never hand off: the plan finishes in this
-# session even past the budget.
+# They are measured against it and run past it, so the plan finishes in this
+# session, until hard (564,500 in the 650k window; 375k at a pinned 300k).
 asst 500000 > "$T"
 record s-1 "$T"
 run --final
@@ -192,10 +192,10 @@ check "final: past the task budget: exit 0" "$status" "0"
 check "final: line" "$out" "budget (final): 500k of 465k (107%) — ok — source: record"
 asst 700000 > "$T"
 run --final
-check "final: far over: exit 0, the final phase never hands off" "$status:$out" "0:budget (final): 700k of 465k (150%) — ok — source: record"
+check "final: past hard: exit 5" "$status:$out" "5:budget (final): 700k of 465k (150%) — handoff — source: record"
 asst 500000 > "$T"
 DFORGE_BUDGET=300000 run --final
-check "final: a pinned budget is its limit" "$out" "budget (final): 500k of 300k (166%) — ok — source: record"
+check "final: a pinned budget is its limit" "$out" "budget (final): 500k of 300k (166%) — handoff — source: record"
 settings 800000
 DFORGE_BUDGET=465000 run
 check "800k window, pinned task budget: tasks still hand off at 465k" "$out" "budget: 500k of 465k (107%) — handoff — source: record"
@@ -208,27 +208,27 @@ run --tail 1
 check "tail of 1: past the task budget: exit 0" "$status" "0"
 check "tail of 1: line" "$out" "budget (last task): 500k of 465k (107%) — ok — source: record"
 DFORGE_BUDGET=300000 run --tail 2
-check "tail of 2: a pinned budget is its limit" "$out" "budget (last 2 tasks): 500k of 300k (166%) — ok — source: record"
+check "tail of 2: a pinned budget is its limit" "$out" "budget (last 2 tasks): 500k of 300k (166%) — handoff — source: record"
 asst 700000 > "$T"
 run --tail 2
-check "tail: far over: exit 0, the tail never hands off" "$status" "0"
+check "tail: past hard: exit 5" "$status" "5"
 run --tail 3
 check "tail of 3: usage" "$status" "2"
 run --tail 0
 check "tail of 0: usage" "$status" "2"
 
-# --- the plan after a spec: 150% of the task budget, capped at the final limit ---
+# --- the plan after a spec: strict measures against hard ---
 asst 500000 > "$T"
 run --plan
-check "plan: past the task budget, under the final cap: exit 0" "$status" "0"
-check "plan: capped at the final-phase limit" "$out" "budget (plan): 500k of 553k (90%) — ok — source: record"
+check "plan: past the task budget, under hard: exit 0" "$status" "0"
+check "plan: measured against hard" "$out" "budget (plan): 500k of 565k (88%) — ok — source: record"
 DFORGE_BUDGET=300000 run --plan
-check "plan: 150% of a pinned task budget" "$out" "budget (plan): 500k of 450k (111%) — handoff — source: record"
+check "plan: hard of a pinned task budget" "$out" "budget (plan): 500k of 375k (133%) — handoff — source: record"
 DFORGE_BUDGET=300000 run --plan
 check "plan: over: exit 5" "$status" "5"
 settings 800000
 DFORGE_BUDGET=465000 run --plan
-check "800k window, pinned 465k: capped at 680k, not 698k" "$out" "budget (plan): 500k of 680k (73%) — ok — source: record"
+check "800k window, pinned 465k: hard is 125% of it" "$out" "budget (plan): 500k of 581k (86%) — ok — source: record"
 settings 650000
 run --plan extra
 check "plan: arguments: exit 2" "$status" "2"
@@ -240,6 +240,33 @@ DFORGE_JQ=no-such-jq run --final
 check "final: no jq: line" "$out" "budget (final): unknown — unknown — no jq"
 run --final extra
 check "final: arguments: exit 2" "$status" "2"
+
+# --- strict: the tail, the final phase, the plan and finishing end at hard (A12) ---
+# hard is 375k at a 300k budget and an 800k window.
+settings 800000
+strict() { DFORGE_BUDGET=300000 run "$@"; printf '%s:%s' "$status" "${out% — source:*}"; }
+asst 370000 > "$T"
+check "strict: the final phase is ok below hard (A12)" "$(strict --final)" "0:budget (final): 370k of 300k (123%) — ok"
+asst 375000 > "$T"
+check "strict: the final phase hands off at hard (A12)" "$(strict --final)" "5:budget (final): 375k of 300k (125%) — handoff"
+a="$(strict --tail 1)|$(strict --tail 2)"
+asst 374000 > "$T"
+check "strict: the tail hands off at hard (A12)" "$a|$(strict --tail 1)" \
+  "5:budget (last task): 375k of 300k (125%) — handoff|5:budget (last 2 tasks): 375k of 300k (125%) — handoff|0:budget (last task): 374k of 300k (124%) — ok"
+a=$(strict --plan); b=$(strict --finish)
+asst 375000 > "$T"
+check "strict: the plan after the spec measures against hard (A12)" "$a|$(strict --plan)" \
+  "0:budget (plan): 374k of 375k (99%) — ok|5:budget (plan): 375k of 375k (100%) — handoff"
+check "strict: finishing is measured against hard (A12)" "$b|$(strict --finish)" \
+  "0:budget (finishing): 374k of 375k (99%) — ok|5:budget (finishing): 375k of 375k (100%) — handoff"
+mkdir -p "$HOME/.dforge"
+printf '{"handoffMode":"relaxed"}\n' > "$HOME/.dforge/config.json"
+check "relaxed: nothing changes (A12)" "$(strict --final)|$(strict --tail 1)|$(strict --plan)|$(strict --finish)" \
+  "0:budget (final): 375k of 680k (55%) — ok|0:budget (last task): 375k of 680k (55%) — ok|0:budget (plan): 375k of 450k (83%) — ok|0:budget (finishing): 375k of 680k (55%) — ok"
+rm -f "$HOME/.dforge/config.json"
+run --finish extra
+check "finish: arguments: exit 2" "$status" "2"
+settings 650000
 
 # --- the handoffMode and handoffTokens settings ---
 # Relaxed measures a plain task against the final-phase limit (553k
@@ -608,12 +635,14 @@ export DFORGE_BUDGET=465000
 run
 check "auto: ok, exit 0" "$status:$out" "0:budget (auto): 300k of 465k (64%) — ok — source: record"
 run --plan
-check "auto: --plan keeps its own limit" "$out" "budget (plan): 300k of 680k (44%) — ok — source: record"
+check "auto: --plan keeps its own limit" "$out" "budget (plan): 300k of 581k (51%) — ok — source: record"
 asst 470000 > "$AUTO_T"
 run
 check "auto: compact, exit 6" "$status:$out" "6:budget (auto): 470k of 465k (101%) — compact — source: record"
 run --final
 check "auto: --final follows the run's rule" "$out" "budget (auto): 470k of 465k (101%) — compact — source: record"
+run --finish
+check "auto run: --finish prints the auto line" "${out:0:12}" "budget (auto"
 AUTO_STATE="$REPO/.dforge/sdd/auto-run.json"
 jq '.pending = "handoff"' "$AUTO_STATE" > "$AUTO_STATE.tmp" && mv "$AUTO_STATE.tmp" "$AUTO_STATE"
 run --final

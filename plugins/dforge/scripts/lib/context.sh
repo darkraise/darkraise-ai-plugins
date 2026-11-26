@@ -17,12 +17,13 @@ CTX_COMPACT_PCT=93
 CTX_TASK_MARGIN=140000
 CTX_FINAL_PCT=85
 # A plan's last tasks join the final phase: once this many or fewer remain, they
-# never hand off. Finishing them here costs less than a fresh session's
-# baseline plus its reload.
+# hand off only at hard (ctx_hard) in strict mode. Finishing them here costs
+# less than a fresh session's baseline plus its reload.
 CTX_TAIL_TASKS=2
-# After a committed spec, the plan is written in the same session while the
-# context is under 150% of the task budget, capped at the final-phase limit so
-# plan writing never starts at the compaction point.
+# After a committed spec in relaxed mode, the plan is written in the same
+# session while the context is under 150% of the task budget, capped at the
+# final-phase limit so plan writing never starts at the compaction point.
+# Strict mode measures against hard instead.
 CTX_PLAN_PCT=150
 
 . "$(dirname "${BASH_SOURCE[0]}")/dforge-env.sh"
@@ -363,6 +364,18 @@ ctx_plan_budget() {
   echo "$plan"
 }
 
+# ctx_hard MODEL — hard (ar_hard) of the task budget, pinned or computed, and
+# the window: the most a strict session holds to finish a plan's tail, its
+# final phase, the plan after a spec, or the branch. Nothing and status 1 when
+# the window is unknown.
+ctx_hard() {
+  local window budget
+  window=$(ctx_window "$1") || return 1
+  budget=$(ctx_pinned_budget)
+  [ -n "$budget" ] || budget=$(ctx_budget "$1") || return 1
+  ar_hard "$budget" "$window"
+}
+
 # The primary checkout's root: a worktree's .dforge/ lives with the checkout
 # that owns the repository, so every session logs to one file.
 ctx_primary_root() {
@@ -444,13 +457,16 @@ ctx_auto_line() {
   return 0
 }
 
-# ctx_line [final | tail R | plan] — print the budget line; return 0 ok, 5
-# handoff, 6 compact (an auto run only), 3 unknown. With final, the plan's final
-# phase: measured against the task budget, it never hands off. tail R does the
-# same before one of a plan's last R tasks (CTX_TAIL_TASKS), so the plan
-# finishes in this session past its budget. With the handoffMode setting at
-# relaxed both measure against the final-phase limit instead, and a tail task
-# past it hands off. With the handoffMode setting at relaxed, a plain task
+# ctx_line [final | tail R | plan | finish] — print the budget line; return 0
+# ok, 5 handoff, 6 compact (an auto run only), 3 unknown. With final, the plan's
+# final phase: measured against the task budget, it hands off only at hard
+# (ctx_hard). tail R does the same before one of a plan's last R tasks
+# (CTX_TAIL_TASKS), so the plan finishes in this session past its budget. plan,
+# the check after a committed spec, and finish, the check before finishing the
+# branch, measure against hard itself. With the handoffMode setting at
+# relaxed final and tail measure against the final-phase limit instead, and a
+# tail task past it hands off; plan keeps ctx_plan_budget; finish measures
+# against the final-phase limit and never hands off. With the handoffMode setting at relaxed, a plain task
 # measures against the final-phase limit too, and the label says so. An auto run bound to the session (AR_SESSION, else
 # CLAUDE_CODE_SESSION_ID) replaces every limit but the plan's with its own
 # (ar_verdict, reference/auto-run.md): 6 asks for a compaction and 5 for a
@@ -459,7 +475,7 @@ ctx_auto_line() {
 ctx_line() {
   local budget="" model="" tokens bk tk pct found=0 claude="" rollout="" of window
   local label=budget
-  local limit=task auto=0 regime mode finishing=0
+  local limit=task auto=0 regime mode finishing=0 hard="" past=0
   CTX_TOKENS=""
   mode=$(dforge_setting handoffMode strict)
   if [ "${1:-}" = final ]; then
@@ -471,6 +487,10 @@ ctx_line() {
     if [ "${2:-1}" = 1 ]; then label="budget (last task)"; else label="budget (last ${2} tasks)"; fi
   fi
   [ "${1:-}" = plan ] && label="budget (plan)" limit=plan
+  if [ "${1:-}" = finish ]; then
+    label="budget (finishing)"
+    if [ "$mode" = relaxed ]; then limit=final finishing=1; else limit=hard; fi
+  fi
   # An auto run bound to this session replaces every limit but the plan's.
   if [ "${1:-}" != plan ]; then
     AR_SESSION=${AR_SESSION:-${CLAUDE_CODE_SESSION_ID:-}}
@@ -519,8 +539,11 @@ ctx_line() {
   ctx_window_prime "$model"
   # An unknown window leaves the budget empty: only a pinned task budget
   # stands without one.
+  [ "$mode" = relaxed ] || hard=$(ctx_hard "$model") || hard=""
   if [ "$limit" = final ] || [ "$limit" = relaxed ]; then
     budget=$(ctx_final_budget "$model") || budget=""
+  elif [ "$limit" = hard ] || { [ "$limit" = plan ] && [ -n "$hard" ]; }; then
+    budget=$hard
   elif [ "$limit" = plan ]; then
     budget=$(ctx_plan_budget "$model") || budget=""
   else
@@ -559,9 +582,16 @@ ctx_line() {
   fi
   bk=$(( (budget + 500) / 1000 ))
   pct=$(( tokens * 100 / budget ))
-  # The final phase never hands off (reference/session-budget.md §Stops), nor in
-  # strict mode does a plan's tail: an over-limit line still says ok.
-  if [ "$tokens" -ge "$budget" ] && [ "$finishing" -eq 0 ]; then
+  # In strict mode a plan's tail and its final phase run past the task budget
+  # and hand off only at hard (reference/session-budget.md §Stops); relaxed
+  # mode's final phase and finishing never hand off. An unknown hard hands
+  # nothing off.
+  if [ "$finishing" -eq 1 ]; then
+    [ -z "$hard" ] || [ "$tokens" -lt "$hard" ] || past=1
+  elif [ "$tokens" -ge "$budget" ]; then
+    past=1
+  fi
+  if [ "$past" -eq 1 ]; then
     echo "$label: ${tk}k of ${bk}k (${pct}%) — handoff — source: $(ctx_source_text)"
     return 5
   fi

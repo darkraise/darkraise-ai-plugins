@@ -82,6 +82,10 @@ printf 'Task 2: complete (commit abc1235)
 out=$(bash "$P/scripts/task-brief" docs/plan.md 3 2>/dev/null)
 check "task-brief: one task left: the tail line" "$(tail -n 1 <<<"$out")" \
   "budget (last task): 500k of 465k (107%) — ok — source: record"
+printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-opus-5-5","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":375000}}}\n' > "$T"
+out=$(DFORGE_BUDGET=300000 bash "$P/scripts/task-brief" docs/plan.md 3 2>/dev/null)
+check "strict: task-brief in the tail hands off at hard (A12)" "$(tail -n 1 <<<"$out")" \
+  "budget (last task): 375k of 300k (125%) — handoff — source: record"
 printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-opus-5-5","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":560000}}}\n' > "$T"
 out=$(bash "$P/scripts/task-brief" docs/plan.md 3 2>/dev/null); status=$?
 check "task-brief: far past the budget in the tail: still ok" "$(tail -n 1 <<<"$out")" \
