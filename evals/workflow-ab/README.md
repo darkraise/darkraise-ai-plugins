@@ -24,7 +24,8 @@ creates `<WAB_ROOT>/<ARM>-<RUN>/` and refuses an existing one.
   highest tier any `dforge:impl-*` Implementer line names (haiku counts as
   sonnet), at that tier's effort, raised to `high` when a task has risk 3;
   bare `**Items:**` numbers are qualified with the basename of the register
-  the spec's `**Register:**` line names; Implementer lines stay. dagents:
+  the spec's `**Register:**` line names, or else of the one register whose
+  `**Covers:**` line names the spec; Implementer lines stay. dagents:
   `docs/dforge/` moves to `docs/dagents/` (dagents reads only its own docs
   tree) and `dforge:impl-` becomes `dagents:impl-`; the Execution and
   Parallelism lines stay. Both append one line to Global Constraints saying
@@ -34,7 +35,11 @@ creates `<WAB_ROOT>/<ARM>-<RUN>/` and refuses an existing one.
   dforge config (read only), else `DFORGE_BUDGET`, else 300000;
   `finishAction` `keep`; dforge `decisionApi` `off`, every `apiBudget*` cap 0,
   `codexReview` and `agyReview` false; dagents `codexReview`, `codexLane` and
-  `agyLane` false. `clone/.claude/settings.local.json` switches off every
+  `agyLane` false. The owner's corepack `lastKnownGood.json` is copied into
+  `home/.cache/node/corepack/`, so a `pnpm` run outside a package that pins
+  its version gets the owner's version, not the newest; the caller's
+  `COREPACK_ENABLE_AUTO_PIN`, when set, carries into the launch
+  environment. `clone/.claude/settings.local.json` switches off every
   plugin the clone's project settings enable, and is excluded from git.
 - **Record.** `arm.json` holds the arm, the plan path in the clone, the plugin
   commit, the pins, the launch model and effort, parallelism, the Claude Code
@@ -85,7 +90,9 @@ same way and writes `stopped`.
 
 **The sandbox** (`sandbox`, private mount and pid namespaces made with
 `unshare`, the command in a further user namespace so it cannot undo the
-mounts or see a host process) leaves writable only the session's own directories in the run directory
+mounts or see a host process; that namespace maps each user and group id
+the sandbox has to itself, so a root caller can still chown to another
+user) leaves writable only the session's own directories in the run directory
 (`clone/`, `home/`, `claude-config/`, `gh/`, `guard/`, `gocache/`) and each
 `WAB_WRITABLE` directory, so the files the harness writes (`state`,
 `arm.json`, `out/`, the repair marker) are out of its reach; every other mount is read-only. `/tmp` and

@@ -106,6 +106,17 @@ if [ "$arm" = dforge ]; then
   spec=$(path_value Spec "$plan_text")
   if [ -n "$spec" ] && [ -f "$clone/$spec" ]; then
     register=$(path_value Register "$clone/$spec")
+    if [ -z "$register" ]; then
+      # dforge itself resolves a spec's register this way round, through the
+      # register's Covers line, so older specs carry no Register line.
+      covering=()
+      for f in "$clone/$(dirname "$(dirname "$spec")")"/registers/*.md; do
+        [ -f "$f" ] || continue
+        header_value Covers "$f" | grep -qF "$(basename "$spec")" && covering+=("$f")
+      done
+      [ ${#covering[@]} -le 1 ] || wab_die 1 "several registers cover $spec: ${covering[*]##*/}"
+      register=${covering[0]:-}
+    fi
     [ -z "$register" ] || register=$(basename "$register" .md)
   fi
 else
@@ -141,7 +152,7 @@ ARM=$arm MODEL=$model EFFORT=$effort REG=$register C14=$WAB_C14 awk '
   $0 == ENVIRON["C14"] { seen = 1 }
   { line[NR] = $0 }
   END {
-    if (bare) { print "workflow-ab: the plan cites bare **Items:** numbers but its spec names no **Register:**" > "/dev/stderr"; exit 3 }
+    if (bare) { print "workflow-ab: the plan cites bare **Items:** numbers but its spec names no register and none covers it" > "/dev/stderr"; exit 3 }
     for (i = 1; i <= NR; i++) if (line[i] == "## Global Constraints") { gc = i; break }
     if (!gc) { print "workflow-ab: the plan has no ## Global Constraints section" > "/dev/stderr"; exit 3 }
     last = NR
@@ -171,6 +182,14 @@ else
 fi
 mkdir -p "$dir/home/.$arm"
 printf '%s\n' "$pins" > "$dir/home/.$arm/config.json"
+
+# A pnpm run outside any package.json that pins a version takes corepack's last
+# known good one; a scratch home has none, so corepack would fetch the newest.
+lkg="${COREPACK_HOME:-${XDG_CACHE_HOME:-$HOME/.cache}/node/corepack}/lastKnownGood.json"
+if [ -f "$lkg" ]; then
+  mkdir -p "$dir/home/.cache/node/corepack" && cp -L "$lkg" "$dir/home/.cache/node/corepack/" \
+    || wab_die 1 "cannot copy $lkg"
+fi
 
 # Plugins the clone's project settings enable stay off: only the arm's loads.
 mkdir -p "$clone/.claude"

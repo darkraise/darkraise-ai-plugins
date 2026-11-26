@@ -54,13 +54,15 @@ export WAB_ROOT="$TMP/root" WAB_CLAUDE="$TMP/claude" WAB_CLAUDE_CONFIG="$TMP/cla
 
 C14='- This is a replay in a clone with no remote: no push, tag or workflow dispatch; a gate that needs one is recorded as not run.'
 
-# make_source DIR [SED] — a source repository built from the fixture: the base
-# holds everything but the plan, which a later commit adds (edited by SED),
-# one more commit follows, and an origin remote holds both.
+# make_source DIR [SED [SPEC_SED]] — a source repository built from the
+# fixture: the base holds everything but the plan (its spec edited by
+# SPEC_SED), which a later commit adds (edited by SED), one more commit
+# follows, and an origin remote holds both.
 make_source() {
   local src=$1
   mkdir -p "$src"
   cp -R "$FIXTURE/." "$src/"
+  [ -z "${3:-}" ] || sed -i -E "$3" "$src/docs/dforge/specs/2026-01-01-fixture-design.md"
   mkdir -p "$src/.claude"
   printf '{"enabledPlugins": {"other@market": true, "off@market": false}}\n' > "$src/.claude/settings.json"
   mv "$src/$PLAN" "$TMP/plan.md"
@@ -137,6 +139,18 @@ for f in "$dplan" "$aplan"; do
   check "prepare_converts_per_arm: the replay line once, ending Global Constraints (${f#"$WAB_ROOT/"})" \
     "$(grep -cxF -- "$C14" "$f") $(awk -v l="$C14" '$0 == "## Global Constraints" { on = 1; next } on && /^## / { exit } on && NF { last = $0 } END { print (last == l) }' "$f")" "1 1"
 done
+make_source "$TMP/src-covers" '' '/^\*\*Register:\*\*/d'
+WAB_SOURCE="$TMP/src-covers" WAB_BASE=$(git -C "$TMP/src-covers" rev-list --max-parents=0 HEAD) prep dforge 15
+check "prepare_converts_per_arm: a spec with no Register line takes the register whose Covers names it" \
+  "$status $(grep '^\*\*Items:\*\*' "$WAB_ROOT/dforge-15/clone/$PLAN" 2>/dev/null)" "0 **Items:** 2026-01-01-fixture#1"
+make_source "$TMP/src-uncovered" '' '/^\*\*Register:\*\*/d'
+sed -i '/^\*\*Covers:\*\*/d' "$TMP/src-uncovered/docs/dforge/registers/2026-01-01-fixture.md"
+git -C "$TMP/src-uncovered" commit -qam "docs: drop the Covers line"
+WAB_SOURCE="$TMP/src-uncovered" WAB_BASE=$(git -C "$TMP/src-uncovered" rev-parse HEAD) prep dforge 16
+check "prepare_converts_per_arm: bare Items with no register to qualify them are refused" \
+  "$status $out" "1 workflow-ab: the plan cites bare **Items:** numbers but its spec names no register and none covers it
+workflow-ab: cannot convert the plan"
+
 make_source "$TMP/src-opus" '/^### Task 2/,$ { s/impl-sonnet-high/impl-opus-medium/; s/^\*\*Evaluation:\*\* .*/**Evaluation:** files 1 - spec 1 - coupling 1 - risk 3 = 6/ }'
 WAB_SOURCE="$TMP/src-opus" WAB_BASE=$(git -C "$TMP/src-opus" rev-list --max-parents=0 HEAD) prep dforge 4
 check "prepare_converts_per_arm: an opus risk-3 variant exits 0" "$status" "0"
@@ -180,14 +194,19 @@ WAB_SOURCE="$TMP/src-false" WAB_BASE=$(git -C "$TMP/src-false" rev-list --max-pa
 check "prepare_check_blocks: a failing Integration check exits 1" "$status" "1"
 check "prepare_check_blocks: and writes check-failed" "$(cat "$WAB_ROOT/dforge-2/state" 2>/dev/null)" "check-failed"
 make_source "$TMP/src-true" 's/^\*\*Integration check:\*\* .*/**Integration check:** `env > check-env.txt`/'
+mkdir -p "$HOME/.cache/node/corepack"
+printf '{"pnpm": "11.17.0"}\n' > "$HOME/.cache/node/corepack/lastKnownGood.json"
 WAB_SOURCE="$TMP/src-true" WAB_BASE=$(git -C "$TMP/src-true" rev-list --max-parents=0 HEAD) GH_TOKEN=secret SSH_AUTH_SOCK=/sock \
-  prep dforge 3 --check
+  COREPACK_ENABLE_AUTO_PIN=0 prep dforge 3 --check
 check "prepare_check_blocks: a passing Integration check exits 0" "$status" "0"
 check "prepare_check_blocks: and writes no state" "$([ -e "$WAB_ROOT/dforge-3/state" ] && echo written || echo none)" "none"
 cenv="$WAB_ROOT/dforge-3/clone/check-env.txt"
 check "prepare_check_blocks: the check runs under the launch environment" \
   "$(grep -cxE "HOME=$WAB_ROOT/dforge-3/home|GOCACHE=$WAB_ROOT/dforge-3/gocache|GIT_ALLOW_PROTOCOL=file|GIT_SSH_COMMAND=false|GH_CONFIG_DIR=$WAB_ROOT/dforge-3/gh|IS_SANDBOX=1" "$cenv")" "6"
 check "prepare_check_blocks: and none of the caller's tokens or sockets" "$(grep -cE '^(GH_TOKEN|SSH_AUTH_SOCK)=' "$cenv")" "0"
+check "prepare_check_blocks: the caller's corepack auto-pin setting carries over" "$(grep -cx 'COREPACK_ENABLE_AUTO_PIN=0' "$cenv")" "1"
+check "prepare_check_blocks: corepack keeps the owner's last known good versions" \
+  "$(cat "$WAB_ROOT/dforge-3/home/.cache/node/corepack/lastKnownGood.json" 2>/dev/null)" '{"pnpm": "11.17.0"}'
 has "prepare_check_blocks: the check runs in the run's sandbox" "$(cat "$TMP/sandbox.argv")" \
   "-h $TMP/claude-config -w $WAB_ROOT/dforge-3/clone "
 
@@ -205,6 +224,12 @@ if bash "$WAB/sandbox" --check -w "$sb/rw" >/dev/null 2>&1; then
     echo x > /tmp/$probe && echo tmp" 2>&1)
   check "sandbox: only the -w directory is writable, -h paths are empty, /tmp is writable" \
     "$(tr '\n' ' ' <<<"$got")" "rw ro 0 0 tmp "
+  got=$(cd "$sb/rw" && bash "$WAB/sandbox" -w "$sb/rw" -- bash -c 'touch c && echo cwd-rw' 2>&1)
+  check "sandbox: a relative path from inside the -w directory is writable" "$got" "cwd-rw"
+  if [ "$(id -u)" -eq 0 ] && [ "$(awk '{n += $3} END {print n}' /proc/self/uid_map)" -gt 1000 ]; then
+    got=$(cd "$sb/rw" && bash "$WAB/sandbox" -w "$sb/rw" -- bash -c 'touch o && chown 1000:1000 o && stat -c %u:%g o' 2>&1)
+    check "sandbox: root keeps every user id it has, so chown to another user works" "$got" "1000:1000"
+  fi
   check "sandbox: its /tmp is private" "$([ -e "/tmp/$probe" ] && echo shared || echo private)" "private"
   check "sandbox: the hidden files are untouched outside" "$(cat "$sb/secret/id" "$sb/netrc" | tr '\n' ' ')" "key token "
   got=$(bash "$WAB/sandbox" -w "$sb/rw" -h "$sb/secret" -- bash -c "

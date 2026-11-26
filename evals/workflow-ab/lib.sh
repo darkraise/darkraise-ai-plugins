@@ -57,6 +57,7 @@ wab_env() {
     "GH_CONFIG_DIR=$dir/gh" "WORKFLOW_GUARD_CLAUDE_DIR=$dir/guard"
     "GOCACHE=$dir/gocache" "DISABLE_AUTOUPDATER=1"
   )
+  [ -z "${COREPACK_ENABLE_AUTO_PIN:-}" ] || WAB_ENV+=("COREPACK_ENABLE_AUTO_PIN=$COREPACK_ENABLE_AUTO_PIN")
 }
 
 # wab_run_config RUN_DIR — the run's own Claude config directory: copies of

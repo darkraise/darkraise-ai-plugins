@@ -73,7 +73,15 @@ for h in "${hidden[@]}"; do
   fi
 done
 mount -o remount,bind,ro /run || die 1 "cannot remount /run read-only"
+# The working directory still points into the mount it was entered on, which is
+# now read-only even where a -w bind covers it; entering it again picks the bind.
+cd -- "$PWD" || die 1 "cannot enter $PWD"
 
-# Mounts a less privileged user namespace inherits are locked.
+# Mounts a less privileged user namespace inherits are locked. Every id this
+# namespace has maps to itself, so a root caller can still chown to another
+# user, as test suites that check file ownership do.
 [ "$check" -eq 0 ] || set -- true
-exec unshare --user --map-current-user --mount -- "$@"
+maps=()
+while read -r id _ count; do maps+=(--map-users "$id:$id:$count"); done < /proc/self/uid_map
+while read -r id _ count; do maps+=(--map-groups "$id:$id:$count"); done < /proc/self/gid_map
+exec unshare --user "${maps[@]}" --mount -- "$@"
