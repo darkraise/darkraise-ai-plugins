@@ -156,6 +156,8 @@ export API_JUDGE_LADDER="$TMP/ladder.md"
 reset() {
   rm -rf "$HOME" "$WORK" "$TMP/ws" "$TMP/mirror" "$TMP/outside.txt" "$ARGS" "$ENVLOG" "$TMP/stub.pid" "$REPORT"
   mkdir -p "$HOME/.dforge" "$HOME/.claude/dforge/sessions/cockpit" "$WORK/docs" "$TMP/ws" "$TMP/mirror"
+  # The loop ends once it sees HOME gone, which the rm above may or may not show it.
+  cockpit_ack_start "$HOME"
   git -C "$WORK" init -q
   printf '.dforge/\nsecret.env\n' > "$WORK/.gitignore"
   printf '# Spec\nThe lock must hold on uutils.\n' > "$WORK/docs/s.md"
