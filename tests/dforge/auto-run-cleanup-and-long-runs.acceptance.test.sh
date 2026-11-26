@@ -489,8 +489,9 @@ for ph in spec plan final finish; do
   newrun "$b14" "$s" "$ph"
   size "$s" 299999 "$b14"
   ar "$b14" "$s" due --tokens 299999 >/dev/null 2>&1
+  check "A14: in $ph below the limit due books nothing" "$(ar "$b14" "$s" pending 2>&1)|$(field "$b14" pending)" "none|null"
   ctx "$b14" "$s" >/dev/null
-  check "A14: in $ph below the limit nothing becomes pending" "$(ar "$b14" "$s" pending 2>&1)|$(field "$b14" pending)" "none|null"
+  check "A14: in $ph below the limit the budget line books nothing either" "$(ar "$b14" "$s" pending 2>&1)|$(field "$b14" pending)" "none|null"
 done
 
 # --- A41: a bound session works from another repository ---
