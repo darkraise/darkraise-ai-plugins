@@ -361,6 +361,7 @@ _ar_start_bound() {
     phase: "spec", regime: "normal", pending: null, resumePrompt: null, launch: null,
     failures: 0, compactions: 0, resumes: 0, decisions: [], rulings: [],
     setupDue: false, stalls: 0, stalledAt: null, compactionsSinceTask: 0,
+    progressMark: null, compactionsSinceProgress: 0,
     totals: {compactionSeconds: 0, holds: 0, stalls: 0, apiErrors: 0, reconcilePrompts: 0, panelFailures: 0},
     isolation: $iso, branch: null, branchBase: null, carried: null,
     version: $version, root: $root
@@ -473,6 +474,7 @@ _ar_resume_locked() {
     | .stopHistory = ((.stopHistory // []) + [{reason: .stopped, at: (.stoppedAt // null), resumedAt: $now}])
     | .stopped = null | .stoppedAt = null | .stoppedKind = null
     | .stalls = 0 | .resumes = 0 | .failures = 0 | .apiErrors = 0 | .compactionsSinceTask = 0
+    | .progressMark = null | .compactionsSinceProgress = 0
     | .stalledAt = null | .pending = null | .resumePrompt = null | .launch = null
     | .version = $version | .root = $root' \
     --arg s "$AR_SESSION" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg version "$(ar_plugin_version)" --arg root "$AR_PLUGIN_ROOT"
@@ -912,25 +914,62 @@ ar_resumed() {
     | if .pending == "resume" then .pending = null else . end'
 }
 
-# ar_compacted — book a compaction. One in the final or finish phase sets
-# finalCompacted, after which every budget line of the run says ok. An
-# execute-phase compaction counts toward AR_COMPACTION_CAP, reached without a
-# completed task, which stops the run (return 5): a task that cannot fit in a
-# window would otherwise loop. --seconds N adds the compaction's duration to
-# totals.compactionSeconds.
+# ar_progress_mark — "<ledger lines>|<HEAD>|<newest mtime>": the attached
+# plan's ledger line count (0 without one), HEAD of the run's checkout, and the
+# newest modification time of the spec and of the plans whose Spec line names
+# it. A part that cannot be read is empty.
+ar_progress_mark() {
+  local primary plan file lines=0 head spec newest="" mt
+  primary=$(ar_run_primary) || primary=""
+  plan=$(ar_get plan)
+  spec=$(ar_get spec)
+  head=$(git -C "$(ar_checkout 2>/dev/null)" rev-parse HEAD 2>/dev/null | tr -d '\r')
+  [ -n "$primary" ] || { printf '%s|%s|' "$lines" "$head"; return 0; }
+  if [ -n "$plan" ]; then
+    file=$(cd "$primary" && plan_ledger "$(plan_locate "$plan")" 2>/dev/null)
+    [ -z "$file" ] || [ ! -f "$file" ] || lines=$(wc -l < "$file" | tr -d ' ')
+  fi
+  if [ -n "$spec" ]; then
+    declare -F _spec_plan_files >/dev/null || . "$(dirname "${BASH_SOURCE[0]}")/route.sh"
+    while IFS= read -r file; do
+      [ -n "$file" ] && [ -f "$file" ] || continue
+      mt=$(stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null) || continue
+      [ -n "$newest" ] && [ "$newest" -ge "$mt" ] || newest=$mt
+    done < <(cd "$primary" && { dforge_resolve "$spec" "$primary"; dforge_stores_init "$primary"; _spec_plan_files "$primary" "$spec" | cut -f2; } 2>/dev/null)
+  fi
+  printf '%s|%s|%s' "$lines" "$head" "$newest"
+}
+
+# ar_compacted — book a compaction. In execute it counts toward
+# AR_COMPACTION_CAP, reached without a completed task; in the other phases
+# toward the same cap, reached while ar_progress_mark stays unchanged. Either
+# stops the run (return 5): a step that cannot fit in a window would otherwise
+# loop. --seconds N adds the compaction's duration to totals.compactionSeconds.
 ar_compacted() {
-  local n secs=0
+  local n secs=0 phase mark=""
   [ "${1:-}" = --seconds ] && secs=$2
+  phase=$(ar_get phase)
+  [ "$phase" = execute ] || mark=$(ar_progress_mark)
   ar_update '.compactions += 1 | .failures = 0 | .pending = "after-compact"
     | .totals.compactionSeconds = ((.totals.compactionSeconds // 0) + $secs)
-    | .finalCompacted = ((.finalCompacted // false) or .phase == "final" or .phase == "finish")
     | if .phase == "execute"
-      then .compactionsSinceTask = ((.compactionsSinceTask // 0) + 1) else . end' --argjson secs "$secs" || return $?
+      then .compactionsSinceTask = ((.compactionsSinceTask // 0) + 1)
+      elif .progressMark == $mark
+      then .compactionsSinceProgress = ((.compactionsSinceProgress // 0) + 1)
+      else .progressMark = $mark | .compactionsSinceProgress = 1 end' --argjson secs "$secs" --arg mark "$mark" || return $?
   ar_log compacted
-  n=$(ar_get compactionsSinceTask)
-  if [ "${n:-0}" -ge "$AR_COMPACTION_CAP" ]; then
-    ar_stop "$AR_COMPACTION_CAP compactions without a completed task" || return $?
-    return 5
+  if [ "$phase" = execute ]; then
+    n=$(ar_get compactionsSinceTask)
+    if [ "${n:-0}" -ge "$AR_COMPACTION_CAP" ]; then
+      ar_stop "$AR_COMPACTION_CAP compactions without a completed task" || return $?
+      return 5
+    fi
+  else
+    n=$(ar_get compactionsSinceProgress)
+    if [ "${n:-0}" -ge "$AR_COMPACTION_CAP" ]; then
+      ar_stop "$AR_COMPACTION_CAP compactions in $phase without progress" || return $?
+      return 5
+    fi
   fi
 }
 
@@ -998,11 +1037,35 @@ AR_HIGH_PCT=90
 AR_AFTER_HANDOFF_PCT=85
 AR_AFTER_HIGH_PCT=85
 
-# ar_limit BUDGET WINDOW REGIME — where a checkpoint compacts: the task
-# budget, or AR_HIGH_PCT of the window in the high regime.
+# ar_hard BUDGET WINDOW — the most a session may hold outside execute:
+# BUDGET plus a quarter, below Claude Code's compaction point (93% of the
+# window) by 40000, and never below BUDGET.
+ar_hard() {
+  local hard point
+  hard=$(( $1 * 125 / 100 )) point=$(( $2 * 93 / 100 - 40000 ))
+  [ "$hard" -le "$point" ] || hard=$point
+  [ "$hard" -ge "$1" ] || hard=$1
+  echo "$hard"
+}
+
+# ar_limit BUDGET WINDOW REGIME [PHASE] — where a checkpoint compacts: the
+# task budget, or AR_HIGH_PCT of the window in the high regime, capped at
+# ar_hard in the phases no compaction hands off from or before (spec, plan,
+# final, finish). PHASE defaults to the run's.
 ar_limit() {
-  local limit
-  if [ "$3" = high ]; then limit=$(( $2 * AR_HIGH_PCT / 100 )); else limit=$1; fi
+  local limit phase hard
+  if [ $# -ge 4 ]; then phase=$4; else phase=$(ar_get phase 2>/dev/null); fi
+  if [ "$3" = high ]; then
+    limit=$(( $2 * AR_HIGH_PCT / 100 ))
+    case $phase in
+      spec | plan | final | finish)
+        hard=$(ar_hard "$1" "$2")
+        [ "$limit" -le "$hard" ] || limit=$hard
+        ;;
+    esac
+  else
+    limit=$1
+  fi
   [ "$limit" -gt 0 ] || limit=1
   echo "$limit"
 }
@@ -1042,8 +1105,7 @@ ar_settle() {
 # <regime>". A compaction not yet measured is settled first with TOKENS as its
 # size; a pending clear is a handoff in progress. An ok clears a pending
 # compaction, and a resume the cockpit never confirmed: the session measuring
-# itself is the resumed one. Once a compaction ran in the final phases
-# (finalCompacted) it never asks for another: Claude Code's own is the backstop.
+# itself is the resumed one.
 # WINDOW 0 is an unknown window: "unknown 0 <regime>", status 3, and no
 # size-based compaction or handoff; a pending compaction settles to continue,
 # so a Stop hold that waits on it cannot repeat forever.
@@ -1065,7 +1127,7 @@ ar_verdict() {
   limit=$(ar_limit "$budget" "$window" "$regime")
   if [ "$pending" = handoff ] || [ "$pending" = clear ]; then
     echo "handoff $limit $regime"
-  elif [ "$tokens" -ge "$limit" ] && ! ar_state | ar_jq -e '.finalCompacted == true' >/dev/null 2>&1; then
+  elif [ "$tokens" -ge "$limit" ]; then
     ar_update '.pending = "compact"' || return $?
     echo "compact $limit $regime"
   else

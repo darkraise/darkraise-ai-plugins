@@ -463,6 +463,13 @@ check "stop without a reason: finished" "$(field stopped)" "null"
 
 # --- the rules (reference/auto-run.md §The budget line) ---
 ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+# The high regime reaches 90% of the window in execute only; elsewhere hard caps it.
+jq '.phase = "execute"' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+# A compaction apart from the caps on compactions without a task or progress.
+regime_compacted() {
+  jq '.compactionsSinceTask = 0 | .compactionsSinceProgress = 0' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+  ar --session s-1 compacted
+}
 verdict() { # verdict --tokens T [--budget B] [--window W] — ar_verdict for s-1, as the budget line calls it
   local t="" b=465000 w=800000
   while [ $# -gt 1 ]; do case $1 in --tokens) t=$2 ;; --budget) b=$2 ;; --window) w=$2 ;; esac; shift 2; done
@@ -476,23 +483,23 @@ check "normal: at the budget, compact" "$status:$out" "0:compact 465000 normal"
 check "compact is pending" "$(field pending)" "compact"
 out=$(verdict --tokens 464999)
 check "an ok after a compact cancels the compaction" "$out:$(field pending)" "ok 465000 normal:null"
-ar --session s-1 compacted
+regime_compacted
 out=$(verdict --tokens 395249)
 check "after a compaction under 85% of the budget: normal" "$out:$(field pending)" "ok 465000 normal:null"
-ar --session s-1 compacted
+regime_compacted
 out=$(verdict --tokens 395250)
 check "after a compaction at 85% of the budget: high" "$out" "ok 720000 high"
 out=$(verdict --tokens 719999)
 check "high: under 90% of the window" "$out" "ok 720000 high"
 out=$(verdict --tokens 720000); status=$?
 check "high: at 90% of the window, compact" "$status:$out" "0:compact 720000 high"
-ar --session s-1 compacted
+regime_compacted
 out=$(verdict --tokens 679999)
 check "after a compaction under 85% of the window: high stays" "$out" "ok 720000 high"
-ar --session s-1 compacted
+regime_compacted
 out=$(verdict --tokens 100000)
 check "after a small compaction: back to normal" "$out" "ok 465000 normal"
-ar --session s-1 compacted
+regime_compacted
 out=$(verdict --tokens 680000); status=$?
 check "after a compaction at 85% of the window: handoff" "$status:${out%% *}" "0:handoff"
 check "a handoff stays pending" "$(field pending)" "handoff"
@@ -502,7 +509,7 @@ ar --session s-1 clear --phase
 out=$(verdict --tokens 10000); status=$?
 check "a pending clear answers handoff" "$status:${out%% *}" "0:handoff"
 ar --session s-1 rebind --to s-1
-ar --session s-1 compacted
+regime_compacted
 out=$(verdict --tokens 260000 --budget 300000 --window 400000)
 check "another budget and window" "$out" "ok 360000 high"
 ar --session s-1 verdict --tokens 1 --budget 1 --window 1 >/dev/null 2>&1; status=$?
@@ -521,23 +528,24 @@ out=$(verdict --tokens 900000 --window 0); status=$?
 check "unknown window: unknown, exit 3, nothing pending" "$status:${out%% *}:$(field pending)" "3:unknown:null"
 
 # --- after-compact measures the session it names ---
+jq '.phase = "spec"' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
 mkdir -p "$HOME/.claude"
 printf '{"autoCompactWindow": 800000}\n' > "$HOME/.claude/settings.json"
 live s-1
 T="$HOME/.claude/projects/p/s-1.jsonl"
 asst() { printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-opus-5-5","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":%s}}}\n' "$1"; }
 after() { (cd "$REPO" && CLAUDE_CODE_SESSION_ID=s-other DFORGE_BUDGET=465000 bash "$AR" --session s-1 after-compact); }
-ar --session s-1 compacted
+regime_compacted
 asst 30000 > "$T"
 out=$(after); status=$?
 check "after-compact: a small context continues" "$status:$out" "0:continue — 30k after compaction; regime normal"
 check "after-compact: nothing pending" "$(field pending)" "null"
-ar --session s-1 compacted
+regime_compacted
 asst 700000 > "$T"
 out=$(after); status=$?
 check "after-compact: 85% of the window hands off" "$status:${out%% *}" "5:handoff"
 check "after-compact: the handoff stays pending" "$(field pending)" "handoff"
-ar --session s-1 compacted
+regime_compacted
 printf '{}\n' > "$T"
 out=$(after); status=$?
 check "after-compact: an unknown size continues and says to record it" "$status:${out%%;*}" "0:continue — the size after compaction is unknown"
@@ -571,7 +579,7 @@ ar --session s-1 resumed
 asst 30000 > "$T"
 out=$(after); status=$?
 check "after-compact: with nothing pending it only measures" "$status:${out%% *}:$(field pending)" "0:continue:null"
-ar --session s-1 compacted
+regime_compacted
 asst 700000 > "$T"
 after >/dev/null
 asst 30000 > "$T"
@@ -635,28 +643,28 @@ ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
 # --- the plan, final and finish phases never hand off ---
 for phase in plan final finish; do
   ar --session s-1 phase "$phase"
-  ar --session s-1 compacted
+  regime_compacted
   asst 700000 > "$T"
   out=$(after); status=$?
   check "after-compact in $phase: 85% of the window continues" "$status:${out%% *}:$(field pending)" "0:continue:null"
 done
 side --session s-1 phase execute
-ar --session s-1 compacted
+regime_compacted
 out=$(after); status=$?
 check "after-compact in execute: 85% of the window still hands off" "$status:${out%% *}" "5:handoff"
 
-# --- once a final-phase compaction ran, every budget line is ok ---
+# --- a final-phase compaction leaves the next one due at the limit ---
 ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
 ar --session s-1 phase final
 out=$(verdict --tokens 465000); status=$?
 check "final, before a compaction: at the budget, compact" "$status:${out%% *}" "0:compact"
 ar --session s-1 compacted
-check "a final-phase compaction is recorded" "$(field finalCompacted)" "true"
+check "a final-phase compaction records no exemption" "$(field finalCompacted)" "null"
 out=$(verdict --tokens 750000); status=$?
-check "final, after a compaction: ok above the high limit" "$status:${out%% *}:$(field pending)" "0:ok:null"
+check "final, after a compaction: compact past hard" "$status:${out%% *}:$(field pending)" "0:compact:compact"
 ar --session s-1 phase finish
 out=$(verdict --tokens 900000); status=$?
-check "finish, after a final-phase compaction: ok" "$status:${out%% *}" "0:ok"
+check "finish, after a final-phase compaction: compact" "$status:${out%% *}" "0:compact"
 
 # --- Setup after the switch: setupDue and the primary-checkout guard ---
 ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
@@ -703,9 +711,9 @@ ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
 ar --session s-1 attach --plan docs/plan.md
 ar --session s-1 phase plan
 ar --session s-1 compacted
-ar --session s-1 compacted
 ar --session s-1 compacted; status=$?
-check "plan-phase compactions are not counted" "$status:$(field active):$(field compactionsSinceTask)" "0:true:0"
+check "plan-phase compactions count toward progress, not tasks" \
+  "$status:$(field active):$(field compactionsSinceTask):$(field compactionsSinceProgress)" "0:true:0:2"
 ar --session s-1 switch
 side --session s-1 phase execute
 ar --session s-1 compacted
@@ -748,9 +756,9 @@ for phase in final finish; do
   ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
   ar --session s-1 phase "$phase"
   ar --session s-1 compacted
-  ar --session s-1 compacted
   ar --session s-1 compacted; status=$?
-  check "$phase-phase compactions are not counted" "$status:$(field active):$(field compactionsSinceTask)" "0:true:0"
+  check "$phase-phase compactions count toward progress, not tasks" \
+    "$status:$(field active):$(field compactionsSinceTask):$(field compactionsSinceProgress)" "0:true:0:2"
 done
 
 # --- after-compact: an unknown size still names a due Setup ---

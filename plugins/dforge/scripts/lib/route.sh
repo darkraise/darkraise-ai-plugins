@@ -1,8 +1,22 @@
 # The register router next-step uses to pick the one next action from the open
 # rows of the registers it reads. Sourced; defines functions only. It calls
-# helpers the sourcing script defines (plan_name, plan_finished, _plan_roots,
+# helpers the sourcing script defines (plan_name, plan_finished,
 # execution_launch, launch_for) and the plan.sh, roots.sh and register.sh
 # libraries.
+
+# _plan_roots ROOT — "<root>\t<name prefix>" for each place a plan name can be
+# read from: the docs root in use, then the docs directory and top level of the
+# checkout and of every worktree (the primary among them).
+_plan_roots() {
+  local top=${_DFORGE_TOP:-$1} tree
+  printf '%s\t%s\n' "$_DFORGE_DOCS_ROOT" "$(dforge_dir_rel docs "$top")"
+  { printf '%s\n' "$top"; git -C "$top" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p'; } |
+  while IFS= read -r tree; do
+    tree=$(_dforge_path "$tree")
+    printf '%s\t%s\n' "$(dforge_dir docs "$tree")" "$(dforge_dir_rel docs "$tree")"
+    printf '%s\t\n' "$tree"
+  done
+}
 
 # _spec_plan_files ROOT SPEC — "<name>\t<path>\t<sub-project or empty>" for
 # every plan whose header Spec or Program line names SPEC, once per name key,

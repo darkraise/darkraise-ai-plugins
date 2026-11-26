@@ -618,6 +618,8 @@ AUTO_STATE="$REPO/.dforge/sdd/auto-run.json"
 jq '.pending = "handoff"' "$AUTO_STATE" > "$AUTO_STATE.tmp" && mv "$AUTO_STATE.tmp" "$AUTO_STATE"
 run --final
 check "auto: --final hands off while a handoff is pending" "$status:$out" "5:budget (auto): 470k of 465k (101%) — handoff — source: record"
+# The high regime reaches 90% of the window in execute only; elsewhere hard caps it.
+jq '.phase = "execute"' "$AUTO_STATE" > "$AUTO_STATE.tmp" && mv "$AUTO_STATE.tmp" "$AUTO_STATE"
 (cd "$REPO" && bash "$HERE/../../plugins/dforge/scripts/auto-run" --session auto-1 compacted)
 asst 400000 > "$AUTO_T"
 run

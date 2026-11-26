@@ -155,6 +155,31 @@ out=$(CLAUDE_CODE_SESSION_ID=s-1 bash "$KIT/scripts/task-close" docs/plan.md 2 "
 check "close_prints_auto_line: a stopped run exits 5" "$status" "5"
 check "close_prints_auto_line: a stopped run prints no budget line" "$(grep -c '^budget' <<<"$out")" "0"
 rm -f "$L"
+
+# --- every phase measures against its limit, and hard caps the high regime (A9) ---
+printf '{"autoCompactWindow": 800000}\n' > "$HOME/.claude/settings.json"
+ST="$REPO/.dforge/sdd/auto-run.json"
+setst() { jq "$1" "$ST" > "$ST.tmp" && mv "$ST.tmp" "$ST"; }
+cs() { out=$(CLAUDE_CODE_SESSION_ID=s-1 DFORGE_BUDGET=300000 bash "$P/scripts/context-size" 2>/dev/null); status=$?; out=${out% — source:*}; }
+usage 310000
+setst '.phase = "final" | .finalCompacted = true | .pending = null | .regime = "normal"'
+cs
+check "auto: compact after a compaction in final (A9)" "$status|$out" "6|budget (auto): 310k of 300k (103%) — compact"
+for ph in plan finish; do
+  setst ".phase = \"$ph\" | .finalCompacted = true | .pending = null"
+  cs
+  check "auto: compact in plan and finish ($ph, A9)" "$status|$out" "6|budget (auto): 310k of 300k (103%) — compact"
+done
+usage 380000
+for ph in spec plan final finish; do
+  setst ".phase = \"$ph\" | .regime = \"high\" | .pending = null"
+  cs
+  check "auto: the high regime is capped at hard outside execute ($ph, A9)" "$status|$out" "6|budget (auto, high): 380k of 375k (101%) — compact"
+done
+setst '.phase = "execute" | .regime = "high" | .pending = null'
+cs
+check "auto: the high regime is capped at hard outside execute (execute, A9)" "$status|$out" "0|budget (auto, high): 380k of 720k (52%) — ok"
+printf '{"autoCompactWindow": 650000}\n' > "$HOME/.claude/settings.json"
 bash "$P/scripts/auto-run" --session s-1 stop >/dev/null
 
 # --- a missing task still fails the way it did ---
