@@ -340,8 +340,8 @@ When `<docs>/roadmap.md` exists, run
 `scripts/roadmap settle --spec <the plan's Spec path>` after resolving those
 rows, and again for its `**Program:**` spec if any; commit the changes with
 them. Settle moves an epic row assigned to the spec to `verify` once every
-register covering it is resolved, never to `done`: only
-dagents:closing-a-milestone makes an epic done. Settle before Step 7, so
+row covering it is resolved or `verify`, never `done`: only
+dagents:closing-a-milestone makes it done. Settle before Step 7, so
 `next-step` routes to the next epic, not this one.
 
 When no register covers the plan, write
