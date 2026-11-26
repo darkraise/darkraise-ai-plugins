@@ -73,7 +73,7 @@ What changes here:
   The tail rule and the final-phase limit do not apply;
   `scripts/context-size --final` prints the auto line too.
 - **Final review:** run `scripts/auto-run phase final`; on exit 4 (here or after the last task),
-  run `scripts/auto-run stop --reason "<path> is a carried path and was committed"` (no path: `--reason "git could not check the carried paths"`) and end as auto-run.md §Stopping says. With pending items,
+  run `scripts/auto-run stop --reason "<path> is a carried path and was committed"` (no path: `--reason "git could not check the carried paths"`) and end as auto-run.md §Stopping says. On exit 7, run it again with the `cd` prefix it printed: never a stop. With pending items,
   run the Fable batch first; the review's findings take the
   same ladder.
 - **A turn ends** only on `Auto run: compacting` or `Auto run: clearing` as
@@ -243,9 +243,6 @@ the hard limit: `budget (last 2 tasks)`, `budget (last task)` and
 task's `Task <N>: complete` line, `task-close` prints the `--final` budget line
 (run `scripts/context-size --final` yourself if it did not).
 After every earlier task, the next brief's budget line is the check.
-In an auto run `--final` also moves the
-run to the final phase, and a `compact` line still ends the turn on
-`Auto run: compacting`.
 
 The last task completing is no stop while that line says `ok`: the final
 review, its fix wave and finishing run in this session; a

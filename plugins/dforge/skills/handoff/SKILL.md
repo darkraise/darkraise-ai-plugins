@@ -24,12 +24,14 @@ cleanly."
   only when it has 4 or more tasks, or when `scripts/context-size` does not
   say `ok` after steps 0-4 (dforge:writing-plans §Execution Handoff): a light
   plan of 1-3 tasks runs steps 0-4 and continues in this session.
-  The last task completing is never a stop: the
-  final review and finishing run in the same session whatever
-  `scripts/context-size --final` prints. A task budget line printed during
-  that final phase does not stop it, and nothing stops finishing once the
-  final review is clean. In strict mode the plan's last two tasks never hand
-  off either: their budget lines say `ok` past the budget.
+  The last task completing is no stop by itself: the final review and
+  finishing run in the same session while `scripts/context-size --final`
+  says `ok`. In strict mode the plan's last two tasks and its final phase say
+  `ok` past the budget and `handoff` only at the hard limit
+  ([session-budget.md](../../reference/session-budget.md)); in relaxed mode
+  they never hand off. A plain task budget line printed during the final
+  phase does not stop it. Finishing checks `scripts/context-size --finish`
+  once at its entry.
 - On Codex: after every 3 completed tasks, or after any task that needed 3 or
   more fix rounds. The budget line there reports a measured number with an
   `unknown` verdict, and the measured number does not override it.

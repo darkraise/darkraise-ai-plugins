@@ -532,12 +532,14 @@ needs. dforge hands off instead.
   resume guide from `scripts/next-step`.
 - **Stops.** A saved plan outside an auto run (an auto run clears the session
   and goes on) is a hard stop.
-  The last task completing is never a stop: the final whole-branch review and
-  finishing always run in the same session. In an auto run, finishing runs in
-  a session of its own. In strict mode the plan's last two
-  tasks and the final phase keep the handoff budget and run past it; in relaxed
-  mode they measure against 85% of the compaction window. Finishing itself is
-  never budget-checked. A
+  The last task completing is no stop by itself: the final whole-branch review
+  and finishing run in the same session while its budget lines say `ok`. In an
+  auto run, finishing runs in a session of its own. In strict mode the plan's
+  last two tasks and the final phase keep the handoff budget and run past it
+  up to the hard limit (125% of the budget, and never closer than 40k to the
+  compaction point), where they hand off; in relaxed mode they measure against
+  85% of the compaction window and never hand off. Outside an auto run
+  finishing checks `scripts/context-size --finish` once at its entry. A
   `handoff` verdict waits for the task in flight to complete. The
   budget is the compaction point minus one task's worst growth, derived from
   `autoCompactWindow` and the model's window; see
@@ -738,7 +740,8 @@ desktop window joins the session, unless you closed it.
   locally with no API calls. The title adds about how many turns are left to
   the budget at the pace of the last few; past the budget in a plan's last two
   tasks or its final phase it says `finishing` instead, since strict mode runs
-  on there to finish the plan. Until a response measures the window
+  on there to finish the plan, and `handoff due` once that reaches the hard
+  limit. Until a response measures the window
   (a new session, or just after a compaction) it shows the estimate instead,
   `≈37k estimated`, with the categories. A tool call's reading shows as the
   tool starts. **⇣ Compact** stays on the card, and **↪ Hand off** appears in

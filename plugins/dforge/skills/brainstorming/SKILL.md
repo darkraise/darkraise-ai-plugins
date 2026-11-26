@@ -285,9 +285,10 @@ Read [user-review-gate.md](references/user-review-gate.md) before you ask your h
 - In an auto run skip this check: the plan is always written in this session.
   Otherwise run `scripts/context-size --plan`
   (see using-dforge §Session Budget).
-  It measures against 150% of the task budget, capped at the
-  final-phase limit: writing the plan here costs less than a fresh session's
-  baseline and reload. On exit 5 (handoff), invoke dforge:handoff with the spec
+  In strict mode it measures against the hard limit, and in relaxed mode
+  against 150% of the task budget, capped at the final-phase limit
+  ([session-budget.md](../../reference/session-budget.md)): writing the plan
+  here costs less than a fresh session's baseline and reload. On exit 5 (handoff), invoke dforge:handoff with the spec
   as the draft and the next action "Write the implementation plan with
   dforge:writing-plans." — the plan is written in a fresh session.
 - Otherwise invoke the writing-plans skill to create a detailed implementation plan.

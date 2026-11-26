@@ -40,7 +40,9 @@ means the cockpit did not echo the binding within `DFORGE_BIND_WAIT` seconds
 `~/.claude/dforge/sessions/run/<session>.json`, which names the primary
 checkout holding the run's state. Every script, the Stop hook and the cockpit
 find the run through it, so a session started in one repository can run a
-plan in another.
+plan in another. A run of this session's in the working directory's own
+repository is found first, unless it has ended and the binding names an
+active one.
 
 ## While a run is bound to this session
 
@@ -93,7 +95,8 @@ exits 0. It prints what would stop an unattended run: free space below
 directory's filesystem, a refused git write in the primary checkout, and with
 `--isolation worktree` a refused scratch worktree in `.worktrees` (or an
 existing `worktrees`); `preflight: ok` when there is none. Then one line per
-review family: its gate's answer and its `<id>Review` setting.
+review family: its gate's answer, or `gate failed: <its error>` when the gate
+could not answer, and its `<id>Review` setting.
 dforge:brainstorming runs it before the spec review and shows every line at
 the top of that message, so a blocker is met while your human partner is
 present.
