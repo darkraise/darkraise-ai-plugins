@@ -179,6 +179,51 @@ done
 setst '.phase = "execute" | .regime = "high" | .pending = null'
 cs
 check "auto: the high regime is capped at hard outside execute (execute, A9)" "$status|$out" "0|budget (auto, high): 380k of 720k (52%) — ok"
+
+# --- early compaction at a task boundary: limit - budget/5 in execute (A11) ---
+csc() { # csc <caller>
+  out=$(CLAUDE_CODE_SESSION_ID=s-1 DFORGE_BUDGET=300000 DFORGE_BUDGET_CALLER=$1 bash "$P/scripts/context-size" 2>/dev/null)
+  status=$?; out=${out% — source:*}
+}
+pend() { bash "$P/scripts/auto-run" --session s-1 pending; }
+setst '.phase = "execute" | .regime = "normal" | .pending = null'
+usage 240000
+csc task-close:3
+check "auto: task-close compacts at the boundary (A11)" "$status|$out|$(pend)" "6|budget (auto): 240k of 300k (80%) — compact|compact"
+setst '.pending = null'
+csc task-brief:4
+check "auto: task-brief compacts at the boundary (A11)" "$status|$out|$(pend)" "6|budget (auto): 240k of 300k (80%) — compact|compact"
+setst '.pending = null'
+usage 239000
+csc task-close:3
+check "auto: below the boundary is ok (A11)" "$status|$out|$(pend)" "0|budget (auto): 239k of 300k (79%) — ok|none"
+usage 260000
+got=""
+for c in direct review-package task-step:verdict; do csc "$c"; got="$got$status|${out##* — };"; done
+check "auto: other callers keep the limit" "$got" "0|ok;0|ok;0|ok;"
+setst '.phase = "final"'
+csc task-close:3
+check "auto: no early compaction outside execute" "$status|$out" "0|budget (auto): 260k of 300k (86%) — ok"
+setst '.phase = "execute" | .pending = null'
+usage 245000
+csc task-close:3; s0=$status
+csc direct; o1=${out##* — }
+csc review-package; o2=${out##* — }
+check "auto: a boundary compaction survives another caller's line (A11)" "$s0|$o1|$o2|$(pend)" "6|ok|ok|compact"
+setst '.pending = "compact"'
+usage 239000
+csc direct; o1=${out##* — }; p1=$(pend)
+setst '.phase = "final" | .pending = "compact"'
+usage 299000
+csc direct; o2=${out##* — }; p2=$(pend)
+check "auto: a booked compaction clears below the boundary" "$o1|$p1|$o2|$p2" "ok|none|ok|none"
+setst '.phase = "execute" | .regime = "high" | .pending = null'
+usage 660000
+csc task-close:3; o1=$out
+setst '.pending = null'
+usage 659000
+csc task-close:3; o2=${out##* — }
+check "auto: the high regime's boundary" "$o1|$o2" "budget (auto, high): 660k of 720k (91%) — compact|ok"
 printf '{"autoCompactWindow": 650000}\n' > "$HOME/.claude/settings.json"
 bash "$P/scripts/auto-run" --session s-1 stop >/dev/null
 

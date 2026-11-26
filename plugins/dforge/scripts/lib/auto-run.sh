@@ -1101,16 +1101,19 @@ ar_settle() {
   echo continue
 }
 
-# ar_verdict TOKENS BUDGET WINDOW — prints "<ok|compact|handoff> <limit>
-# <regime>". A compaction not yet measured is settled first with TOKENS as its
-# size; a pending clear is a handoff in progress. An ok clears a pending
-# compaction, and a resume the cockpit never confirmed: the session measuring
-# itself is the resumed one.
+# ar_verdict TOKENS BUDGET WINDOW [EARLY] — prints "<ok|compact|handoff>
+# <limit> <regime>". A compaction not yet measured is settled first with TOKENS
+# as its size; a pending clear is a handoff in progress. In execute the
+# boundary is limit - BUDGET/5: with EARLY 1 (a task boundary) a compaction is
+# due from there. An ok clears a pending compaction only below the boundary
+# (the limit outside execute), so one booked at a task boundary survives other
+# callers' lines; it also clears a resume the cockpit never confirmed: the
+# session measuring itself is the resumed one.
 # WINDOW 0 is an unknown window: "unknown 0 <regime>", status 3, and no
 # size-based compaction or handoff; a pending compaction settles to continue,
 # so a Stop hold that waits on it cannot repeat forever.
 ar_verdict() {
-  local tokens=$1 budget=$2 window=$3 pending regime limit settled
+  local tokens=$1 budget=$2 window=$3 early=${4:-0} pending regime limit settled boundary threshold
   pending=$(ar_get pending)
   if [ "$window" = 0 ]; then
     if [ "$pending" = after-compact ]; then ar_update '.pending = null' || return $?; fi
@@ -1125,13 +1128,22 @@ ar_verdict() {
   regime=$(ar_get regime)
   regime=${regime:-normal}
   limit=$(ar_limit "$budget" "$window" "$regime")
+  boundary=$limit
+  if [ "$(ar_get phase)" = execute ]; then
+    boundary=$(( limit - budget / 5 ))
+    [ "$boundary" -ge 1 ] || boundary=1
+  fi
+  threshold=$limit
+  [ "$early" != 1 ] || threshold=$boundary
   if [ "$pending" = handoff ] || [ "$pending" = clear ]; then
     echo "handoff $limit $regime"
-  elif [ "$tokens" -ge "$limit" ]; then
+  elif [ "$tokens" -ge "$threshold" ]; then
     ar_update '.pending = "compact"' || return $?
     echo "compact $limit $regime"
   else
-    if [ "$pending" = compact ] || [ "$pending" = resume ]; then ar_update '.pending = null' || return $?; fi
+    if { [ "$pending" = compact ] && [ "$tokens" -lt "$boundary" ]; } || [ "$pending" = resume ]; then
+      ar_update '.pending = null' || return $?
+    fi
     echo "ok $limit $regime"
   fi
 }

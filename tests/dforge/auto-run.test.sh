@@ -481,7 +481,8 @@ check "normal: ok leaves nothing pending" "$(field pending)" "null"
 out=$(verdict --tokens 465000); status=$?
 check "normal: at the budget, compact" "$status:$out" "0:compact 465000 normal"
 check "compact is pending" "$(field pending)" "compact"
-out=$(verdict --tokens 464999)
+# In execute only an ok below the task boundary (limit - budget/5) cancels it.
+out=$(verdict --tokens 371999)
 check "an ok after a compact cancels the compaction" "$out:$(field pending)" "ok 465000 normal:null"
 regime_compacted
 out=$(verdict --tokens 395249)

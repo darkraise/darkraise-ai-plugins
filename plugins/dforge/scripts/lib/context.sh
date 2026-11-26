@@ -417,14 +417,15 @@ ctx_auto_label() { # ctx_auto_label REGIME
 # after-compaction rule measure against it), so a pinned budget does not stand
 # in for an unknown one.
 ctx_auto_line() {
-  local tokens=$1 task=0 window out verdict limit regime label
+  local tokens=$1 task=0 window out verdict limit regime label early=0
   if window=$(ctx_window "$2"); then
     task=$(ctx_pinned_budget)
     [ -n "$task" ] || task=$(ctx_budget "$2")
   else
     window=0
   fi
-  if ! out=$(ar_verdict "$tokens" "$task" "$window"); then
+  case ${DFORGE_BUDGET_CALLER:-} in task-close:* | task-brief:*) early=1 ;; esac
+  if ! out=$(ar_verdict "$tokens" "$task" "$window" "$early"); then
     if [ "${out%% *}" = unknown ]; then
       read -r _ _ regime <<<"$out"
       echo "$(ctx_auto_label "$regime"): $(( (tokens + 500) / 1000 ))k measured — unknown — the model's window is unknown"
