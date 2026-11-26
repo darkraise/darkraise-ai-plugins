@@ -126,6 +126,9 @@ printf '# SDD ledger — plan: docs/wplan.md\n' > "$TMP/side/.dforge/sdd/wplan/p
 ar --session s-x attach --plan docs/wplan.md
 jq -n --arg c "$A" '{cwd: $c}' > "$REC"
 check "cd-prefix: a worktree run names the ledger's worktree" "$(a --session s-x cd-prefix)" "cd '$TMP/side' && "
+out1=$(a --session s-x cd-prefix --dir "$TMP/o'k"); s1=$?
+out2=$(a --session s-x cd-prefix --dir "$A/.worktrees/x"); s2=$?
+check "cd-prefix: --dir names the given directory" "$out1|$s1|$out2|$s2" "cd '$TMP/o'\''k' && |0||0"
 rm -f "$REC"
 
 # --- resolver: the working directory's run, and the commands that act on it ---

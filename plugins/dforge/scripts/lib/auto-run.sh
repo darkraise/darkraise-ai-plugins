@@ -110,16 +110,16 @@ ar_checkout() {
 
 _ar_quote() { local q="'\\''"; printf "'%s'" "${1//\'/$q}"; }
 
-# ar_cd_prefix — "cd '<checkout>' && " when the run's checkout is outside the
-# directory the caller's session started in; nothing when inside it or when
-# that directory is unknown.
+# ar_cd_prefix [DIR] — "cd '<DIR>' && " when DIR (default: the run's checkout)
+# is outside the directory the caller's session started in; nothing when inside
+# it or when that directory is unknown.
 ar_cd_prefix() {
-  local sid=${AR_SESSION:-${CLAUDE_CODE_SESSION_ID:-}} rec cwd checkout
+  local sid=${AR_SESSION:-${CLAUDE_CODE_SESSION_ID:-}} rec cwd checkout=${1:-}
   rec="${HOME:-}/.claude/dforge/sessions/by-id/$(_session_safe "$sid").json"
   [ -f "$rec" ] || return 0
   cwd=$(ar_jq -r '.cwd // empty | strings' < "$rec" 2>/dev/null) || return 0
   [ -n "$cwd" ] || return 0
-  checkout=$(ar_checkout) || return 0
+  [ -n "$checkout" ] || checkout=$(ar_checkout) || return 0
   cwd=$(dr_native_path "$cwd")
   case $(dr_native_path "$checkout") in
     "$cwd" | "$cwd"/*) return 0 ;;

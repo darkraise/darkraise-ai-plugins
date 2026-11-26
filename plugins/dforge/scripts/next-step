@@ -753,7 +753,10 @@ if [ -n "$prompt" ]; then
   claim_clause=""
   if [ "$host" = claude ]; then claim_clause="Before anything else, claim it with dforge's \`scripts/handoff claim\` on that file. "
   else case $key in adhoc-*) claim_clause="When you hand off, pass \`--key $key\` to next-step. " ;; esac; fi
-  prompt="Start in \`$dir\` ($t_where); its handoff is \`$handoff\`. If your working directory is not \`$dir\`, enter it first. $claim_clause$prompt"
+  enter="If your working directory is not \`$dir\`, enter it first."
+  prefix=$(bash "$(cd "$(dirname "$0")" && pwd)/auto-run" cd-prefix --dir "$dir" 2>/dev/null) || prefix=""
+  [ -z "$prefix" ] || enter="Your session starts elsewhere: run every command as \`${prefix}…\`."
+  prompt="Start in \`$dir\` ($t_where); its handoff is \`$handoff\`. $enter $claim_clause$prompt"
 fi
 
 # A block printed over running work invites ending the session it would die

@@ -3,7 +3,7 @@
 # resume, final review, next sub-project, program done, no follow-on — and
 # keep the primary checkout's handoff file pointing at it.
 set -uo pipefail
-unset CLAUDE_CODE_SESSION_ID
+unset CLAUDE_CODE_SESSION_ID AR_SESSION
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT="$HERE/../../plugins/dforge/scripts/next-step"
@@ -1191,6 +1191,45 @@ for args in "$PLAN_REL" "--draft $OTHER_REL --next x" "--adhoc --phase build --n
   # shellcheck disable=SC2086
   check "dforge_path_handoff_matches_target ($args)" "$(cd "$WA" && CLAUDE_CODE_SESSION_ID=$S0 bash "$PATHCMD" handoff $args)" "$want"
 done
+
+# --- an auto run whose session started elsewhere (A5) ---
+. "$HERE/fixtures/cockpit-ack.sh"
+cockpit_ack_start "$HOME"
+NREPO="$TMP/nrepo"
+git init -q -b main "$NREPO"
+NROOT="$(git -C "$NREPO" rev-parse --show-toplevel)"
+mkdir -p "$NREPO/docs/plans" "$NREPO/.dforge/sdd/2026-01-01-demo"
+write_plan "$NREPO/$PLAN_REL" "$EXEC_SUB" ""
+git -C "$NREPO" add -A && git -C "$NREPO" commit -qm init
+printf '# SDD ledger — plan: %s\nTask 1: complete (commits a..b, unreviewed)\n' "$PLAN_REL" > "$NREPO/.dforge/sdd/2026-01-01-demo/progress.md"
+SA=s-away; BY="$HOME/.claude/dforge/sessions/by-id/$SA.json"
+mkdir -p "$(dirname "$BY")" "$HOME/.claude/dforge/sessions/cockpit" "$TMP/elsewhere"
+date +%s > "$HOME/.claude/dforge/sessions/cockpit/$SA"
+(cd "$NREPO" && bash "$HERE/../../plugins/dforge/scripts/auto-run" --session "$SA" start --spec docs/specs/demo.md --force >/dev/null 2>&1)
+check "A5: the auto run starts" "$?" "0"
+prompt_of() { sed -n '/^Start in /p' <<<"$1"; }
+jq -n --arg c "$TMP/elsewhere" '{cwd: $c}' > "$BY"
+CLAUDE_CODE_SESSION_ID=$SA run "$NREPO" "$PLAN_REL"
+has "auto run outside the starting directory (A5)" "$(prompt_of "$out")" "Your session starts elsewhere: run every command as \`cd '$NROOT' && …\`."
+lacks "auto run outside the starting directory: no enter it first (A5)" "$(prompt_of "$out")" "enter it first"
+jq -n --arg c "$NREPO" '{cwd: $c}' > "$BY"
+CLAUDE_CODE_SESSION_ID=$SA run "$NREPO" "$PLAN_REL"
+has "auto run inside the starting directory (A5)" "$(prompt_of "$out")" "If your working directory is not \`$NROOT\`, enter it first."
+lacks "auto run inside the starting directory: no cd (A5)" "$(prompt_of "$out")" "cd '"
+git -C "$NREPO" worktree add -q -b x "$NREPO/.worktrees/x"
+NX="$(git -C "$NREPO/.worktrees/x" rev-parse --show-toplevel)"
+mkdir -p "$NX/.dforge/sdd/2026-01-01-demo"
+cp "$NREPO/.dforge/sdd/2026-01-01-demo/progress.md" "$NX/.dforge/sdd/2026-01-01-demo/progress.md"
+CLAUDE_CODE_SESSION_ID=$SA run "$NX" "$PLAN_REL"
+has "auto run inside the starting directory: a worktree under it (A5)" "$(prompt_of "$out")" "If your working directory is not \`$NX\`, enter it first."
+lacks "auto run inside the starting directory: a worktree under it, no cd (A5)" "$(prompt_of "$out")" "cd '"
+(cd "$NREPO" && bash "$HERE/../../plugins/dforge/scripts/auto-run" --session "$SA" stop >/dev/null 2>&1)
+jq -n --arg c "$TMP/elsewhere" '{cwd: $c}' > "$BY"
+rm -f "$HOME/.claude/dforge/sessions/run/$SA.json" "$HOME/.claude/dforge/sessions/run/$SA.seen"
+CLAUDE_CODE_SESSION_ID=$SA run "$NX" "$PLAN_REL"
+h=$(cd "$NX" && CLAUDE_CODE_SESSION_ID=$SA bash "$SCRIPT" --target "$PLAN_REL")
+has "no auto run keeps the prompt (A5)" "$(prompt_of "$out")" \
+  "Start in \`$NX\` (branch x); its handoff is \`$h\`. If your working directory is not \`$NX\`, enter it first. Before anything else, claim it"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
