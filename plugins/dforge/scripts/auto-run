@@ -52,7 +52,7 @@ usage: auto-run [--session ID] start --spec P [--register R] [--isolation worktr
        auto-run [--session ID] review-skip FAMILY [--until EPOCH] | review-skipped FAMILY
        auto-run [--session ID] api-error [--clear]
        auto-run [--session ID] total compactionSeconds|holds|stalls|apiErrors|reconcilePrompts|panelFailures
-       auto-run [--session ID] counters
+       auto-run [--session ID] counters | log
 pending prints compact, after-compact, handoff, clear, resume, switch or none.
 clear --phase is for a phase transition (the switch or finishing) and never a
       self-resume; a plain clear is one, and the third in a row stops the run
@@ -62,7 +62,8 @@ stop --stale stops a run whose owner session is gone, from any session, and
 api-error counts a turn that ended on an API error; the tenth in a row stops
       the run (exit 5). --clear and task-complete reset the count.
 total adds one to a run total of an active run, bound or not (hooks book
-      them); counters prints the totals, bound or not.
+      them); counters prints the totals, bound or not; log prints the run
+      log of this checkout, bound or not (exit 3 when there is none).
 cd-prefix prints "cd '<checkout>' && " when the run's checkout (or DIR) is
       outside the directory this session started in, and nothing otherwise.
 task-complete, phase execute|final|finish, setup-branch, clear and switch
@@ -205,6 +206,12 @@ case $cmd in
     ar_total "$1" || { echo "auto-run: no auto run in this checkout" >&2; exit 3; }
     ;;
   counters) [ $# -eq 0 ] || usage; ar_counters || { echo "auto-run: no auto run in this checkout" >&2; exit 3; } ;;
+  log)
+    [ $# -eq 0 ] || usage
+    log=$(ar_path 2>/dev/null) && log="$(dirname "$log")/auto-run-log.tsv" && [ -f "$log" ] \
+      || { echo "auto-run: no run log in this checkout" >&2; exit 3; }
+    tr -d '\r' < "$log"
+    ;;
   switch) [ $# -eq 0 ] || usage; bound; ar_require_checkout || exit 7; ar_switch ;;
   failure) reason_arg "$@"; bound; ar_failure "$reason" ;;
   decision)

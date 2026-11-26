@@ -306,6 +306,18 @@ ar_create_unless_busy() {
   ar_create "$@"
 }
 
+# ar_log EVENT [DETAIL] — append one row to the run log beside the state file.
+# Never fails its caller.
+ar_log() {
+  local path phase="" detail=${2:-}
+  path=$(ar_path 2>/dev/null) || return 0
+  [ -f "$path" ] && phase=$(ar_jq -r '.phase // empty' < "$path" 2>/dev/null | tr -d '\r')
+  detail=${detail//[$'\t\n\r']/ }
+  { printf '%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${AR_SESSION:-}" "$phase" "$detail" \
+      >> "$(dirname "$path")/auto-run-log.tsv"; } 2>/dev/null
+  return 0
+}
+
 # ar_start SPEC REGISTER FORCE [ISOLATION] — prints the register path. A
 # register it creates goes in the checkout the run starts from, where its path
 # resolves. ISOLATION is worktree (the default) or in-place.
@@ -353,6 +365,8 @@ _ar_start_bound() {
     isolation: $iso, branch: null, branchBase: null, carried: null,
     version: $version, root: $root
   }' --arg version "$(ar_plugin_version)" --arg root "$AR_PLUGIN_ROOT" || return $?
+  ar_log start "$spec"
+  ar_log bind "$(ar_primary_root)"
   # A register opened at the spec review before the spec existed may still
   # cover nothing, and next-step finds a register only through its Covers.
   [ -z "$regfile" ] && [ -n "$register" ] && regfile=$(dforge_resolve "$register" "$top")
@@ -402,6 +416,8 @@ ar_resume() {
     || { echo "auto-run: no live cockpit in this session" >&2; return 2; }
   [ -f "$path" ] || { echo "auto-run: there is no auto run to resume" >&2; return 4; }
   ar_binding_around "$AR_SESSION" "$(ar_primary_root)" dr_locked "$path" _ar_resume_locked "$path" || return $?
+  ar_log resume
+  ar_log bind "$(ar_primary_root)"
   ar_status
 }
 
@@ -488,7 +504,8 @@ ar_total() {
   path=$(ar_path) || return 1
   [ -f "$path" ] || return 1
   dr_locked "$path" ar_put "$path" 'if .active == true then .totals[$n] = ((.totals[$n] // 0) + $k) else . end' \
-    --arg n "$1" --argjson k "${2:-1}"
+    --arg n "$1" --argjson k "${2:-1}" || return
+  [ "$1" != holds ] || ! ar_jq -e '.active == true' < "$path" >/dev/null 2>&1 || ar_log hold
 }
 
 # ar_counters — the run's totals, one per line (reference/auto-run.md); the
@@ -617,7 +634,8 @@ ar_carried_hit() {
 ar_stop() { # ar_stop [REASON [KIND]] — KIND guard or carried marks a stop resume refuses
   ar_update '.active = false | .stopped = (if $r == "" then null else $r end) | .pending = null
     | .stoppedAt = $now | .stoppedKind = (if $k == "" then null else $k end)' \
-    --arg r "${1:-}" --arg k "${2:-}" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    --arg r "${1:-}" --arg k "${2:-}" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" || return
+  ar_log stop "${1:-}"
 }
 
 # ar_stop_stale — stop, from any session, an active run whose owner is gone
@@ -648,7 +666,8 @@ ar_stop_stale() {
 # SID still owns it, it is active, and SID is gone. Return 3 otherwise.
 _ar_stop_if_stale() {
   ar_jq -e --arg s "$2" '.active == true and .session == $s' < "$1" >/dev/null 2>&1 && ar_is_stale || return 3
-  ar_put "$1" '.active = false | .stopped = $r | .pending = null' --arg r "owner session $2 is gone"
+  ar_put "$1" '.active = false | .stopped = $r | .pending = null' --arg r "owner session $2 is gone" || return
+  ar_log stop "owner session $2 is gone"
 }
 
 # ar_set_phase PHASE — refuses (return 4) execute where ar_guard does, since
@@ -675,7 +694,8 @@ ar_set_phase() {
       return 4
     fi
   fi
-  ar_update '.phase = $p | if $p == "execute" or $p == "final" then .setupDue = false else . end' --arg p "$1"
+  ar_update '.phase = $p | if $p == "execute" or $p == "final" then .setupDue = false else . end' --arg p "$1" || return
+  ar_log phase "$1"
 }
 
 # ar_enter_final — in the execute phase, once the attached plan's ledger has a
@@ -693,7 +713,8 @@ ar_enter_final() {
   tasks=$(plan_tasks "$plan" | cut -f1 | sort -u)
   [ -n "$tasks" ] || return 0
   [ -z "$(comm -23 <(printf '%s\n' "$tasks") <(ledger_done "$ledger" | sort -u))" ] || return 0
-  ar_update '.phase = "final" | .setupDue = false'
+  ar_update '.phase = "final" | .setupDue = false' || return
+  ar_log phase final
 }
 
 # ar_task_complete — a task's complete line is written, so the progress counts
@@ -831,7 +852,8 @@ ar_switch() {
     || { echo "auto-run: the handoff's first prompt names another plan than $plan; run scripts/next-step $plan again" >&2; return 4; }
   ar_update '.pending = "switch" | .phase = "execute" | .setupDue = true | .compactionsSinceTask = 0 | .resumePrompt = $p
     | .launch = (if $m == "" then null else {model: $m, effort: $e} end)' \
-    --arg p "$AR_PROMPT" --arg m "$AR_MODEL" --arg e "$AR_EFFORT"
+    --arg p "$AR_PROMPT" --arg m "$AR_MODEL" --arg e "$AR_EFFORT" || return
+  ar_log switch
 }
 
 # ar_clear PHASE — the cleared session's first prompt and launch, from the
@@ -862,7 +884,8 @@ ar_clear() {
   fi
   ar_update '.pending = "clear" | .rebind = true | .resumePrompt = $p
     | .launch = (if $m == "" then null else {model: $m, effort: $e} end)' \
-    --arg p "$AR_PROMPT" --arg m "$AR_MODEL" --arg e "$AR_EFFORT"
+    --arg p "$AR_PROMPT" --arg m "$AR_MODEL" --arg e "$AR_EFFORT" || return
+  if [ "$is_phase" = 1 ]; then ar_log clear phase; else ar_log clear resume; fi
 }
 
 # The cockpit rebinds from the session that replaced the cleared one, so no
@@ -879,7 +902,8 @@ ar_rebind_locked() { # ar_rebind_locked PATH ID
   ar_jq -e '.active == true and .rebind == true' < "$1" >/dev/null 2>&1 \
     || { echo "auto-run: no clear is waiting for its session" >&2; return 4; }
   ar_put "$1" '.session = $id | .rebind = false | .pending = "resume" | .failures = 0 | .regime = "normal"' --arg id "$2" || return
-  ar_binding_write "$2" "$(ar_primary_root)" >/dev/null
+  ar_binding_write "$2" "$(ar_primary_root)" >/dev/null || return
+  ar_log rebind "$2"
 }
 
 # ar_resumed — the cockpit submitted its stage's prompt.
@@ -902,6 +926,7 @@ ar_compacted() {
     | .finalCompacted = ((.finalCompacted // false) or .phase == "final" or .phase == "finish")
     | if .phase == "execute"
       then .compactionsSinceTask = ((.compactionsSinceTask // 0) + 1) else . end' --argjson secs "$secs" || return $?
+  ar_log compacted
   n=$(ar_get compactionsSinceTask)
   if [ "${n:-0}" -ge "$AR_COMPACTION_CAP" ]; then
     ar_stop "$AR_COMPACTION_CAP compactions without a completed task" || return $?
@@ -926,6 +951,7 @@ ar_stalled() {
   local n
   ar_update '.stalls = ((.stalls // 0) + 1) | .stalledAt = $now | .totals.stalls = ((.totals.stalls // 0) + 1)' \
     --argjson now "$(date +%s)" || return $?
+  ar_log stalled
   n=$(ar_get stalls)
   if [ "${n:-0}" -ge "$AR_STALL_CAP" ]; then
     ar_stop "$AR_STALL_CAP stalls without a completed task" || return $?

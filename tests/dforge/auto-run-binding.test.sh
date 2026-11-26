@@ -202,5 +202,58 @@ ms=$(( ($(date +%s%N) - t0) / 1000000 ))
 check "ack: rebind does not wait (A4)" \
   "$status|$([ "$ms" -lt 2000 ] && echo quick || echo "$ms ms")|$([ -f "$H2/.claude/dforge/sessions/run/s-n2.json" ] && echo written)" "0|quick|written"
 
+# --- log ---
+LR="$TMP/repo-log"
+git init -q -b main "$LR"
+git -C "$LR" commit -q --allow-empty -m init
+LOG="$LR/.dforge/sdd/auto-run-log.tsv"
+lr() {
+  [ "${1:-}" != --session ] || beat "$2"
+  (cd "$LR" && bash "$AR" "$@")
+}
+handoff_for() { # handoff_for <session>: the handoff a clear of that session reads
+  mkdir -p "$LR/.dforge/handoff"
+  printf '# Handoff\n\n## Next session\n\n**Status:** s\n**Next:** n\n\nLaunch in `/work`:\n\n```\nclaude --model opus --effort high\n```\n\nPaste as the first prompt:\n\n```\nKeep designing.\n```\n<!-- next-step: kind=adhoc session=%s done=0 closed=0 subject=- at=%s -->\n' \
+    "$1" "$(date +%s)" > "$LR/.dforge/handoff/stored.md"
+}
+lr --session s-l1 start --spec "$SPEC" >/dev/null 2>&1
+lr --session s-l1 phase plan >/dev/null 2>&1
+lr --session s-l1 compacted >/dev/null 2>&1
+handoff_for s-l1
+lr --session s-l1 clear --phase >/dev/null 2>&1
+lr --session s-l1 stop --reason "disk full" >/dev/null 2>&1
+lr --session s-l2 start --spec "$SPEC" --force >/dev/null 2>&1
+out=$(lr log); status=$?
+check "log: a stopped run survives the next start (A6)" \
+  "$status|$(cut -f2 <<<"$out" | head -n 8 | tr '\n' ' ')|$(awk -F'\t' '$2 == "stop" { print $5 }' <<<"$out")|$(cut -f2 <<<"$out" | grep -cx start)" \
+  "0|start bind phase compacted clear stop start bind |disk full|2"
+check "log: rows have five columns" \
+  "$(awk -F'\t' 'NF != 5 || $1 !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9:][0-9:][0-9:][0-9:][0-9:][0-9:][0-9:][0-9:]Z$/' <<<"$out" | wc -l | tr -d ' ')|$(awk -F'\t' '$2 == "phase" || $2 == "compacted" || $2 == "start" { printf "%s %s %s;", $2, $3, $4 }' <<<"$out")" \
+  "0|start s-l1 spec;phase s-l1 plan;compacted s-l1 plan;start s-l2 spec;"
+
+lr --session s-l2 stop --reason $'a\tb\nc' >/dev/null 2>&1
+check "log: a reason with a tab stays one row" "$(tail -n 1 "$LOG" | cut -f2,5)" $'stop\ta b c'
+
+lr --session s-l2 resume >/dev/null 2>&1
+lr --session s-l2 total holds >/dev/null 2>&1
+lr --session s-l2 stalled >/dev/null 2>&1
+handoff_for s-l2
+lr --session s-l2 clear >/dev/null 2>&1
+lr --session s-l3 rebind --to s-l3 >/dev/null 2>&1
+check "log: a hold, a stall, a rebind and a resume are rows" \
+  "$(cut -f2 "$LOG" | tail -n 6 | tr '\n' ' ')|$(awk -F'\t' '$2 == "rebind" { print $5 }' "$LOG")" \
+  "resume bind hold stalled clear rebind |s-l3"
+
+mv "$LOG" "$TMP/log.aside" && mkdir "$LOG"
+lr --session s-l3 phase plan >/dev/null 2>&1; status=$?
+rmdir "$LOG" && mv "$TMP/log.aside" "$LOG"
+check "log: an unwritable log never fails the command" "$status" "0"
+
+NL="$TMP/repo-nolog"
+git init -q -b main "$NL"
+git -C "$NL" commit -q --allow-empty -m init
+out=$(cd "$NL" && bash "$AR" log 2>/dev/null); status=$?
+check "log: no log exits 3" "$status|$out" "3|"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
