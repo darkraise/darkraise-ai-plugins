@@ -125,6 +125,18 @@ check "settle: refuses while the spec's register is open" "$(grep -c '^not settl
 check "settle: the epic is untouched" "$(register_rows "$D/registers/m1.md" | awk -F'\t' '$1 == 1 { print $5 }')" "doing"
 run bash "$RM" settle --root "$ROOT" --spec docs/dforge/specs/2026-10-08-billing-design.md
 check "settle: the other docs prefix still refuses while open" "$(grep -c '^not settled' <<<"$OUT")" "1"
+# A row waiting on the owner's check is built work: it never holds the epic,
+# while an open row beside it still does.
+bash "$REG" set "$D/registers/billing.md" 1 verify --note "invoice demo owed" >/dev/null
+run bash "$RM" settle --root "$ROOT" --spec "$BILLING"
+check "settle: an open row beside a verify row still refuses" "$(grep -c '^not settled' <<<"$OUT")" "1"
+bash "$REG" set "$D/registers/billing.md" 2 done >/dev/null
+run bash "$RM" settle --root "$ROOT" --spec "$BILLING"
+check "settle: a register with only verify rows left settles the epic" \
+  "$(register_rows "$D/registers/m1.md" | awk -F'\t' '$1 == 1 { print $5 }')" "verify"
+check "settle: the verify row itself is left for the owner" \
+  "$(register_rows "$D/registers/billing.md" | awk -F'\t' '$1 == 1 { print $5 }')" "verify"
+bash "$REG" set "$D/registers/m1.md" 1 doing >/dev/null
 bash "$REG" set "$D/registers/billing.md" 1 done >/dev/null
 bash "$REG" set "$D/registers/billing.md" 2 done >/dev/null
 run bash "$RM" settle --root "$ROOT" --spec "$BILLING"

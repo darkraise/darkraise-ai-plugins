@@ -328,8 +328,10 @@ cmd_settle() {
   [ -n "$spec" ] || usage
   [ -f "$FILE" ] || { echo "no roadmap; nothing to settle"; return 0; }
   spec=${spec#./}
-  if [ -n "$(register_for_spec "$root" "$spec" | while IFS= read -r f; do register_open "$f"; done)" ]; then
-    echo "not settled: registers covering $spec still have unresolved rows"
+  # A verify row is built work waiting on the owner's check, the state settle
+  # itself gives the epic, so only the other unresolved rows hold it back.
+  if [ -n "$(register_for_spec "$root" "$spec" | while IFS= read -r f; do register_open "$f"; done | awk -F'\t' '$5 != "verify"')" ]; then
+    echo "not settled: registers covering $spec still have rows that are not built"
     return 0
   fi
   while IFS=$'\037' read -r m _ _ reg _ _; do

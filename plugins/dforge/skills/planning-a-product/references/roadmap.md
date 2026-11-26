@@ -54,5 +54,5 @@ scripts/roadmap open [M<n>]                every unresolved row below a mileston
 scripts/roadmap add NAME --exit TEXT --register PATH
 scripts/roadmap close M<n> --note TEXT     refuses while rows are open or an earlier milestone is open
 scripts/roadmap reopen M<n> --note TEXT
-scripts/roadmap settle --spec SPEC         epic rows assigned to SPEC go to verify once its registers are resolved
+scripts/roadmap settle --spec SPEC         epic rows assigned to SPEC go to verify once its registers hold nothing unresolved but verify rows
 ```
