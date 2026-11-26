@@ -26,6 +26,8 @@ TMP="$(mktemp -d)"
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
+. "$HERE/fixtures/cockpit-ack.sh"
+cockpit_ack_start "$HOME"
 mkdir -p "$HOME"
 export MSYS_NO_PATHCONV=1
 unset DFORGE_BUDGET DFORGE_JQ DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR

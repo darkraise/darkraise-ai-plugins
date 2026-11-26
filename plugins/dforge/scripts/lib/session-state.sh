@@ -95,7 +95,22 @@ ss_launches() {
   return 0
 }
 
-# ss_prune — delete state files untouched for 30 days.
+# ss_prune — delete state files untouched for 30 days, and run bindings and
+# their seen files as old, except those of a session whose bound run is still
+# active. Without jq no binding is deleted.
 ss_prune() {
+  local run="${HOME:-}/.claude/dforge/sessions/run" f base primary
   find "${HOME:-}/.claude/dforge/sessions/state" -maxdepth 1 -type f -name '*.json' -mtime +30 -delete 2>/dev/null || true
+  [ -d "$run" ] && command -v "${DFORGE_JQ:-jq}" >/dev/null 2>&1 || return 0
+  while IFS= read -r f; do
+    f=${f%$'\r'}
+    base=${f%.*}
+    if [ -f "$base.json" ]; then
+      primary=$("${DFORGE_JQ:-jq}" -r '.primary // empty | strings' < "$base.json" 2>/dev/null | tr -d '\r')
+      [ -z "$primary" ] || ! "${DFORGE_JQ:-jq}" -e --arg s "$(basename "$base")" '.active == true and .session == $s' \
+        < "$primary/.dforge/sdd/auto-run.json" >/dev/null 2>&1 || continue
+    fi
+    rm -f "$f"
+  done < <(find "$run" -maxdepth 1 -type f \( -name '*.json' -o -name '*.seen' \) -mtime +30 2>/dev/null)
+  return 0
 }

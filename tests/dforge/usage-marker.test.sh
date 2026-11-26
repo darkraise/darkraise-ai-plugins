@@ -18,6 +18,8 @@ TMP=$(mktemp -d)
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
+. "$HERE/fixtures/cockpit-ack.sh"
+cockpit_ack_start "$HOME"
 mkdir -p "$HOME/.claude"
 export MSYS_NO_PATHCONV=1 GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1
 export GIT_AUTHOR_DATE='2026-01-01T00:00:00Z' GIT_COMMITTER_DATE='2026-01-01T00:00:00Z'

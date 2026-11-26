@@ -36,6 +36,8 @@ trap 'cd / && rm -rf "$TMP"' EXIT
 # run from TMP so the hooks never write this repository's .dforge/.
 cd "$TMP" || exit 1
 export HOME="$TMP/home"
+. "$HERE/fixtures/cockpit-ack.sh"
+cockpit_ack_start "$HOME"
 mkdir -p "$HOME"
 unset CLAUDE_CODE_SESSION_ID CLAUDE_CONFIG_DIR AR_SESSION DFORGE_BUDGET CLAUDE_PROJECT_DIR
 export DFORGE_NO_SETTINGS=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \

@@ -20,6 +20,8 @@ TMP="$(mktemp -d)"
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
+. "$HERE/fixtures/cockpit-ack.sh"
+cockpit_ack_start "$HOME"
 mkdir -p "$HOME/.claude"
 printf '{"autoCompactWindow": 650000}
 ' > "$HOME/.claude/settings.json"

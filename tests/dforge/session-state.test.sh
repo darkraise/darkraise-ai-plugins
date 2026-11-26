@@ -64,5 +64,20 @@ ss_prune
 check "prune: a file older than 30 days goes, a newer one stays" \
   "$([ -e "$SD/s-old.json" ] && echo kept || echo gone) $([ -e "$SD/s-2.json" ] && echo kept || echo gone)" "gone kept"
 
+RD="$HOME/.claude/dforge/sessions/run"
+mkdir -p "$RD" "$TMP/idle/.dforge/sdd" "$TMP/busy/.dforge/sdd"
+printf '{"active":false,"session":"old"}\n' > "$TMP/idle/.dforge/sdd/auto-run.json"
+printf '{"active":true,"session":"live"}\n' > "$TMP/busy/.dforge/sdd/auto-run.json"
+for s in old:idle live:busy young:idle; do
+  jq -nc --arg p "$TMP/${s#*:}" '{primary: $p, nonce: "n", at: 1}' > "$RD/${s%%:*}.json"
+  cp "$RD/${s%%:*}.json" "$RD/${s%%:*}.seen"
+done
+touch -d '-31 days' "$RD/old.json" "$RD/old.seen" "$RD/live.json" "$RD/live.seen"
+ss_prune
+check "prune: old bindings and seen files go" \
+  "$([ -e "$RD/old.json" ] && echo kept || echo gone) $([ -e "$RD/old.seen" ] && echo kept || echo gone) $([ -e "$RD/young.json" ] && echo kept || echo gone)" "gone gone kept"
+check "prune: an active run's binding stays" \
+  "$([ -e "$RD/live.json" ] && echo kept || echo gone) $([ -e "$RD/live.seen" ] && echo kept || echo gone)" "kept kept"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

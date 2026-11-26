@@ -20,6 +20,8 @@ TMP=$(mktemp -d); stub=""
 trap '[ -n "$stub" ] && kill "$stub" 2>/dev/null; rm -rf "$TMP"' EXIT
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 export HOME="$TMP/home" CLAUDE_CODE_SESSION_ID=s1
+. "$HERE/fixtures/cockpit-ack.sh"
+cockpit_ack_start "$HOME"
 export DFORGE_OPENAI_API_KEY=sk-test-openai-SENTINEL STUB_DECISIONS_KEY=sk-test-openai-SENTINEL
 WORK="$TMP/work"; LOG="$WORK/.dforge/decisions.jsonl"; REQ="$TMP/requests.jsonl"
 mkdir -p "$HOME/.dforge" "$HOME/.claude/dforge/sessions/cockpit" "$WORK/docs" "$WORK/.dforge"

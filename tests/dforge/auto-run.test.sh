@@ -17,6 +17,8 @@ TMP="$(mktemp -d)"
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
+. "$HERE/fixtures/cockpit-ack.sh"
+cockpit_ack_start "$HOME"
 mkdir -p "$HOME"
 export MSYS_NO_PATHCONV=1 DFORGE_NO_SETTINGS=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
@@ -95,11 +97,11 @@ check "another session cannot stop it" "$status:$(field active)" "3:true"
 out=$(ar --session s-1 status); status=$?
 check "status: exit 0" "$status" "0"
 check "status: the run line" "$(head -n 1 <<<"$out")" "auto run: spec — regime normal — pending none — 0 compactions — 0 resumes — 0 pending decisions — spec $SPEC — plan none — base main — register $reg — isolation worktree"
-check "status: the default settings leave the API rungs off" "$(sed -n 2p <<<"$out")" "api rungs: off"
+check "status: the default settings leave the API rungs off" "$(sed -n 3p <<<"$out")" "api rungs: off"
 mkdir -p "$HOME/.dforge"
 for cfg in '{}|api rungs: off' '{"apiBudgetOpenai":5}|' '{"apiBudgetAnthropic":5}|' '{"apiBudgetAgentRouter":5}|' '{"decisionApi":"shadow"}|'; do
   printf '%s\n' "${cfg%%|*}" > "$HOME/.dforge/config.json"
-  check "status with ${cfg%%|*}: the API rungs line" "$(DFORGE_NO_SETTINGS= ar --session s-1 status | sed -n 2p)" "${cfg#*|}"
+  check "status with ${cfg%%|*}: the API rungs line" "$(DFORGE_NO_SETTINGS= ar --session s-1 status | sed -n 3p)" "${cfg#*|}"
 done
 rm -f "$HOME/.dforge/config.json"
 check "pending: none" "$(ar --session s-1 pending)" "none"

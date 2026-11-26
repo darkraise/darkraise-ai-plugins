@@ -171,9 +171,24 @@ ar_seen_ok() { # ar_seen_ok SID — the cockpit has read this binding
     'length == 2 and (.[0].nonce | type == "string") and .[0].primary == .[1].primary and .[0].nonce == .[1].nonce' >/dev/null 2>&1
 }
 
-# ar_binding_around SID PRIMARY CMD [ARGS…] — write SID's binding, run CMD,
-# and when CMD fails put the binding's earlier bytes back (or remove it when
-# there was none), so a refused start or resume leaves no trace.
+# ar_ack_wait SID — wait up to DFORGE_BIND_WAIT seconds (10 by default) for
+# the cockpit to echo SID's binding.
+ar_ack_wait() {
+  local wait=${DFORGE_BIND_WAIT:-10} n
+  case $wait in '' | *[!0-9]*) wait=10 ;; esac
+  n=$(( wait * 20 ))
+  while :; do
+    ar_seen_ok "$1" && return 0
+    [ "$n" -gt 0 ] || return 1
+    n=$(( n - 1 ))
+    sleep 0.05
+  done
+}
+
+# ar_binding_around SID PRIMARY CMD [ARGS…] — write SID's binding, wait for
+# the cockpit to echo it (return 2 without the echo), run CMD, and when either
+# fails put the binding's earlier bytes back (or remove it when there was
+# none), so a refused start or resume leaves no trace.
 ar_binding_around() {
   local sid=$1 primary=$2 f keep="" rc
   shift 2
@@ -186,8 +201,13 @@ ar_binding_around() {
     [ -z "$keep" ] || rm -f "$keep"
     return 1
   fi
-  "$@"
-  rc=$?
+  if ar_ack_wait "$sid"; then
+    "$@"
+    rc=$?
+  else
+    echo "auto-run: the cockpit in this session does not see this run" >&2
+    rc=2
+  fi
   if [ "$rc" -ne 0 ]; then
     if [ -n "$keep" ]; then mv -f "$keep" "$f"; else rm -f "$f"; fi
   else
@@ -290,12 +310,19 @@ ar_create_unless_busy() {
 # register it creates goes in the checkout the run starts from, where its path
 # resolves. ISOLATION is worktree (the default) or in-place.
 ar_start() {
-  local spec=$1 register=$2 force=$3 iso=${4:-worktree} path top slug base regfile="" age
+  local spec=$1 register=$2 force=$3 iso=${4:-worktree} path age
   path=$(ar_path) || { echo "auto-run: not inside a git repository" >&2; return 2; }
   # Nothing would compact, switch or wake the run without the cockpit.
   age=$(ar_beat_age "$AR_SESSION") && [ "$age" -le "$AR_BEAT_SECONDS" ] \
     || { echo "auto-run: no live cockpit in this session" >&2; return 2; }
   if [ "$force" != 1 ] && ar_busy; then ar_busy_refusal; return; fi
+  ar_binding_around "$AR_SESSION" "$(ar_primary_root)" _ar_start_bound "$spec" "$register" "$force" "$iso" "$path"
+}
+
+# _ar_start_bound SPEC REGISTER FORCE ISOLATION PATH — ar_start once the
+# cockpit sees the binding.
+_ar_start_bound() {
+  local spec=$1 register=$2 force=$3 iso=$4 path=$5 top slug base regfile=""
   top=$(git rev-parse --show-toplevel)
   dforge_stores_init "$top"
   if [ -z "$register" ]; then
@@ -315,8 +342,7 @@ ar_start() {
   dforge_self_ignore "$(dirname "$path")"
   # Under the update lock, so a --force start never lands between another
   # session's read and write of the state and is lost.
-  ar_binding_around "$AR_SESSION" "$(ar_primary_root)" \
-    dr_locked "$path" ar_create_unless_busy "$force" "$path" --arg s "$AR_SESSION" --arg spec "$spec" --arg reg "$register" --arg base "$base" \
+  dr_locked "$path" ar_create_unless_busy "$force" "$path" --arg s "$AR_SESSION" --arg spec "$spec" --arg reg "$register" --arg base "$base" \
     --arg iso "$iso" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
     active: true, session: $s, rebind: false, stopped: null, startedAt: $now,
     spec: $spec, plan: null, register: $reg, base: (if $base == "" then null else $base end),
@@ -479,7 +505,10 @@ ar_counters() {
 }
 
 ar_status() {
-  ar_state | ar_jq -r '"auto run: \(.phase) — regime \(.regime) — pending \(.pending // "none") — \(.compactions) compactions — \(.resumes) resumes — \(.decisions | length) pending decisions — spec \(.spec) — plan \(.plan // "none") — base \(.base // "none") — register \(.register) — isolation \(.isolation // "worktree")\(if .branch then " — branch \(.branch)" else "" end)\(if .setupDue == true then " — setup due" else "" end)"'
+  local line
+  line=$(ar_state | ar_jq -r '"auto run: \(.phase) — regime \(.regime) — pending \(.pending // "none") — \(.compactions) compactions — \(.resumes) resumes — \(.decisions | length) pending decisions — spec \(.spec) — plan \(.plan // "none") — base \(.base // "none") — register \(.register) — isolation \(.isolation // "worktree")\(if .branch then " — branch \(.branch)" else "" end)\(if .setupDue == true then " — setup due" else "" end)"') || return
+  printf '%s\n' "$line"
+  if ar_seen_ok "$AR_SESSION"; then echo "cockpit: sees this run"; else echo "cockpit: does not see this run"; fi
 }
 
 ar_pending() { ar_state | ar_jq -r '.pending // "none"'; }

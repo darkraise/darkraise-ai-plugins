@@ -31,6 +31,8 @@ cleanup() {
 }
 trap cleanup EXIT
 export HOME="$TMP/home" CLAUDE_CODE_SESSION_ID=s1
+. "$HERE/fixtures/cockpit-ack.sh"
+cockpit_ack_start "$HOME"
 KEY_A=sk-test-anthropic-SENTINEL KEY_O=sk-test-openai-SENTINEL KEY_R=sk-test-agentrouter-SENTINEL
 export DFORGE_ANTHROPIC_API_KEY=$KEY_A DFORGE_OPENAI_API_KEY=$KEY_O DFORGE_AGENTROUTER_API_KEY=$KEY_R
 WORK="$TMP/work"; REPORT="$TMP/report.md"; REQ="$TMP/requests.jsonl"; CFG="$TMP/stub-config.json"

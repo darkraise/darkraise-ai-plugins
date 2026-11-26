@@ -22,7 +22,9 @@ export HOME="$TMP/home"
 mkdir -p "$HOME"
 export MSYS_NO_PATHCONV=1 DFORGE_NO_SETTINGS=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
-unset DFORGE_BUDGET DFORGE_JQ DFORGE_FLOCK DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
+. "$HERE/fixtures/cockpit-ack.sh"
+cockpit_ack_start "$HOME"
+unset DFORGE_BIND_WAIT DFORGE_BUDGET DFORGE_JQ DFORGE_FLOCK DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
 
 REPO="$TMP/repo"
 git init -q -b main "$REPO"
@@ -145,6 +147,57 @@ a --session s-x resume >/dev/null 2>&1; s2=$?
 check "resolver: stop --stale and resume act on this repository" \
   "$s1|$active1|$s2|$(jq -r '"\(.active) \(.session)"' "$ASTATE")|$(cmp -s "$STATE" "$TMP/b.before" && echo same)" \
   "0|false|0|true s-x|same"
+
+# --- ack: a second HOME whose cockpit never echoes ---
+H2="$TMP/home2"
+mkdir -p "$H2"
+RN="$TMP/repo-n"
+git init -q -b main "$RN"
+git -C "$RN" commit -q --allow-empty -m init
+NSTATE="$RN/.dforge/sdd/auto-run.json"
+mute() { # mute <session> ARGS… — from RN, in H2, with a live beat and a 1 s wait
+  local s=$1 f
+  shift
+  f="$H2/.claude/dforge/sessions/cockpit/$s"
+  mkdir -p "$(dirname "$f")"
+  printf '%s\n' "$(date +%s)" > "$f"
+  (cd "$RN" && HOME="$H2" DFORGE_BIND_WAIT=${WAIT:-1} bash "$AR" --session "$s" "$@")
+}
+err=$(mute s-n1 start --spec "$SPEC" 2>&1 >/dev/null); status=$?
+check "ack: start without an echo exits 2 (A3)" \
+  "$status|$err|$([ -e "$NSTATE" ] && echo state)|$([ -e "$H2/.claude/dforge/sessions/run/s-n1.json" ] && echo binding)" \
+  "2|auto-run: the cockpit in this session does not see this run||"
+
+(cd "$RN" && beat s-n0 && bash "$AR" --session s-n0 start --spec "$SPEC" >/dev/null 2>&1)
+mkdir -p "$H2/.claude/dforge/sessions/run"
+printf '{"primary":"/elsewhere","nonce":"old","at":1}\n' > "$H2/.claude/dforge/sessions/run/s-n1.json"
+cp "$H2/.claude/dforge/sessions/run/s-n1.json" "$TMP/n1.before"
+cp "$NSTATE" "$TMP/n.before"
+mute s-n1 start --spec "$SPEC" --force >/dev/null 2>&1; status=$?
+check "ack: start --force over another run changes nothing (A3)" \
+  "$status|$(cmp -s "$NSTATE" "$TMP/n.before" && echo same)|$(cmp -s "$H2/.claude/dforge/sessions/run/s-n1.json" "$TMP/n1.before" && echo same)" "2|same|same"
+
+(cd "$RN" && beat s-n0 && bash "$AR" --session s-n0 stop >/dev/null 2>&1)
+cp "$NSTATE" "$TMP/n.before"
+err=$(mute s-n1 resume 2>&1 >/dev/null); status=$?
+check "ack: resume without an echo exits 2 (A3)" \
+  "$status|$err|$(cmp -s "$NSTATE" "$TMP/n.before" && echo same)" "2|auto-run: the cockpit in this session does not see this run|same"
+
+ar --session s-n3 start --spec "$SPEC" --force >/dev/null 2>&1; status=$?
+check "ack: an echoed start succeeds" "$status|$(jq -r .session "$STATE")" "0|s-n3"
+
+check "status: cockpit sees this run (A4)" "$(ar --session s-n3 status | sed -n 2p)" "cockpit: sees this run"
+rm -f "$RUN/s-n3.seen"
+s1=$(ar --session s-n3 status | sed -n 2p)
+jq -c '.nonce = "other"' "$RUN/s-n3.json" > "$RUN/s-n3.seen"
+check "status: cockpit does not see this run (A4)" "$s1|$(ar --session s-n3 status | sed -n 2p)" "cockpit: does not see this run|cockpit: does not see this run"
+
+jq '.active = true | .rebind = true | .stopped = null' "$NSTATE" > "$NSTATE.tmp" && mv "$NSTATE.tmp" "$NSTATE"
+t0=$(date +%s%N)
+WAIT=5 mute s-n2 rebind --to s-n2 >/dev/null 2>&1; status=$?
+ms=$(( ($(date +%s%N) - t0) / 1000000 ))
+check "ack: rebind does not wait (A4)" \
+  "$status|$([ "$ms" -lt 2000 ] && echo quick || echo "$ms ms")|$([ -f "$H2/.claude/dforge/sessions/run/s-n2.json" ] && echo written)" "0|quick|written"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

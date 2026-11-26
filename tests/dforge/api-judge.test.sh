@@ -19,6 +19,8 @@ lacks() { case "$2" in *"$3"*) check "$1" "[$2]" "lacks [$3]" ;; *) check "$1" y
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 export HOME="$TMP/home" CLAUDE_CODE_SESSION_ID=s1
+. "$HERE/fixtures/cockpit-ack.sh"
+cockpit_ack_start "$HOME"
 export DFORGE_ANTHROPIC_API_KEY=sk-test-anthropic-SENTINEL DFORGE_OPENAI_API_KEY=sk-test-openai-SENTINEL DFORGE_AGENTROUTER_API_KEY=sk-test-agentrouter-SENTINEL
 WORK="$TMP/work"; STATE="$WORK/.dforge"; REPORT="$STATE/rulings-preexec-1-report.md"; JLOG="$STATE/api-judge.log"
 mkdir -p "$HOME/.dforge" "$HOME/.claude/dforge/sessions/cockpit" "$WORK/docs" "$STATE" "$TMP/ws" "$TMP/mirror"

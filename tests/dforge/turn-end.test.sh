@@ -25,6 +25,8 @@ trap 'cd / && rm -rf "$TMP"' EXIT
 # run from TMP so the hooks never write this repository's .dforge/.
 cd "$TMP" || exit 1
 export HOME="$TMP/home"; mkdir -p "$HOME"
+. "$HERE/fixtures/cockpit-ack.sh"
+cockpit_ack_start "$HOME"
 unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION DFORGE_BUDGET CLAUDE_PROJECT_DIR
 
 REPO="$TMP/repo"

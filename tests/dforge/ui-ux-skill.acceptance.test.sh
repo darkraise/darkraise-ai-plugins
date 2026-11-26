@@ -47,6 +47,8 @@ export WORKFLOW_GUARD_CLAUDE_DIR="$TMP/workflow-guard" WORKFLOW_GUARD_MANAGED_DI
 trap 'rm -rf "$TMP"' EXIT
 REAL_HOME="$HOME"
 export HOME="$TMP/home"; mkdir -p "$HOME"
+. "$HERE/fixtures/cockpit-ack.sh"
+cockpit_ack_start "$HOME"
 unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION DFORGE_BUDGET CLAUDE_PROJECT_DIR
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
@@ -713,6 +715,7 @@ t_A15() {
   new_repo a15b web
   HX="$TMP/home-a15b"; SID=s-a15b
   mkdir -p "$HX/.claude/dforge/sessions/cockpit"
+  cockpit_ack_start "$HX"
   date +%s > "$HX/.claude/dforge/sessions/cockpit/$SID"
   turn_start "$HX" "$SID" "$REPO"
   (cd "$REPO" && HOME="$HX" timeout 30 bash "$AUTORUN" --session "$SID" start --spec docs/s.md --register docs/r.md >/dev/null 2>&1)
