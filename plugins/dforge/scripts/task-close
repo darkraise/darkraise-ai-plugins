@@ -101,7 +101,7 @@ if bash "$HERE/auto-run" status >/dev/null 2>&1; then
   # Measured before the completion is recorded, so the close row comes first;
   # printed last, so a compact verdict is the last thing the session reads.
   if [ "$mode" = --final ]; then budget_out=$(budget --final); else budget_out=$(budget); fi
-  ar_out=$(bash "$HERE/auto-run" task-complete 2>&1); ar_rc=$?
+  ar_out=$(AR_NO_BUDGET_LINE=1 bash "$HERE/auto-run" task-complete 2>&1); ar_rc=$?
   [ -z "$ar_out" ] || printf '%s\n' "$ar_out"
   if [ "$ar_rc" -eq 5 ]; then
     echo "auto run: stopped at this completion"

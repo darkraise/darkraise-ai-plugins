@@ -220,5 +220,23 @@ run bash "$CLOSE" docs/plan.md 1 'done: x; verified: y; remaining: none; discove
 check "close: a review text with a newline exits 2 and writes nothing" "$rc|$(cat "$LEDGER")" "2|$LEDGER_BEFORE"
 rm -rf other
 
+# --- auto: one budget line, task-close's own ---
+. "$HERE/fixtures/cockpit-ack.sh"
+cockpit_ack_start "$HOME"
+sed '/^### Task 2/,$d' docs/plan.md > docs/auto-plan.md
+git add docs/auto-plan.md && git commit -qm "docs: auto fixture"
+mkdir -p "$HOME/.claude/dforge/sessions/cockpit"
+date +%s > "$HOME/.claude/dforge/sessions/cockpit/s-tc"
+bash "$P/scripts/auto-run" --session s-tc start --spec docs/spec.md --isolation in-place >/dev/null 2>&1
+git checkout -q -b auto/tc
+AST="$(git rev-parse --show-toplevel)/.dforge/sdd/auto-run.json"
+jq '.phase = "execute" | .branch = "auto/tc"' "$AST" > "$AST.tmp" && mv "$AST.tmp" "$AST"
+run bash "$BRIEF" --open docs/auto-plan.md 1
+CLAUDE_CODE_SESSION_ID=s-tc run bash "$CLOSE" docs/auto-plan.md 1 "$CP"
+check "auto: task-close prints one budget line (A13)" \
+  "$rc|$(grep -c '^budget' <<<"$out")|$(tail -n 1 <<<"$out" | cut -c1-12)" "0|1|budget (auto"
+bash "$P/scripts/auto-run" --session s-tc stop >/dev/null 2>&1
+git checkout -q -
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

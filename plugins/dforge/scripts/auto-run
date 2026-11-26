@@ -49,6 +49,7 @@ usage: auto-run [--session ID] start --spec P [--register R] [--isolation worktr
        auto-run [--session ID] ruling add TEXT | ruling list
        auto-run [--session ID] stop [--reason TEXT] | stop --stale
        auto-run [--session ID] after-compact
+       auto-run [--session ID] due --tokens N
        auto-run [--session ID] review-skip FAMILY [--until EPOCH] | review-skipped FAMILY
        auto-run [--session ID] api-error [--clear]
        auto-run [--session ID] total compactionSeconds|holds|stalls|apiErrors|reconcilePrompts|panelFailures
@@ -74,6 +75,11 @@ preflight prints what would stop an unattended run (free space below
       DFORGE_PREFLIGHT_FREE percent, default 15; a refused git write; with
       --isolation worktree a refused scratch worktree), or preflight: ok, then
       one line per review family; it needs no run and exits 0.
+due books a compaction (exit 6) when N tokens reach the run's limit and nothing
+      is pending, and prints the limit, hard and the pending action; exit 3
+      when the model's window is unknown. phase plan|execute|final,
+      task-complete and ruling add print the run's budget line last
+      (AR_NO_BUDGET_LINE=1 leaves it out).
 review-skipped exits 0 while the review family is skipped after a quota
       failure (review-skip records one), 1 when it is not.
 Exit: 0 done; 1 failed (no handoff file, or jq or mktemp failed); 2 usage; 3 no run bound to this session;
@@ -109,6 +115,12 @@ fi
 case $cmd in start | stop | resume) ;; *) ar_version_check ;; esac
 
 bound() { ar_bound || { echo "auto-run: no auto run is bound to this session" >&2; exit 3; }; }
+# budget_line — the run's budget line after a command changed the run; the
+# line's verdict never becomes the command's status.
+budget_line() {
+  [ "${AR_NO_BUDGET_LINE:-}" != 1 ] || return 0
+  (export CLAUDE_CODE_SESSION_ID=$AR_SESSION; DFORGE_BUDGET_CALLER="auto-run:$cmd" ctx_line) || true
+}
 # api_rungs — "api rungs: off" when the Decisions API is off and every API
 # budget cap is 0, so a ruling's rungs 1 and 2 have nothing to call. Settings
 # that cannot be read print nothing, and the session runs the rungs as before.
@@ -167,9 +179,18 @@ case $cmd in
     case $1 in spec|plan|execute|final|finish) ;; *) usage ;; esac
     bound
     case $1 in execute | final | finish) ar_require_checkout || exit 7 ;; esac
-    ar_set_phase "$1"
+    ar_set_phase "$1"; rc=$?
+    case $1 in plan | execute | final) [ "$rc" -ne 0 ] || budget_line ;; esac
+    exit "$rc"
     ;;
-  task-complete) [ $# -eq 0 ] || usage; bound; ar_require_checkout || exit 7; ar_task_complete ;;
+  task-complete)
+    [ $# -eq 0 ] || usage
+    bound
+    ar_require_checkout || exit 7
+    ar_task_complete; rc=$?
+    [ "$rc" -ne 0 ] || budget_line
+    exit "$rc"
+    ;;
   cd-prefix)
     [ $# -eq 0 ] || { [ $# -eq 2 ] && [ "$1" = --dir ] && [ -n "$2" ]; } || usage
     bound; ar_cd_prefix "${2:-}"
@@ -263,10 +284,33 @@ case $cmd in
     ;;
   ruling)
     case "$#:${1:-}" in
-      2:add) [ -n "$2" ] || usage; bound; ar_ruling_add "$2" ;;
+      2:add) [ -n "$2" ] || usage; bound; ar_ruling_add "$2"; rc=$?; [ "$rc" -ne 0 ] || budget_line; exit "$rc" ;;
       1:list) bound; ar_ruling_list ;;
       *) usage ;;
     esac
+    ;;
+  due)
+    [ $# -eq 2 ] && [ "$1" = --tokens ] && [[ $2 =~ ^[0-9]+$ ]] || usage
+    bound
+    export CLAUDE_CODE_SESSION_ID=$AR_SESSION
+    model=""
+    if ctx_have_jq && ctx_find_transcript; then model=$(ctx_model "$CTX_TRANSCRIPT"); fi
+    ctx_window_prime "$model"
+    window=$(ctx_window "$model") || window=""
+    [ -n "$window" ] || { echo "due: unknown"; exit 3; }
+    budget=$(ctx_pinned_budget)
+    [ -n "$budget" ] || budget=$(ctx_budget "$model")
+    regime=$(ar_get regime)
+    limit=$(ar_limit "$budget" "$window" "${regime:-normal}")
+    hard=$(ar_hard "$budget" "$window")
+    before=$(ar_get pending)
+    if [ -z "$before" ] && [ "$((10#$2))" -ge "$limit" ]; then
+      ar_update 'if .pending == null then .pending = "compact" else . end' || exit $?
+    fi
+    after=$(ar_get pending)
+    echo "due: limit=$limit hard=$hard pending=${after:-none}"
+    [ -z "$before" ] && [ "$after" = compact ] && exit 6
+    exit 0
     ;;
   after-compact)
     [ $# -eq 0 ] || usage
