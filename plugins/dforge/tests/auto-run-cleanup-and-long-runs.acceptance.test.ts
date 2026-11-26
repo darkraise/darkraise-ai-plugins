@@ -131,7 +131,7 @@ function world(on: On, w: World) {
     return { value: [...names].map(name => ({ name, kind: w.files[`${prefix}${name}`] !== undefined ? 'file' : 'dir' })) } as never
   })
   on('fs.write', (_$, e) => {
-    w.files[e.path] = { text: String(e.content ?? '') }
+    w.files[e.path] = { text: e.text }
     return { value: undefined }
   })
   on('http.fetch', () => ({ value: { status: 200, ok: true, headers: {}, text: '{"id":"m1"}' } }))

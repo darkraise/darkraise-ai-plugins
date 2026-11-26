@@ -5376,6 +5376,57 @@ describe('run card', () => {
       expect(sent()).toHaveLength(1)
     })
 
+  // A strict tail at 360k of a 300k budget (hard is 375k), with Discord on.
+  const strictTail = async ($: Parameters<TestBody>[0], on: On, config: Record<string, unknown> = {}) => {
+    const fetches: NonNullable<World['fetches']> = []
+    const files: World['files'] = {
+      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: tailLedger(3, false), mtimeMs: 2_000_000 },
+      '/home/me/code/shop/docs/plans/p.md': { text: TAIL_PLAN },
+      [CONFIG]: { text: JSON.stringify({ handoffTokens: 300_000, notifyAfter: 0, ...config }) },
+    }
+    const w: World = { ...SIGNED_IN, tokens: 360_000, window: 800_000, fetches, files }
+    world(on, w)
+    signedIn(on, files)
+    mock.store(on, { notifyUrl: WEBHOOK })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    const drawn = async (mount: typeof PANE | ReturnType<typeof minimized>) => {
+      const ui = await $.ui.mount({ ...mount, surface: 'desktop' })
+      const text = JSON.stringify(await ui.drawn())
+      await ui.unmount()
+      return text
+    }
+    const reachHard = async () => {
+      w.tokens = 375_000
+      await $.tool.call({ tool: 'Bash', command: 'ls' })
+    }
+    return { fetches, drawn, reachHard }
+  }
+
+  test('at hard the desktop dial and the Discord field say handoff due', async ($, on) => {
+    const { fetches, drawn, reachHard } = await strictTail($, on)
+    const field = async (turnId: string) => {
+      await $.turn.start({ text: 'go', turnId })
+      await $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId, reason: 'answer' })
+      const embed = (fetches.at(-1)?.body.embeds as { fields?: { name: string; value: string }[] }[] | undefined)?.[0]
+      return embed?.fields?.find(one => one.name === 'Context')?.value
+    }
+    expect(await drawn(PANE)).toContain('of handoff')
+    expect(await drawn(PANE)).not.toContain('handoff due')
+    expect(await field('t1')).toBe('360k · 120% of handoff')
+    await reachHard()
+    expect(await drawn(PANE)).toContain('of handoff · handoff due')
+    expect(await field('t2')).toBe('375k · 125% of handoff · handoff due')
+  })
+
+  test('at hard the desktop band says handoff due', async ($, on) => {
+    const { drawn, reachHard } = await strictTail($, on, { layout: 'compact' })
+    expect(await drawn(minimized('desktop'))).toContain('Context')
+    expect(await drawn(minimized('desktop'))).not.toContain('handoff due')
+    await reachHard()
+    expect(await drawn(minimized('desktop'))).toContain('handoff due')
+  })
+
   test('a ledger write that reaches the tail is read before the budget in the same call', async ($, on) => {
     const notes: string[] = []
     const files: World['files'] = {

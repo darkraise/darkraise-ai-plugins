@@ -2361,8 +2361,14 @@ export const register: Register = on => {
         tiles.push({
           dial: gaugeSvg(share, rampColor(share * 100), 120, `${Math.round(share * 100)}%`, null, true),
           key: 'Context',
-          alt: `${Math.round(share * 100)}% of the handoff budget`,
-          notes: [[{ text: `of handoff${turnsLeft === null ? '' : ` · ≈${turnsLeft} ${turnsLeft === 1 ? 'turn' : 'turns'}`}`, color: turnsLeft !== null && turnsLeft <= 3 ? 'warning' : undefined }]],
+          alt: `${Math.round(share * 100)}% of the handoff budget${head.isHandoffDue ? ', handoff due' : ''}`,
+          notes: [
+            [
+              head.isHandoffDue
+                ? { text: 'of handoff · handoff due', color: 'warning' }
+                : { text: `of handoff${turnsLeft === null ? '' : ` · ≈${turnsLeft} ${turnsLeft === 1 ? 'turn' : 'turns'}`}`, color: turnsLeft !== null && turnsLeft <= 3 ? 'warning' : undefined },
+            ],
+          ],
         })
       }
       for (const limit of gauged) {
@@ -2593,7 +2599,11 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
               share: head.tokens / head.window,
               color: rampColor((head.tokens / head.limit) * 100),
               tick: head.limit / head.window,
-              note: turnsNow === null ? [] : [{ text: `≈${turnsNow} ${turnsNow === 1 ? 'turn' : 'turns'}`, color: turnsNow <= 3 ? 'warning' : undefined }],
+              note: head.isHandoffDue
+                ? [{ text: 'handoff due', color: 'warning' }]
+                : turnsNow === null
+                  ? []
+                  : [{ text: `≈${turnsNow} ${turnsNow === 1 ? 'turn' : 'turns'}`, color: turnsNow <= 3 ? 'warning' : undefined }],
             },
           ]),
       ...band.limits.filter(limit => picked.includes(limitLabel(limit.kind) as BandSegment)).map((limit): BandMeter => {
@@ -3044,7 +3054,7 @@ async function turnFields($: EngineInterface): Promise<{ name: string; value: st
   const items = await read($, plan)
   const summary = await read($, run)
   const fields: { name: string; value: string }[] = []
-  if (head !== null) fields.push({ name: 'Context', value: `${kTokens(head.tokens)} · ${Math.round((head.tokens / head.limit) * 100)}% of handoff` })
+  if (head !== null) fields.push({ name: 'Context', value: `${kTokens(head.tokens)} · ${Math.round((head.tokens / head.limit) * 100)}% of handoff${head.isHandoffDue ? ' · handoff due' : ''}` })
   if (head?.usd != null) fields.push({ name: 'Cost', value: `$${head.usd.toFixed(2)}` })
   if (summary !== null && summary.total > 0) fields.push({ name: 'Run', value: `${summary.done}/${summary.total}` })
   else if (items.length > 0) fields.push({ name: 'Plan', value: `${items.filter(item => item.status === 'completed').length}/${items.length}` })
@@ -4497,7 +4507,8 @@ async function refresh(
       ? finalLimitFor(window, compactWindow)
       : budgetFor(handoffTokens, window, compactWindow)
   // Relaxed mode measures the tail against the final-phase limit, but a plan
-  // with every task complete is in its final phase, which never hands off.
+  // with every task complete is in its final phase, which never hands off
+  // there. In strict mode the tail and the final phase hand off at hard.
   const isFinishing = !isAuto && isTail && (!tuning.isRelaxed || summary?.isFinished === true || (summary !== null && summary.isPlanRead && summary.total > 0 && summary.done >= summary.total))
   // Strict mode finishes a plan's tail and final phase past the budget, up to hard.
   const hard = isFinishing && !tuning.isRelaxed ? hardFor(handoffTokens, window, compactWindow) : null

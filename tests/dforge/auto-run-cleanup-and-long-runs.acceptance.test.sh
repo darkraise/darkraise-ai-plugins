@@ -455,6 +455,8 @@ for mode in "--final" "--tail 1" "--tail 2" "--plan" "--finish"; do
   check "A12: $mode says handoff at hard (375,000)" "$(vd 375000 300000 $mode)" "handoff|5"
   check "A12: $mode follows a 200k budget: ok at 249,999, handoff at 250,000" "$(vd 249999 200000 $mode)/$(vd 250000 200000 $mode)" "ok|0/handoff|5"
 done
+# 93% of the 800,000 window is 744,000; 1.25 x 600,000 would pass it.
+check "A12: hard stays 40,000 below the compaction point: a 600k budget is ok at 703,999, handoff at 704,000" "$(vd 703999 600000 --final)/$(vd 704000 600000 --final)" "ok|0/handoff|5"
 check "A12: an ordinary task past the budget still says handoff" "$(vd 310000 300000)" "handoff|5"
 check "A12: an ordinary task below the budget says ok" "$(vd 290000 300000)" "ok|0"
 
