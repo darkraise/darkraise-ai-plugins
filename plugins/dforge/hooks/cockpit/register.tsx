@@ -33,6 +33,7 @@ import {
   billingLabel,
   bindingOf,
   budgetFor,
+  dueOf,
   collapsedFrom,
   collapsedToggled,
   commandLine,
@@ -41,6 +42,7 @@ import {
   elapsed,
   endsOnSentinel,
   finalLimitFor,
+  hardFor,
   finishLine,
   fitBand,
   folderRuns,
@@ -2779,6 +2781,14 @@ const S = {
   // Whether a main-loop turn is running; a subagent's approval wait does not set it, as it does isTurnLive.
   isMainTurn: false,
   isBudgetSent: false,
+  // What auto-run due last answered for the bound run: `key` is the phase,
+  // regime and compaction count it was asked under, and `isNoted` whether the
+  // note at the limit went out since the compaction `compactions` counts.
+  autoDue: null as { key: string; limit: number; hard: number; isNoted: boolean; compactions: number } | null,
+  // When auto-run due last gave no answer: asked again a minute later, not at every reading.
+  autoDueFailedAt: null as number | null,
+  // The note at hard in a plan's tail or final phase, once per crossing.
+  isHardNoted: false,
   // The pane's Compact runs: it books its compaction itself.
   isPaneCompacting: false,
   // Ledger events already seen, by the plan the ledger names; the first read
@@ -4464,8 +4474,13 @@ async function refresh(
   // Only a session running the plan: a darkmem pull at the start writes the
   // ledgers of a finished plan anew, and the newest one then reads as this session's.
   const isTail = summary !== null && isPlanTail(summary) && (await read($, isRunSession))
+  if (!isAuto) S.autoDue = null
+  const due = isAuto && !isShownOnly ? await autoDue($, auto, tokens) : null
+  // The script owns a run's limit: the estimate stands in until it has answered for this phase.
   const limit = isAuto
-    ? autoLimitFor(auto.regime, handoffTokens, window, compactWindow)
+    ? S.autoDue !== null && S.autoDue.key === autoDueKey(auto)
+      ? S.autoDue.limit
+      : autoLimitFor(auto.regime, handoffTokens, window, compactWindow)
     : tuning.isRelaxed
       ? finalLimitFor(window, compactWindow)
       : budgetFor(handoffTokens, window, compactWindow)
@@ -4488,25 +4503,69 @@ async function refresh(
   }
 
   if (isShownOnly) return
+  // The run's own note, in any mode: the script booked the compaction.
+  if (due !== null) await tell($, `dforge: budget: ${kTokens(tokens)} of ${kTokens(due.limit)} — compact. Finish the step in hand, record it, then end the turn on \`Auto run: compacting\`.`)
   const level = levelOf(tokens, limit)
   // Finishing the plan past the budget is no handoff.
   const isPast = level === 'handoff' && !isFinishing
   const reading = { now: { tokens, limit, window, compactWindow: compactWindow ?? null, usd, isFinishing }, isPast }
+  const isToldHere = nudgeModel && (await read($, isPlanSession)) && !(await read($, isFastMode))
+  // Strict mode finishes a plan's tail and final phase past the budget, up to hard.
+  const hard = isFinishing && !tuning.isRelaxed ? hardFor(handoffTokens, window, compactWindow) : null
+  if (hard === null || tokens < hard) S.isHardNoted = false
+  else if (!S.isHardNoted && isToldHere) {
+    S.isHardNoted = true
+    await tell($, `dforge: budget: ${kTokens(tokens)} of ${kTokens(hard)} — handoff. ${HANDOFF_PROMPT}`)
+  }
   if (!isPast) {
     if (await read($, isNudged)) await update($, isNudged, () => false)
     return reading
   }
-  // An auto run compacts at its limit rather than handing off: no note.
-  if (!nudgeModel || isAuto || (await read($, isNudged)) || !(await read($, isPlanSession)) || (await read($, isFastMode))) return reading
+  // An auto run compacts at its limit rather than handing off: no handoff note.
+  if (isAuto || (await read($, isNudged)) || !isToldHere) return reading
   await update($, isNudged, () => true)
-  const note = `dforge: budget: ${kTokens(tokens)} of ${kTokens(limit)} — handoff. ${HANDOFF_PROMPT}`
+  await tell($, `dforge: budget: ${kTokens(tokens)} of ${kTokens(limit)} — handoff. ${HANDOFF_PROMPT}`)
+  return reading
+}
+
+// A note to the model as a session row.
+async function tell($: EngineInterface, note: string) {
   try {
     await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: note }] } })
   } catch {
     // The host would not take the row: say it to the person instead.
     $.ui.toast(note)
   }
-  return reading
+}
+
+const AUTO_DUE_RETRY_MS = 60_000
+function autoDueKey(auto: CockpitAutoRun): string {
+  return `${auto.phase}|${auto.regime}|${auto.compactions}`
+}
+
+// Asks scripts/auto-run due for the run's limit and hard, and lets it book a
+// compaction, when the phase, regime or compaction count changed since the
+// last answer, or at the limit with nothing pending and no note since the
+// last compaction. Resolves the answer when this call booked the compaction
+// and the note is owed, else null.
+async function autoDue($: EngineInterface, auto: CockpitAutoRun, tokens: number): Promise<{ limit: number; hard: number } | null> {
+  const key = autoDueKey(auto)
+  const last = S.autoDue
+  const wasNoted = last !== null && last.isNoted && last.compactions === auto.compactions
+  if (last !== null && last.key === key && !(tokens >= last.limit && auto.pending === null && !wasNoted)) return null
+  const stamp = await $.clock.now()
+  if (S.autoDueFailedAt !== null && stamp - S.autoDueFailedAt < AUTO_DUE_RETRY_MS) return null
+  const ran = await $.process.run(await autoRunArgv($, await $.session.id(), ['due', '--tokens', String(tokens)]), { timeoutMs: 15_000 }).catch(() => null)
+  const answer = ran === null ? null : dueOf(ran.stdout)
+  // No answer: an unknown window, or a run that ended.
+  S.autoDueFailedAt = answer === null ? stamp : null
+  if (answer === null) return null
+  // Read again: a reading taken beside this one may have sent the note.
+  const now = S.autoDue
+  const isNoted = now !== null && now.isNoted && now.compactions === auto.compactions
+  const isBooked = ran?.exitCode === 6 && !isNoted
+  S.autoDue = { key, limit: answer.limit, hard: answer.hard, isNoted: isNoted || isBooked, compactions: auto.compactions }
+  return isBooked ? answer : null
 }
 
 /** What the pane asks the surface for under a layout: the band's rows unless it is full. */
@@ -4734,6 +4793,9 @@ async function engineSettings($: EngineInterface): Promise<string> {
 // reconcile prompts, and the background-work deferral.
 function resetSessionGuards() {
   S.keepWarmCount = 0
+  S.autoDue = null
+  S.autoDueFailedAt = null
+  S.isHardNoted = false
   S.reconcileSeen = { key: '', count: 0 }
   S.autoDeferredSince = null
 }

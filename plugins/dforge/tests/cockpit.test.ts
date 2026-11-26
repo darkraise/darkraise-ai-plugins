@@ -23,6 +23,8 @@ import {
   bar,
   billingLabel,
   budgetFor,
+  dueOf,
+  hardFor,
   cellWidth,
   collapsedFrom,
   collapsedToggled,
@@ -325,6 +327,8 @@ type World = {
   autoFileAt?: Record<string, { text: string }>
   /** What `auto-run cd-prefix` prints; empty unless said. */
   cdPrefixOut?: string
+  /** What `auto-run due` answers from: at or past the limit with nothing pending it books a compaction (exit 6); unset, it prints nothing. */
+  autoDue?: { limit: number; hard: number }
   /** What `darkmem-config.mjs --mode` answers; `missing` rejects as a missing node does. Git porcelain with exit 0 unless said. */
   modeOut?: { exitCode: number; stdout: string; stderr: string } | 'missing' | 'rejects' | 'timeout'
   /** The directory each `--mode` call names. */
@@ -555,10 +559,18 @@ function world(on: On, w: World) {
       w.autoRuns?.push(call)
       const words = call.split(' ')
       const word = words[2] ?? ''
-      const exitCode = w.autoRunExits?.[word] ?? 0
+      let exitCode = w.autoRunExits?.[word] ?? 0
+      let stdout = word === 'cd-prefix' ? (w.cdPrefixOut ?? '') : ''
       const autoFile = w.autoFileAt === undefined ? w.autoFile : w.autoFileAt[e.argv[4] ?? '']
       if (autoFile !== undefined) {
         const state = JSON.parse(autoFile.text) as Record<string, unknown>
+        if (word === 'due' && w.autoDue !== undefined) {
+          if (Number(words[4]) >= w.autoDue.limit && (state.pending ?? null) === null) {
+            state.pending = 'compact'
+            exitCode = 6
+          }
+          stdout = `due: limit=${w.autoDue.limit} hard=${w.autoDue.hard} pending=${String(state.pending ?? 'none')}\n`
+        }
         if (exitCode === 0 && word === 'compacted') Object.assign(state, { pending: 'after-compact', compactions: Number(state.compactions) + 1 })
         if (exitCode === 0 && word === 'clear') Object.assign(state, { pending: 'clear', rebind: true })
         if (exitCode === 0 && word === 'rebind') Object.assign(state, { session: words[4], pending: 'resume', regime: 'normal' })
@@ -570,7 +582,6 @@ function world(on: On, w: World) {
         if (exitCode === 5 && word === 'stalled') Object.assign(state, { active: false, stopped: '3 stalls without a completed task', pending: null })
         autoFile.text = JSON.stringify(state)
       }
-      const stdout = word === 'cd-prefix' ? (w.cdPrefixOut ?? '') : ''
       const answer = { value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
       const during = w.onAutoRun?.(word)
       return during instanceof Promise ? during.then(() => answer) : answer
@@ -5317,7 +5328,8 @@ describe('run card', () => {
     ['two tasks left', 3, false, 500_000, null],
     ['every task complete', 5, false, 500_000, null],
     ['the final review clean', 5, true, 500_000, null],
-    ['two tasks left, far past the budget', 3, false, 700_000, null],
+    // Past hard (564,500 in the 650k window) the tail hands off after all.
+    ['two tasks left, past hard', 3, false, 700_000, /^dforge: budget: 700k of 565k — handoff\. /],
   ] as const) {
     test(`the handoff note with ${name} at ${tokens / 1000}k`, async ($, on) => {
       const notes: string[] = []
@@ -5335,6 +5347,32 @@ describe('run card', () => {
       else expect(sent).toEqual([expect.stringMatching(note)])
     })
   }
+
+  for (const [name, done] of [
+    ['strict tail', 3],
+    ['strict final phase', 5],
+  ] as const)
+    test(`${name}: one note at hard (A12)`, async ($, on) => {
+      const notes: string[] = []
+      const files: World['files'] = {
+        '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: tailLedger(done, false), mtimeMs: 2_000_000 },
+        '/home/me/code/shop/docs/plans/p.md': { text: TAIL_PLAN },
+        [CONFIG]: { text: JSON.stringify({ handoffTokens: 300_000 }) },
+      }
+      const w: World = { ...SIGNED_IN, tokens: 360_000, window: 800_000, notes, files }
+      world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+      const sent = () => notes.filter(text => text.startsWith('dforge: budget:'))
+      expect(sent()).toEqual([])
+      w.tokens = 375_000
+      await $.tool.call({ tool: 'Bash', command: 'ls' })
+      expect(sent()).toEqual(['dforge: budget: 375k of 375k — handoff. Finish the task in flight through its completion line, then hand off with the dforge handoff skill. Start no new task.'])
+      w.tokens = 380_000
+      await $.tool.call({ tool: 'Bash', command: 'ls' })
+      expect(sent()).toHaveLength(1)
+    })
 
   test('a ledger write that reaches the tail is read before the budget in the same call', async ($, on) => {
     const notes: string[] = []
@@ -8564,12 +8602,171 @@ describe('auto run', () => {
   })
 })
 
+// The note an auto run gets at its limit (scripts/auto-run due), and the rule
+// that it never asks for a compaction before the step in hand is recorded.
+describe('auto run budget note', () => {
+  const noteFor = (tokens: string, limit: string) =>
+    `dforge: budget: ${tokens} of ${limit} — compact. Finish the step in hand, record it, then end the turn on \`Auto run: compacting\`.`
+  const NOTE_SHAPE = /^dforge: budget: \d+k of \d+k — compact\. Finish the step in hand, record it, then end the turn on `Auto run: compacting`\.$/
+  const said = ($: Parameters<TestBody>[0], text: string) =>
+    $.session.append({ message: { type: 'assistant', role: 'assistant', content: [{ type: 'text', text }] }, door: 'response', origin: { kind: 'model' }, uuid: 'fm-1' } as never)
+  const seen: string[] = []
+  const begin = async ($: Parameters<TestBody>[0], on: On, fields: Record<string, unknown> = {}, more: Partial<World> = {}) => {
+    const files = autoFiles({ pending: null, phase: 'final', ...fields })
+    const notes: string[] = []
+    const w: World = {
+      ...SIGNED_IN,
+      tokens: 310_000,
+      window: 1_000_000,
+      settings: { autoCompactWindow: 800_000 },
+      notes,
+      compacts: [],
+      autoRuns: [],
+      prompts: [],
+      autoFile: files[AUTO],
+      autoDue: { limit: 300_000, hard: 375_000 },
+      ...more,
+    }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    const sent = () => {
+      const now = notes.filter(text => text.startsWith('dforge: budget:'))
+      for (const text of now) if (!seen.includes(text)) seen.push(text)
+      return now
+    }
+    return { w, files, clock, sent }
+  }
+  const bash = ($: Parameters<TestBody>[0]) => $.tool.call({ tool: 'Bash', command: 'ls' })
+
+  test('an auto run past its limit gets one note (A10)', async ($, on) => {
+    const { w, files, sent } = await begin($, on)
+    await bash($)
+    expect(sent()).toEqual([noteFor('310k', '300k')])
+    expect(pendingOf(files)).toBe('compact')
+    w.tokens = 320_000
+    await bash($)
+    await bash($)
+    expect(sent()).toHaveLength(1)
+  })
+
+  for (const [name, phase, how] of [
+    ['spec', 'spec', 'plan'],
+    ['plan', 'plan', 'plan'],
+    ['execute', 'execute', 'plan'],
+    ['final', 'final', 'plan'],
+    ['finish', 'finish', 'plan'],
+    ['fast mode', 'execute', 'fast'],
+    ['no plan session', 'execute', 'none'],
+  ] as const)
+    test(`the note comes in every phase and in fast mode (A10): ${name}`, async ($, on) => {
+      const { sent } = await begin($, on, { phase })
+      if (how === 'plan') await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+      if (how === 'fast') {
+        await $.tool.call({ tool: 'Skill', skill: 'dforge:brainstorming' })
+        await said($, 'Process: fast — a one-line fix')
+      }
+      await bash($)
+      expect(sent()).toEqual([noteFor('310k', '300k')])
+    })
+
+  const compactThenPass = async ($: Parameters<TestBody>[0], on: On) => {
+    const { w, files, clock, sent } = await begin($, on, { phase: 'execute' })
+    await bash($)
+    expect(sent()).toHaveLength(1)
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.compacts).toHaveLength(1)
+    // after-compact settles the compaction: nothing is pending again.
+    files[AUTO]!.text = JSON.stringify({ ...(JSON.parse(files[AUTO]!.text) as Record<string, unknown>), pending: null })
+    w.tokens = 305_000
+    await bash($)
+    return sent
+  }
+
+  test('a compaction re-arms the note (A10)', async ($, on) => {
+    const sent = await compactThenPass($, on)
+    expect(sent()).toEqual([noteFor('310k', '300k'), noteFor('305k', '300k')])
+  })
+
+  test("the note carries the script's limit (A10)", async ($, on) => {
+    // The cockpit's own estimate for the high regime is 720k here.
+    const { sent } = await begin($, on, { regime: 'high', phase: 'plan' }, { tokens: 380_000, autoDue: { limit: 375_000, hard: 375_000 } })
+    await bash($)
+    expect(sent()).toEqual([noteFor('380k', '375k')])
+  })
+
+  test('below the limit nothing is appended or booked (A14)', async ($, on) => {
+    const { files, sent } = await begin($, on, {}, { tokens: 290_000 })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await bash($)
+    expect(sent()).toEqual([])
+    expect(pendingOf(files)).toBeNull()
+  })
+
+  test('something pending means no note (A10)', async ($, on) => {
+    const { files, sent } = await begin($, on, { pending: 'compact' })
+    await bash($)
+    await bash($)
+    expect(sent()).toEqual([])
+    expect(pendingOf(files)).toBe('compact')
+  })
+
+  test('a due call that gives no answer is asked again a minute later, not at every reading', async ($, on) => {
+    const { w, clock, sent } = await begin($, on, {}, { autoDue: undefined })
+    const asks = () => (w.autoRuns ?? []).filter(call => call.includes(' due '))
+    await bash($)
+    await bash($)
+    expect(asks()).toEqual(['--session sess-1 due --tokens 310000'])
+    await clock.advance(60_000)
+    await bash($)
+    expect(asks()).toHaveLength(2)
+    expect(sent()).toEqual([])
+  })
+
+  test('no auto-run note says to compact now (A11)', async ($, on) => {
+    const sent = await compactThenPass($, on)
+    expect(sent()).toHaveLength(2)
+    expect(seen.length).toBeGreaterThan(0)
+    for (const text of seen) {
+      expect(text).toMatch(NOTE_SHAPE)
+      expect(text).not.toMatch(/compact now|immediately|before/)
+    }
+  })
+
+  test('outside an auto run fast mode gets no note at any size (A14)', async ($, on) => {
+    const notes: string[] = []
+    const w: World = { ...SIGNED_IN, tokens: 400_000, window: 1_000_000, notes }
+    world(on, w)
+    signedIn(on)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await said($, 'Process: fast — a one-line fix')
+    w.tokens = 900_000
+    await bash($)
+    expect(notes.filter(text => text.startsWith('dforge: budget:'))).toEqual([])
+  })
+})
+
 describe('auto run in the pane', () => {
   test('the limit follows the regime', () => {
     expect(autoLimitFor('normal', 465_000, 1_000_000, 800_000)).toBe(465_000)
     expect(autoLimitFor('normal', 0, 1_000_000, 800_000)).toBe(604_000)
     expect(autoLimitFor('high', 465_000, 1_000_000, 800_000)).toBe(720_000)
     expect(autoLimitFor('high', 0, 650_000)).toBe(585_000)
+  })
+
+  test('dueOf parses the due line', () => {
+    expect(dueOf('due: limit=300000 hard=375000 pending=compact')).toEqual({ limit: 300_000, hard: 375_000, pending: 'compact' })
+    expect(dueOf('due: limit=300000 hard=375000 pending=none\n')).toEqual({ limit: 300_000, hard: 375_000, pending: 'none' })
+    expect(dueOf('due: unknown')).toBeNull()
+    expect(dueOf('')).toBeNull()
+  })
+
+  test('hardFor is the lower of 125% and the compaction point less 40k', () => {
+    expect(hardFor(300_000, 1_000_000, 800_000)).toBe(375_000)
+    expect(hardFor(465_000, 1_000_000, 500_000)).toBe(465_000)
+    expect(hardFor(100_000, 1_000_000, 800_000)).toBe(125_000)
   })
 
   test('shows the run and stops it from the pane', async ($, on) => {

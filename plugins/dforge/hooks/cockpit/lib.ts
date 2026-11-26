@@ -1821,3 +1821,19 @@ export function autoLimitFor(regime: string, configured: number, window: number,
   const room = compactWindow !== undefined && compactWindow > 0 ? Math.min(window, compactWindow) : window
   return Math.floor(room * 0.9)
 }
+
+/**
+ * `hard` (scripts/lib/auto-run.sh ar_hard): the lower of 125% of the budget and
+ * the compaction point (93% of the room) less 40,000, never below the budget.
+ */
+export function hardFor(configured: number, window: number, compactWindow?: number): number {
+  const budget = budgetFor(configured, window, compactWindow)
+  const room = compactWindow !== undefined && compactWindow > 0 ? Math.min(window, compactWindow) : window
+  return Math.max(budget, Math.min(Math.floor((budget * 125) / 100), Math.floor((room * 93) / 100) - 40_000))
+}
+
+/** What `auto-run due` printed: the run's limit, its hard limit and the pending action (`none` for nothing); null for `due: unknown` or any other text. */
+export function dueOf(text: string): { limit: number; hard: number; pending: string } | null {
+  const found = /^due: limit=(\d+) hard=(\d+) pending=(\S+)$/.exec(text.trim())
+  return found === null ? null : { limit: Number(found[1]), hard: Number(found[2]), pending: found[3]! }
+}
