@@ -45,6 +45,67 @@ ar_path() {
   printf '%s/sdd/auto-run.json\n' "$(dforge_dir state "$primary")"
 }
 
+# A session's binding names the primary checkout whose state holds the run
+# bound to it; the cockpit echoes what it read to the .seen file beside it.
+ar_binding_file() { # ar_binding_file SID
+  printf '%s/.claude/dforge/sessions/run/%s.json\n' "${HOME:-}" "$(_session_safe "$1")"
+}
+
+ar_binding_get() { # ar_binding_get SID primary|nonce — empty when unreadable
+  local f
+  f=$(ar_binding_file "$1")
+  [ -f "$f" ] || return 0
+  ar_jq -r --arg k "$2" '.[$k] // empty | strings' < "$f" 2>/dev/null || true
+}
+
+ar_binding_write() { # ar_binding_write SID PRIMARY — prints the nonce
+  local f tmp nonce
+  f=$(ar_binding_file "$1")
+  mkdir -p "$(dirname "$f")" || return 1
+  nonce="$(date +%s)-$$-$RANDOM"
+  tmp=$(mktemp "$f.XXXXXX") || return 1
+  if ar_jq -n --arg p "$2" --arg n "$nonce" --argjson at "$(date +%s)" '{primary: $p, nonce: $n, at: $at}' > "$tmp" \
+     && [ -s "$tmp" ] && mv -f "$tmp" "$f"; then
+    printf '%s\n' "$nonce"
+  else
+    rm -f "$tmp"
+    return 1
+  fi
+}
+
+ar_seen_ok() { # ar_seen_ok SID — the cockpit has read this binding
+  local f
+  f=$(ar_binding_file "$1")
+  [ -f "$f" ] && [ -f "${f%.json}.seen" ] || return 1
+  cat "$f" "${f%.json}.seen" 2>/dev/null | ar_jq -s -e \
+    'length == 2 and (.[0].nonce | type == "string") and .[0].primary == .[1].primary and .[0].nonce == .[1].nonce' >/dev/null 2>&1
+}
+
+# ar_binding_around SID PRIMARY CMD [ARGS…] — write SID's binding, run CMD,
+# and when CMD fails put the binding's earlier bytes back (or remove it when
+# there was none), so a refused start or resume leaves no trace.
+ar_binding_around() {
+  local sid=$1 primary=$2 f keep="" rc
+  shift 2
+  f=$(ar_binding_file "$sid")
+  if [ -f "$f" ]; then
+    keep=$(mktemp "$f.keep.XXXXXX") || return 1
+    cp -p "$f" "$keep" || { rm -f "$keep"; return 1; }
+  fi
+  if ! ar_binding_write "$sid" "$primary" >/dev/null; then
+    [ -z "$keep" ] || rm -f "$keep"
+    return 1
+  fi
+  "$@"
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    if [ -n "$keep" ]; then mv -f "$keep" "$f"; else rm -f "$f"; fi
+  else
+    [ -z "$keep" ] || rm -f "$keep"
+  fi
+  return "$rc"
+}
+
 # ar_state — the state file's JSON; fails when there is none.
 ar_state() {
   local path
@@ -164,7 +225,8 @@ ar_start() {
   dforge_self_ignore "$(dirname "$path")"
   # Under the update lock, so a --force start never lands between another
   # session's read and write of the state and is lost.
-  dr_locked "$path" ar_create_unless_busy "$force" "$path" --arg s "$AR_SESSION" --arg spec "$spec" --arg reg "$register" --arg base "$base" \
+  ar_binding_around "$AR_SESSION" "$(ar_primary_root)" \
+    dr_locked "$path" ar_create_unless_busy "$force" "$path" --arg s "$AR_SESSION" --arg spec "$spec" --arg reg "$register" --arg base "$base" \
     --arg iso "$iso" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
     active: true, session: $s, rebind: false, stopped: null, startedAt: $now,
     spec: $spec, plan: null, register: $reg, base: (if $base == "" then null else $base end),
@@ -223,7 +285,7 @@ ar_resume() {
   age=$(ar_beat_age "$AR_SESSION") && [ "$age" -le "$AR_BEAT_SECONDS" ] \
     || { echo "auto-run: no live cockpit in this session" >&2; return 2; }
   [ -f "$path" ] || { echo "auto-run: there is no auto run to resume" >&2; return 4; }
-  dr_locked "$path" _ar_resume_locked "$path" || return $?
+  ar_binding_around "$AR_SESSION" "$(ar_primary_root)" dr_locked "$path" _ar_resume_locked "$path" || return $?
   ar_status
 }
 
@@ -697,7 +759,8 @@ ar_rebind() { # ar_rebind ID
 ar_rebind_locked() { # ar_rebind_locked PATH ID
   ar_jq -e '.active == true and .rebind == true' < "$1" >/dev/null 2>&1 \
     || { echo "auto-run: no clear is waiting for its session" >&2; return 4; }
-  ar_put "$1" '.session = $id | .rebind = false | .pending = "resume" | .failures = 0 | .regime = "normal"' --arg id "$2"
+  ar_put "$1" '.session = $id | .rebind = false | .pending = "resume" | .failures = 0 | .regime = "normal"' --arg id "$2" || return
+  ar_binding_write "$2" "$(ar_primary_root)" >/dev/null
 }
 
 # ar_resumed — the cockpit submitted its stage's prompt.
