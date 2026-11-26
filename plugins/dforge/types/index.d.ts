@@ -12,6 +12,8 @@ export type CockpitBudget = {
   usd: number | null
   /** A plan's last tasks or its final phase in strict mode: past the limit it runs on to finish the plan. */
   isFinishing: boolean
+  /** Finishing has reached the hard limit: the session hands off after the step in hand. */
+  isHandoffDue: boolean
 }
 
 /** One rate-limit window as the last response reported it. */

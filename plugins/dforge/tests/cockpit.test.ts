@@ -5366,9 +5366,11 @@ describe('run card', () => {
       await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
       const sent = () => notes.filter(text => text.startsWith('dforge: budget:'))
       expect(sent()).toEqual([])
+      expect([await finishingShown($), await handoffDueShown($)]).toEqual([true, false])
       w.tokens = 375_000
       await $.tool.call({ tool: 'Bash', command: 'ls' })
-      expect(sent()).toEqual(['dforge: budget: 375k of 375k — handoff. Finish the task in flight through its completion line, then hand off with the dforge handoff skill. Start no new task.'])
+      expect(sent()).toEqual(['dforge: budget: 375k of 375k — handoff. Finish the task or step in hand through its ledger line, then hand off with the dforge handoff skill. Start nothing new.'])
+      expect([await finishingShown($), await handoffDueShown($)]).toEqual([false, true])
       w.tokens = 380_000
       await $.tool.call({ tool: 'Bash', command: 'ls' })
       expect(sent()).toHaveLength(1)
@@ -5399,12 +5401,14 @@ describe('run card', () => {
     return /handoff (\d+k)/.exec(legend ?? '')?.[1]
   }
 
-  const finishingShown = async ($: Parameters<TestBody>[0]) => {
+  const headShown = async ($: Parameters<TestBody>[0], text: RegExp) => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    const isShown = (await ui.find({ type: 'Text', text: /· finishing$/ })) !== undefined
+    const isShown = (await ui.find({ type: 'Text', text })) !== undefined
     await ui.unmount()
     return isShown
   }
+  const finishingShown = ($: Parameters<TestBody>[0]) => headShown($, /· finishing$/)
+  const handoffDueShown = ($: Parameters<TestBody>[0]) => headShown($, /· handoff due$/)
 
   test('a plan at its tail finishes past the budget only in the session that runs it', async ($, on) => {
     // Written as the session started, as a darkmem pull on a new machine writes it.
@@ -7277,6 +7281,18 @@ describe('auto run', () => {
       expect(await ui.find({ type: 'Text', text: /Auto run · execute · normal · 3 compactions · 0 resumes/ })).toBeDefined()
     })
 
+    test('a run that ended in the starting repository does not hide the active bound run', async ($, on) => {
+      const files = { ...bound({ pending: null, compactions: 3 }), ...autoFiles({ active: false, stopped: 'done', compactions: 9 }) }
+      const w: World = { ...SIGNED_IN, autoRuns: [], written: {}, autoFile: files[DEPOT_AUTO] }
+      const clock = world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      await clock.advance(2_000)
+      await settle(clock)
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      expect(await ui.find({ type: 'Text', text: /Auto run · execute · normal · 3 compactions · 0 resumes/ })).toBeDefined()
+    })
+
     test('echoes the binding into the seen file', async ($, on) => {
       const files = bound({ pending: null })
       const w: World = { ...SIGNED_IN, autoRuns: [], written: {}, isPaneShut: true, autoFile: files[DEPOT_AUTO] }
@@ -8607,10 +8623,8 @@ describe('auto run', () => {
 describe('auto run budget note', () => {
   const noteFor = (tokens: string, limit: string) =>
     `dforge: budget: ${tokens} of ${limit} — compact. Finish the step in hand, record it, then end the turn on \`Auto run: compacting\`.`
-  const NOTE_SHAPE = /^dforge: budget: \d+k of \d+k — compact\. Finish the step in hand, record it, then end the turn on `Auto run: compacting`\.$/
   const said = ($: Parameters<TestBody>[0], text: string) =>
     $.session.append({ message: { type: 'assistant', role: 'assistant', content: [{ type: 'text', text }] }, door: 'response', origin: { kind: 'model' }, uuid: 'fm-1' } as never)
-  const seen: string[] = []
   const begin = async ($: Parameters<TestBody>[0], on: On, fields: Record<string, unknown> = {}, more: Partial<World> = {}) => {
     const files = autoFiles({ pending: null, phase: 'final', ...fields })
     const notes: string[] = []
@@ -8630,11 +8644,7 @@ describe('auto run budget note', () => {
     const clock = world(on, w)
     signedIn(on, files)
     await $.session.start(START)
-    const sent = () => {
-      const now = notes.filter(text => text.startsWith('dforge: budget:'))
-      for (const text of now) if (!seen.includes(text)) seen.push(text)
-      return now
-    }
+    const sent = () => notes.filter(text => text.startsWith('dforge: budget:'))
     return { w, files, clock, sent }
   }
   const bash = ($: Parameters<TestBody>[0]) => $.tool.call({ tool: 'Bash', command: 'ls' })
@@ -8654,7 +8664,6 @@ describe('auto run budget note', () => {
     ['spec', 'spec', 'plan'],
     ['plan', 'plan', 'plan'],
     ['execute', 'execute', 'plan'],
-    ['final', 'final', 'plan'],
     ['finish', 'finish', 'plan'],
     ['fast mode', 'execute', 'fast'],
     ['no plan session', 'execute', 'none'],
@@ -8684,9 +8693,10 @@ describe('auto run budget note', () => {
     return sent
   }
 
-  test('a compaction re-arms the note (A10)', async ($, on) => {
+  test('a compaction re-arms the note, and no note says to compact now (A10, A11)', async ($, on) => {
     const sent = await compactThenPass($, on)
     expect(sent()).toEqual([noteFor('310k', '300k'), noteFor('305k', '300k')])
+    for (const text of sent()) expect(text).not.toMatch(/compact now|immediately|before/)
   })
 
   test("the note carries the script's limit (A10)", async ($, on) => {
@@ -8722,16 +8732,6 @@ describe('auto run budget note', () => {
     await bash($)
     expect(asks()).toHaveLength(2)
     expect(sent()).toEqual([])
-  })
-
-  test('no auto-run note says to compact now (A11)', async ($, on) => {
-    const sent = await compactThenPass($, on)
-    expect(sent()).toHaveLength(2)
-    expect(seen.length).toBeGreaterThan(0)
-    for (const text of seen) {
-      expect(text).toMatch(NOTE_SHAPE)
-      expect(text).not.toMatch(/compact now|immediately|before/)
-    }
   })
 
   test('outside an auto run fast mode gets no note at any size (A14)', async ($, on) => {

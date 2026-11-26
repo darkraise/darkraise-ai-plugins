@@ -144,6 +144,9 @@ const MAX_BREAKDOWN_ROWS = 12
 const FRAME_MIN_COLUMNS = 48
 const HANDOFF_PROMPT =
   'Finish the task in flight through its completion line, then hand off with the dforge handoff skill. Start no new task.'
+// At the hard limit the final phase has a step in hand and no task.
+const HARD_HANDOFF_PROMPT =
+  'Finish the task or step in hand through its ledger line, then hand off with the dforge handoff skill. Start nothing new.'
 function resumePrompt(): string {
   if (S.latestName === null) return `Resume the work with the dforge resume-execution skill. Before anything else, claim the handoff it reads with dforge's \`scripts/handoff claim\`.`
   return `Resume the work in ${S.latestName} with the dforge resume-execution skill. Before anything else, claim it with dforge's \`scripts/handoff claim\` on that file.`
@@ -1835,7 +1838,13 @@ export const register: Register = on => {
                 · ≈{turnsLeft} {turnsLeft === 1 ? 'turn' : 'turns'}
               </Text>
             )}
-            {isFinishingPast && <Text dimColor> · finishing</Text>}
+            {isFinishingPast && !head.isHandoffDue && <Text dimColor> · finishing</Text>}
+            {isFinishingPast && head.isHandoffDue && (
+              <Text color="#ffaf5f" bold>
+                {' '}
+                · handoff due
+              </Text>
+            )}
           </Text>
         ),
         ...contextBody,
@@ -3141,9 +3150,12 @@ async function autoRunText($: EngineInterface): Promise<string | null> {
   const bound = S.where.bound
   if (bound !== null && bound !== root) {
     const id = await $.session.id()
-    if (local === null || autoRunFor(local, id) === null) {
+    const mine = local === null ? null : autoRunFor(local, id)
+    // A run of this session's that ended here must not hide the active one its binding names.
+    if (mine === null || !mine.active) {
       const there = await stateAt(bound)
-      if (there !== null && autoRunFor(there, id) !== null) return there
+      const theirs = there === null ? null : autoRunFor(there, id)
+      if (theirs !== null && (mine === null || theirs.active)) return there
     }
   }
   return local
@@ -4467,9 +4479,9 @@ async function refresh(
   if (tokens === undefined || !(window > 0)) return
   const auto = await read($, autoRun)
   const isAuto = auto !== null && auto.active
-  // A plan's last tasks and its final phase never hand off, as the budget line
-  // measures them: strict keeps the handoff budget and runs past it to finish
-  // the plan, relaxed measures against the final-phase limit.
+  // A plan's last tasks and its final phase finish past the budget, as the
+  // budget line measures them: strict keeps the handoff budget and runs past
+  // it up to hard, relaxed measures against the final-phase limit.
   const summary = await read($, run)
   // Only a session running the plan: a darkmem pull at the start writes the
   // ledgers of a finished plan anew, and the newest one then reads as this session's.
@@ -4487,6 +4499,9 @@ async function refresh(
   // Relaxed mode measures the tail against the final-phase limit, but a plan
   // with every task complete is in its final phase, which never hands off.
   const isFinishing = !isAuto && isTail && (!tuning.isRelaxed || summary?.isFinished === true || (summary !== null && summary.isPlanRead && summary.total > 0 && summary.done >= summary.total))
+  // Strict mode finishes a plan's tail and final phase past the budget, up to hard.
+  const hard = isFinishing && !tuning.isRelaxed ? hardFor(handoffTokens, window, compactWindow) : null
+  const isHandoffDue = hard !== null && tokens >= hard
   const usd = figures.cost?.usd ?? null
   const before = await read($, budget)
   if (
@@ -4495,9 +4510,10 @@ async function refresh(
     before.usd !== usd ||
     before.window !== window ||
     before.compactWindow !== (compactWindow ?? null) ||
-    before.isFinishing !== isFinishing
+    before.isFinishing !== isFinishing ||
+    before.isHandoffDue !== isHandoffDue
   ) {
-    const now: CockpitBudget = { tokens, limit, window, compactWindow: compactWindow ?? null, usd, isFinishing }
+    const now: CockpitBudget = { tokens, limit, window, compactWindow: compactWindow ?? null, usd, isFinishing, isHandoffDue }
     await update($, budget, () => now)
     if (before?.tokens !== tokens) await update($, trend, readings => [...readings, tokens].slice(-TREND_LENGTH))
   }
@@ -4508,14 +4524,12 @@ async function refresh(
   const level = levelOf(tokens, limit)
   // Finishing the plan past the budget is no handoff.
   const isPast = level === 'handoff' && !isFinishing
-  const reading = { now: { tokens, limit, window, compactWindow: compactWindow ?? null, usd, isFinishing }, isPast }
+  const reading = { now: { tokens, limit, window, compactWindow: compactWindow ?? null, usd, isFinishing, isHandoffDue }, isPast }
   const isToldHere = nudgeModel && (await read($, isPlanSession)) && !(await read($, isFastMode))
-  // Strict mode finishes a plan's tail and final phase past the budget, up to hard.
-  const hard = isFinishing && !tuning.isRelaxed ? hardFor(handoffTokens, window, compactWindow) : null
   if (hard === null || tokens < hard) S.isHardNoted = false
   else if (!S.isHardNoted && isToldHere) {
     S.isHardNoted = true
-    await tell($, `dforge: budget: ${kTokens(tokens)} of ${kTokens(hard)} — handoff. ${HANDOFF_PROMPT}`)
+    await tell($, `dforge: budget: ${kTokens(tokens)} of ${kTokens(hard)} — handoff. ${HARD_HANDOFF_PROMPT}`)
   }
   if (!isPast) {
     if (await read($, isNudged)) await update($, isNudged, () => false)
