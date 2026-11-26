@@ -821,8 +821,9 @@ fi
 NORUN="$TMP/norun"; git init -q "$NORUN"
 KIT="$TMP/kit"; mkdir -p "$KIT"; cp -R "$HERE/../../plugins/dforge/scripts" "$KIT/"
 printf 'exit 99\n' > "$KIT/scripts/lib/context.sh"
+# A session with a binding may have its run elsewhere, so this one has none.
 for sub in pending status; do
-  (cd "$NORUN" && bash "$KIT/scripts/auto-run" --session s-1 "$sub") >/dev/null 2>"$TMP/err"; status=$?
+  (cd "$NORUN" && bash "$KIT/scripts/auto-run" --session s-unbound "$sub") >/dev/null 2>"$TMP/err"; status=$?
   check "no run: $sub exits 3 before the libraries load" "$status:$(grep -c 'no auto run is bound' "$TMP/err")" "3:1"
 done
 (cd "$NORUN" && bash "$AR" --session s-1 pending extra) >/dev/null 2>&1; status=$?

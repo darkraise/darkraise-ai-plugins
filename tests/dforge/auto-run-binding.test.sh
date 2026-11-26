@@ -69,5 +69,82 @@ check "binding: a refused resume restores it" \
   "$s1|$(cksum < "$RUN/s-b1.json")|$s5|$([ -e "$RUN/s-b5.json" ] && echo present || echo absent)|$(ls "$RUN" | grep -c keep)" \
   "4|$before|4|absent|0"
 
+# --- resolver: the run lives in B ($REPO), bound to s-x; A is another repository ---
+A="$TMP/repo-a"
+git init -q -b main "$A"
+git -C "$A" commit -q --allow-empty -m init
+ASTATE="$A/.dforge/sdd/auto-run.json"
+a() {
+  [ "${1:-}" != --session ] || beat "$2"
+  (cd "$A" && bash "$AR" "$@")
+}
+setf() { jq "$1" "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"; }
+ar --session s-x start --spec "$SPEC" --force >/dev/null 2>&1
+
+out=$(a --session s-x status 2>&1); status=$?
+check "resolver: status from another repository" "${out%%$'\n'*}|$status" "$(ar --session s-x status 2>&1 | head -n 1)|0"
+setf '.pending = "compact"'
+out=$(a --session s-x pending 2>&1); status=$?
+check "resolver: pending from another repository" "$out|$status" "compact|0"
+setf '.pending = "after-compact"'
+ar --session s-x after-compact >/dev/null 2>&1; here=$?
+setf '.pending = "after-compact"'
+a --session s-x after-compact >/dev/null 2>&1; there=$?
+check "resolver: after-compact from another repository" "$there|$(jq -r .pending "$STATE")" "$here|null"
+setf '.pending = "compact"'
+out=$(cd "$TMP" && bash "$AR" --session s-x pending 2>&1)
+check "resolver: outside any repository" "$out" "compact"
+setf '.pending = null'
+
+cp "$STATE" "$TMP/b.before"
+err=$(a --session s-x task-complete 2>&1 >/dev/null); status=$?
+check "resolver: task-complete elsewhere exits 7" \
+  "$status|$err|$(cmp -s "$STATE" "$TMP/b.before" && echo same)" "7|auto-run: run this from the run's checkout: cd '$REPO' && …|same"
+err=$(a --session s-x phase final 2>&1 >/dev/null); status=$?
+check "resolver: phase final elsewhere exits 7" \
+  "$status|$err|$(cmp -s "$STATE" "$TMP/b.before" && echo same)" "7|auto-run: run this from the run's checkout: cd '$REPO' && …|same"
+
+# --- cd-prefix ---
+REC="$HOME/.claude/dforge/sessions/by-id/s-x.json"
+mkdir -p "$(dirname "$REC")"
+jq -n --arg c "$A" '{cwd: $c}' > "$REC"
+out1=$(a --session s-x cd-prefix); s1=$?
+jq -n --arg c "$REPO" '{cwd: $c}' > "$REC"
+out2=$(a --session s-x cd-prefix); s2=$?
+rm -f "$REC"
+out3=$(a --session s-x cd-prefix); s3=$?
+check "cd-prefix: outside the starting directory" "$out1|$s1|$out2|$s2|$out3|$s3" "cd '$REPO' && |0||0||0"
+
+mkdir -p "$REPO/docs"
+printf '# P\n\n### Task 1: One\n' > "$REPO/docs/wplan.md"
+git -C "$REPO" add docs/wplan.md && git -C "$REPO" commit -qm wplan
+git -C "$REPO" worktree add -q -b side "$TMP/side"
+mkdir -p "$TMP/side/.dforge/sdd/wplan"
+printf '# SDD ledger — plan: docs/wplan.md\n' > "$TMP/side/.dforge/sdd/wplan/progress.md"
+ar --session s-x attach --plan docs/wplan.md
+jq -n --arg c "$A" '{cwd: $c}' > "$REC"
+check "cd-prefix: a worktree run names the ledger's worktree" "$(a --session s-x cd-prefix)" "cd '$TMP/side' && "
+rm -f "$REC"
+
+# --- resolver: the working directory's run, and the commands that act on it ---
+ar --session s-x stop >/dev/null 2>&1
+cp "$STATE" "$TMP/b.before"
+a --session s-x start --spec docs/a-spec.md >/dev/null 2>&1
+check "resolver: start ignores a binding to a finished run (A49)" \
+  "$(jq -r .session "$ASTATE" 2>/dev/null)|$(cmp -s "$STATE" "$TMP/b.before" && echo same)" "s-x|same"
+jq -n --arg p "$REPO" '{primary: $p, nonce: "n", at: 0}' > "$RUN/s-x.json"
+check "resolver: a local run of the caller wins" "$(a --session s-x status | head -n 1 | grep -c 'spec docs/a-spec.md')" "1"
+
+a --session s-old start --spec docs/old.md --force >/dev/null 2>&1
+beat s-old && printf '%s\n' "$(( $(date +%s) - 1000 ))" > "$HOME/.claude/dforge/sessions/cockpit/s-old"
+ar --session s-x start --spec "$SPEC" --force >/dev/null 2>&1
+cp "$STATE" "$TMP/b.before"
+(cd "$A" && bash "$AR" --session s-x stop --stale >/dev/null 2>&1); s1=$?
+active1=$(jq -r .active "$ASTATE")
+a --session s-x resume >/dev/null 2>&1; s2=$?
+check "resolver: stop --stale and resume act on this repository" \
+  "$s1|$active1|$s2|$(jq -r '"\(.active) \(.session)"' "$ASTATE")|$(cmp -s "$STATE" "$TMP/b.before" && echo same)" \
+  "0|false|0|true s-x|same"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

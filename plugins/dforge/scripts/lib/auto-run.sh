@@ -38,11 +38,101 @@ ar_in_primary() {
   [ "$dir" = "$common" ]
 }
 
-# ar_path — the state file's path, whether or not it exists.
+# ar_path — the state file's path, whether or not it exists: the working
+# directory's when its run is the caller's, else the one the caller's binding
+# names when that run is the caller's, else the working directory's.
+# AR_RESOLVE=local takes the working directory's at once.
 ar_path() {
-  local primary
-  primary=$(ar_primary_root) || return 1
-  printf '%s/sdd/auto-run.json\n' "$(dforge_dir state "$primary")"
+  local primary="" here="" sid=${AR_SESSION:-${CLAUDE_CODE_SESSION_ID:-}} bfile bound_primary there
+  if primary=$(ar_primary_root); then
+    here="$(dforge_dir state "$primary")/sdd/auto-run.json"
+  else
+    primary=""
+  fi
+  if [ "${AR_RESOLVE:-}" = local ]; then
+    [ -n "$here" ] || return 1
+    printf '%s\n' "$here"
+    return 0
+  fi
+  # With no binding elsewhere every step lands on the working directory's
+  # file, so the common case reads no state.
+  if [ -n "$sid" ]; then
+    bfile=$(ar_binding_file "$sid")
+    if [ -f "$bfile" ]; then
+      bound_primary=$(ar_binding_get "$sid" primary)
+      if [ -n "$bound_primary" ]; then
+        there="$(dforge_dir state "$bound_primary")/sdd/auto-run.json"
+        if [ "$there" != "$here" ] && ! { [ -n "$here" ] && _ar_session_is "$here" "$sid"; } \
+           && _ar_session_is "$there" "$sid"; then
+          printf '%s\n' "$there"
+          return 0
+        fi
+      fi
+    fi
+  fi
+  [ -n "$here" ] || return 1
+  printf '%s\n' "$here"
+}
+
+_ar_session_is() { # _ar_session_is PATH SID
+  [ -f "$1" ] && ar_jq -e --arg s "$2" '.session == $s' < "$1" >/dev/null 2>&1
+}
+
+# ar_run_primary — the primary checkout holding the resolved state file
+# (<primary>/<state>/sdd/auto-run.json).
+ar_run_primary() {
+  local path
+  path=$(ar_path) || return 1
+  dirname "$(dirname "$(dirname "$path")")"
+}
+
+# ar_foreign — true when the working directory is not in the run's primary
+# checkout's repository, or in no repository at all.
+ar_foreign() {
+  local mine run
+  mine=$(ar_primary_root) || return 0
+  run=$(ar_run_primary) || return 0
+  [ "$(dr_native_path "$mine")" != "$(dr_native_path "$run")" ]
+}
+
+# ar_checkout — where the run's steps run: the worktree of the attached
+# plan's ledger, else the run's primary.
+ar_checkout() {
+  local primary plan found
+  primary=$(ar_run_primary) || return 1
+  plan=$(ar_get plan)
+  if [ -n "$plan" ] && found=$(plan_ledger_any "$primary" "$plan" 2>/dev/null) && [ -n "${found#*$'\t'}" ]; then
+    printf '%s\n' "${found#*$'\t'}"
+  else
+    printf '%s\n' "$primary"
+  fi
+}
+
+_ar_quote() { local q="'\\''"; printf "'%s'" "${1//\'/$q}"; }
+
+# ar_cd_prefix — "cd '<checkout>' && " when the run's checkout is outside the
+# directory the caller's session started in; nothing when inside it or when
+# that directory is unknown.
+ar_cd_prefix() {
+  local sid=${AR_SESSION:-${CLAUDE_CODE_SESSION_ID:-}} rec cwd checkout
+  rec="${HOME:-}/.claude/dforge/sessions/by-id/$(_session_safe "$sid").json"
+  [ -f "$rec" ] || return 0
+  cwd=$(ar_jq -r '.cwd // empty | strings' < "$rec" 2>/dev/null) || return 0
+  [ -n "$cwd" ] || return 0
+  checkout=$(ar_checkout) || return 0
+  cwd=$(dr_native_path "$cwd")
+  case $(dr_native_path "$checkout") in
+    "$cwd" | "$cwd"/*) return 0 ;;
+  esac
+  printf 'cd %s && ' "$(_ar_quote "$checkout")"
+}
+
+# ar_require_checkout — return 7, naming the command's checkout, when the
+# caller is outside the run's repository.
+ar_require_checkout() {
+  ar_foreign || return 0
+  printf "auto-run: run this from the run's checkout: cd %s && …\n" "$(_ar_quote "$(ar_checkout)")" >&2
+  return 7
 }
 
 # A session's binding names the primary checkout whose state holds the run
