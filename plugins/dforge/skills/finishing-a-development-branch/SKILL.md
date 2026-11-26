@@ -17,6 +17,9 @@ complete this work."
 A question to your human partner other than this skill's own stops goes
 through `scripts/ask "<question>"`; end on the question.
 
+Outside an auto run, first run `scripts/context-size --finish`: on `handoff`
+(exit 5) invoke dforge:handoff with finishing as the next action.
+
 ## Auto run
 
 When `scripts/auto-run status` exits 0

@@ -20,8 +20,8 @@ back. Before anything else:
 2. Trust the ledger and `git log` over the summary. For each task the last
    ledger line decides; see the Recovery table in [recovery.md](references/recovery.md).
 3. When every task has its `complete` line, run `scripts/context-size --final`
-   and go on to the final review or finishing whatever it prints: the final
-   phase never hands off. In an auto run it also moves the run to the final
+   and go on to the final review or finishing unless it says `handoff` (the
+   hard limit). In an auto run it also moves the run to the final
    phase, and a `compact` line still ends the turn on `Auto run: compacting`.
    Otherwise run `scripts/context-size`; on exit 5, finish the task in
    flight, then invoke dforge:handoff. In an auto run, exit 6 (`compact`) is
@@ -62,7 +62,7 @@ What changes here:
   turn on `Auto run: compacting` before the next task opens. After each task, run the Fable batch when it printed any
   (`scripts/auto-run decision list` shows the same). When that line leaves every
   task with its `complete` line, run `scripts/auto-run phase final` next, before any budget check and
-  before the turn ends, so a compaction from there on never hands off.
+  before the turn ends: a compaction there never hands off; three without progress stop the run.
   A `task-close` exit 5 means the run stopped (a task was completed
   on the run base, off its branch or in the primary checkout, or a carried path was committed):
   end as auto-run.md §Stopping says.
@@ -237,19 +237,21 @@ budget before every task at no extra request:
 - `handoff`: finish the task in flight through its `Task N: complete` line,
   then invoke dforge:handoff. Never hand off in the middle of a task.
 
-The plan's last two tasks never hand off in strict mode: their brief prints
-`budget (last 2 tasks)` or `budget (last task)` and says `ok` past the budget. After the last
+In strict mode the plan's last two tasks and its final phase hand off only at
+the hard limit: `budget (last 2 tasks)`, `budget (last task)` and
+`budget (final)` lines say `ok` past the budget below it. After the last
 task's `Task <N>: complete` line, `task-close` prints the `--final` budget line
-for the record (run `scripts/context-size --final` yourself if it did not): it never says `handoff`.
+(run `scripts/context-size --final` yourself if it did not).
 After every earlier task, the next brief's budget line is the check.
-Finishing is never budget-checked. In an auto run `--final` also moves the
+In an auto run `--final` also moves the
 run to the final phase, and a `compact` line still ends the turn on
 `Auto run: compacting`.
 
-The last task completing is never a stop: the final review, its fix wave and
-finishing run in this session whatever `context-size --final` prints, and a
-`review-package` budget line saying `handoff` does not stop them. If the
-context fills, Claude Code's own compaction is the backstop.
+The last task completing is no stop while that line says `ok`: the final
+review, its fix wave and finishing run in this session; a
+`review-package` budget line saying `handoff` does not stop them. On
+`handoff` from `--final`, finish the step in hand, then invoke
+dforge:handoff: the next session resumes the final phase from the ledger.
 
 ## The Task Loop
 
@@ -330,7 +332,7 @@ Every task is complete, so the branch gets one broad review: follow
 [final-review.md](../../reference/final-review.md), the procedure both
 execution skills share; its reviewer is the seat
 `scripts/review-route PLAN_FILE --final` prints, and its fix wave is your own
-pass. In this mode it runs in this session: the final phase never hands off.
+pass. In this mode it runs in this session.
 List any
 `(unseated)` rulings for the reviewer alongside the ledger's parked and
 deferred-minor lines.

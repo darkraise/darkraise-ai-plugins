@@ -11,10 +11,11 @@ never earlier.
 | Item | Value | Source |
 |------|-------|--------|
 | Handoff budget | The compaction point minus 140,000: min(`autoCompactWindow`, model window) × 93% − 140,000, so 465k at a 650,000 window, and never below a fifth of that window, so 20k at 100,000; `DFORGE_BUDGET` overrides, then the `handoffTokens` setting | Owner ruling, 2026-09-19 |
-| Final-phase limit | 85% of min(`autoCompactWindow`, model window): 553k at a 650,000 window, 680k at 800,000; `DFORGE_BUDGET` does not move it. Only relaxed mode and the plan after the spec measure against it | Owner ruling, 2026-10-02; strict mode revised 2026-10-29 |
+| Final-phase limit | 85% of min(`autoCompactWindow`, model window): 553k at a 650,000 window, 680k at 800,000; `DFORGE_BUDGET` does not move it. Only relaxed mode measures against it | Owner ruling, 2026-10-02; strict mode revised 2026-10-29 and 2026-11-26 |
+| Hard limit | min(task budget × 1.25, compaction point − 40,000), never below the task budget: 375k at a 300,000 budget and an 800,000 window. In strict mode the last 2 tasks, the final phase, the plan after the spec and finishing end there | Owner ruling, 2026-11-26 |
 | Relaxed handoff | With the `handoffMode` setting at `relaxed`, a plain task is measured against the final-phase limit and the line reads `budget (relaxed)`; the pinned budget then has no effect. A worst-case fix loop late in such a session may compact, and the compaction snapshot carries it on | Owner ruling, 2026-10-12 |
-| Plan after the spec | 150% of the task budget (`DFORGE_BUDGET` included), capped at the final-phase limit: 680k at an 800,000 window with the budget pinned at 465,000 | Owner ruling, 2026-10-10 |
-| Tail | Strict: the last 2 tasks and the final phase are measured against the handoff budget and never hand off, so the plan finishes in the session past its budget. Relaxed: both are measured against the final-phase limit, and a tail task past it hands off. Finishing is never measured | Owner ruling, 2026-10-10; strict mode revised 2026-10-29 |
+| Plan after the spec | Strict: measured against the hard limit, `ok` below it and `handoff` at or past it. Relaxed: 150% of the task budget (`DFORGE_BUDGET` included), capped at the final-phase limit: 680k at an 800,000 window with the budget pinned at 465,000 | Owner ruling, 2026-10-10; revised 2026-11-26 |
+| Tail | Strict: the last 2 tasks and the final phase are measured against the handoff budget and say `ok` past it only below the hard limit, so the plan finishes in the session past its budget; at or past the hard limit they say `handoff`. Finishing is measured against the hard limit (`context-size --finish`). Relaxed: the tail and the final phase are measured against the final-phase limit, a tail task past it hands off, and finishing never hands off | Owner rulings, 2026-10-10 and 2026-10-29 (strict mode never handed off there); revised 2026-11-26 |
 | Model window | The cockpit's session state file first (`~/.claude/dforge/sessions/state/<sid>.json`); else 1,000,000 for any Fable 5, Opus 5 or Sonnet 5 model and 200,000 for Haiku; any other model has no window, never a guessed 1,000,000 | Claude API model table, cached 2026-06-24; Opus 5.5 from its launch notes; Sonnet 5.5 from the model table and a CLI probe, 2026-09-29 |
 | `autoCompactWindow` | Claude Code's own setting, read from `settings.json`; unset, the model window applies. One worked example, 800,000 with `DFORGE_BUDGET` pinned at 465,000, is under A larger compaction window below | Claude Code settings |
 | Where auto-compaction fires | About 93-96% of the window: 467k, 467k and 479k observed at 500,000 | Inference from three transcripts |
@@ -30,7 +31,8 @@ The tail trades that margin for a session. A fresh session reloads its system
 prompt, tools and the durable record before it does anything, which costs more
 than finishing one or two tasks and the final phase here. So in strict mode the
 last two tasks and the final phase keep the handoff budget as their limit but
-never hand off: their lines say `ok` past it, and the plan finishes here. In
+hand off only at the hard limit: below it their lines say `ok` past the
+budget, and the plan finishes here. In
 relaxed mode they measure against the final-phase limit instead. Either way, a
 worst-case fix loop late in the plan may compact the session, and the
 compaction snapshot below carries it on. `scripts/lib/context.sh`
@@ -52,6 +54,7 @@ budget: unknown — unknown — no transcript found
 budget: 300k measured — unknown — the model's window is unknown
 budget: 300k of 232k (129%) — handoff — source: record, window session file
 budget (last task): 512k of 465k (110%) — ok — source: record
+budget (finishing): 352k of 375k (93%) — ok — source: record
 budget (relaxed): 512k of 680k (75%) — ok — source: record
 ```
 
@@ -111,10 +114,13 @@ under `ok` is not a reason to stop.
   (counted from the ledger's complete lines) — the brief, `review-package` and
   the `task-step` digests — reads `budget (last 2 tasks)` or
   `budget (last task)` (`context-size --tail R`). Once every task is complete
-  they read `budget (final)`. In strict mode neither hands off.
-- **Finishing:** never checked. Once the final review is clean, finishing
-  runs in the same session. In an auto run it runs in a session of its own
-  ([auto-run.md](auto-run.md) §Finishing).
+  they read `budget (final)`. In strict mode both hand off only at the hard
+  limit.
+- **Finishing:** `context-size --finish` at entry, outside an auto run. Strict
+  mode measures against the hard limit and says `handoff` at or past it;
+  relaxed mode never hands off. Below it, once the final review is clean,
+  finishing runs in the same session. In an auto run it runs in a session of
+  its own ([auto-run.md](auto-run.md) §Finishing).
 - **Acting on `handoff`:** finish the task in flight through its
   `Task N: complete` line, then hand off. Start no new task.
 - **brainstorming:** `context-size --plan` once, after the spec is committed.
@@ -129,10 +135,13 @@ under `ok` is not a reason to stop.
   dforge:handoff once the plan is reviewed. In an auto run the plan saved is
   no stop: the cockpit clears the session and starts execution
   ([auto-run.md](auto-run.md) §The switch).
-- **Never a stop:** the last task completing. The final review
-  and finishing follow in the same session whatever `context-size --final`
-  prints: it never says `handoff`, and a task budget line saying `handoff`
-  inside the final phase does not stop it. When the context fills there,
+- **No stop below the hard limit:** the last task completing. The final
+  review and finishing follow in the same session while
+  `context-size --final` says `ok`, and a task budget line saying `handoff`
+  inside the final phase does not stop it. In strict mode `--final` and
+  `--finish` say `handoff` at the hard limit: finish the step in hand, then
+  hand off, and the next session resumes the final phase from the ledger.
+  Relaxed mode never hands off there: when the context fills,
   Claude Code's own compaction is the backstop, and the execution skill's
   After compaction steps resume the final phase from the ledger.
   In an auto run finishing clears the session first.
@@ -156,19 +165,25 @@ To give the final phase more room without lengthening task sessions, raise
 ```
 
 Tasks then still hand off at 465k, the last tasks and the final phase run on
-past it, and compaction fires at about 744k.
+past it up to the hard limit (581k), and compaction fires at about 744k.
 
 ## Auto run
 
 While an auto run is bound to the session ([auto-run.md](auto-run.md)), every
 budget line but `context-size --plan` prints the run's own verdict,
-`budget (auto…)`, and `context-size` exits 6 on `compact`. The run compacts at
-the task budget, or at 90% of the compaction window once a compaction has left
-85% of the task budget or more; a
+`budget (auto…)`, and `context-size` exits 6 on `compact`. Every phase
+measures against the run's limit: the task budget, or 90% of the compaction
+window once a compaction has left 85% of the task budget or more; in `spec`,
+`plan`, `final` and `finish` that high limit is capped at the hard limit. In
+`execute`, `task-close` and `task-brief` say `compact` from the limit minus
+20% of the task budget, so the compaction falls between two tasks. A
 compaction that leaves 85% of the window or more hands off, and the cockpit
 clears and resumes the session, except in the `plan`, `final` and `finish`
-phases, which never hand off; after one compaction in `final` or `finish`
-every budget line of the run says `ok`. The tail rule, the final-phase limit and
+phases, which never hand off. Three compactions in `spec`, `plan`, `final` or
+`finish` with no ledger line, commit or saved draft between them stop the run
+(`3 compactions in <phase> without progress`). `auto-run phase plan`,
+`phase execute`, `phase final`, `task-complete` and `ruling add` print the
+budget line last. The tail rule, the final-phase limit and
 relaxed mode do not apply to it. Finishing runs in a session of its own.
 
 ## Idle

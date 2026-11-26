@@ -6,12 +6,18 @@ of the work being done.
 
 ## Who runs it, and when
 
-- **Who:** the session that completed the last task: the final phase never
-  hands off. The final phase - this review, its one fix wave
+- **Who:** the session that completed the last task. The final phase - this
+  review, its one fix wave
   and finishing - is measured against the handoff budget in strict mode and
-  the final-phase limit in relaxed mode, and its `budget (final)` lines say
-  `ok` past either; a plain budget line saying `handoff` here does not stop it.
-  Once the review is clean, finishing follows with no budget check.
+  the final-phase limit in relaxed mode. Its `budget (final)` lines say
+  `ok` past either, and a plain budget line saying `handoff` here does not
+  stop it; but in strict mode a `budget (final)` line says `handoff` at the
+  hard limit ([session-budget.md](session-budget.md)): finish the step in
+  hand through its ledger line, then invoke dforge:handoff, and the next
+  session resumes the final phase from the ledger. Relaxed mode never hands
+  off here.
+  Once the review is clean, finishing follows; its entry runs
+  `scripts/context-size --finish`.
   In an auto run finishing clears the session first (auto-run.md §Finishing).
 - **In an auto run** ([auto-run.md](auto-run.md)) the budget line prints the
   run's verdict, and a `compact` line does end the turn here: finish the step
@@ -19,8 +25,9 @@ of the work being done.
   auto-run.md §Ending a turn says. After the compaction,
   `scripts/auto-run after-compact` prints `continue` in this phase: resume the
   review from the ledger as the execution skill's After compaction section
-  says. It never hands off, and once a compaction has run in this phase every
-  budget line says `ok`.
+  says. It never hands off, and every budget line after the compaction
+  measures against the run's limit again; three compactions here with no
+  ledger line or commit between them stop the run.
 - **What it reads:** point the reviewer at the ledger's deferred-minor and
   parked lines, the complete lines' `discovered:` fields, every borderline
   (9-13) score, and every `(unseated)` ruling, so it can triage what must be

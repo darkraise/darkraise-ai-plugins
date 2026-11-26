@@ -283,16 +283,44 @@ While a run is bound to this session, every budget line but
   `scripts/task-close` measures before it records the completion and prints
   the run's line last (exit 0 whatever the verdict): `compact` there means
   ending the turn on `Auto run: compacting` before the next task opens.
+  In `execute`, the lines `scripts/task-close` and `scripts/task-brief` print
+  say `compact` from the limit minus 20% of the task budget (240k at a 300k
+  budget), so the compaction falls between two tasks, and a compaction booked
+  there stays pending until it runs.
 - `handoff` (exit 5): the last compaction left too much behind. Finish the
   task in flight, then follow Clears.
 
-The rules: compact at the task budget in the normal regime, or at 90% of the
-compaction window in the high one. After a compaction of size P: P at 85% of the window or more hands
+The rules: every phase compacts at its limit, the task budget in the normal
+regime or 90% of the compaction window in the high one. In `spec`, `plan`,
+`final` and `finish` the high regime is capped at the hard limit
+([session-budget.md](session-budget.md): the lower of 125% of the task budget
+and the compaction point less 40,000). After a compaction of size P: P at 85% of the window or more hands
 off; P at 85% of the task budget or more switches to the high regime;
 anything smaller returns to the normal one. In the `plan`, `final` and
-`finish` phases P never hands off, and once a compaction has run in `final` or
-`finish` every budget line says `ok`. The tail rule, the final-phase
-limit and relaxed mode do not apply. Finishing is never measured.
+`finish` phases P never hands off. Three compactions in `spec`, `plan`,
+`final` or `finish` with no ledger line, commit or saved draft between them
+stop the run (`3 compactions in <phase> without progress`); `execute` stops
+after three without a completed task. The tail rule, the final-phase
+limit and relaxed mode do not apply.
+
+`scripts/auto-run phase plan`, `phase execute`, `phase final`,
+`task-complete` and `ruling add` print the run's budget line as their last
+line and keep their own exit status; `attach` and `phase finish` print none,
+since a clear follows both.
+
+The cockpit measures each main response as well. At the limit with nothing
+pending it books the compaction through `scripts/auto-run due` and appends
+one note, in any mode, fast mode included, and no second one until the next
+compaction:
+
+    dforge: budget: 310k of 300k — compact. Finish the step in hand, record it, then end the turn on `Auto run: compacting`.
+
+A step is in hand until its durable record is current: a task through its
+`Task N: complete` line; a final-review step through its ledger line; a plan
+draft or review round through the saved file; a finishing step through its
+commit or ledger line. No note forces a compaction in the middle of a step.
+After a mid-step compaction Claude Code starts on its own, the After
+compaction steps resume as before.
 
 ## Ending a turn
 
@@ -334,7 +362,9 @@ It prints `continue` (exit 0) or `handoff` (exit 5); in the `plan`, `final`
 and `finish` phases it always prints `continue`, since the plan and the final
 review stay in this session and finishing runs in one of its own. It settles only a
 compaction that was booked (`pending` is `after-compact`): while a `clear` or
-`handoff` is pending it prints `handoff` and changes nothing.
+`handoff` is pending it prints `handoff` and changes nothing. In every phase
+the budget lines after it measure against the limit again: one compaction no
+longer makes the later lines of `final` or `finish` say `ok`.
 
 - `continue`: carry on with the phase `scripts/auto-run status` names. In
   `plan`, resume dforge:writing-plans from the spec and the plan file on disk
@@ -465,7 +495,9 @@ the binding (§Starting); the run is left as it was.
 
 ## Finishing
 
-Finishing runs in a session of its own. At the entry of
+Finishing runs in a session of its own, measured against the run's limit like
+every phase (`scripts/context-size --finish` prints the run's line and is not
+needed there). At the entry of
 dforge:finishing-a-development-branch, a run whose phase is not `finish` runs,
 in order, `scripts/auto-run phase finish`, dforge:handoff steps 0-3 (do not
 end the session), `scripts/next-step --notes <notes> PLAN_FILE` with the
