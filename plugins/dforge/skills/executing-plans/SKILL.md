@@ -41,10 +41,12 @@ What changes here:
 - **After any compaction**, whether or not a prompt asks for it, run `scripts/auto-run after-compact` before step 0 above. On
   `handoff` (exit 5), invoke dforge:handoff,
   then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
+  On exit 7, run the same command again with the `cd '<path>' && …` prefix it printed; it is never a reason to stop the run.
 - **Setup:** skip the finish-preference question; run `scripts/auto-run phase execute`
   from the execution workspace once dforge:using-git-worktrees Step 0 has prepared it.
   Exit 4 means the workspace step was skipped:
   follow dforge:using-git-worktrees Step 0 for the run, then run the command again.
+  On exit 7, run the same command again with the `cd '<path>' && …` prefix it printed; it is never a reason to stop the run.
 - **Nothing stops for your human partner.** A ruling-seat or exhausted
   `BLOCKED` goes on the pending list and one Fable batch runs at once. An
   irreversible, security-sensitive or outside-the-worktree action is never
@@ -73,7 +75,8 @@ What changes here:
   The tail rule and the final-phase limit do not apply;
   `scripts/context-size --final` prints the auto line too.
 - **Final review:** run `scripts/auto-run phase final`; on exit 4 (here or after the last task),
-  run `scripts/auto-run stop --reason "<path> is a carried path and was committed"` (no path: `--reason "git could not check the carried paths"`) and end as auto-run.md §Stopping says. With pending items,
+  run `scripts/auto-run stop --reason "<path> is a carried path and was committed"` (no path: `--reason "git could not check the carried paths"`) and end as auto-run.md §Stopping says.
+  On exit 7, run the same command again with the `cd '<path>' && …` prefix it printed; it is never a reason to stop the run. With pending items,
   run the Fable batch first; the review's findings take the
   same ladder.
 - **A turn ends** only on `Auto run: compacting` or `Auto run: clearing` as

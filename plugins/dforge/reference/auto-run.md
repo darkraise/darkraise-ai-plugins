@@ -32,6 +32,15 @@ creates `<docs>/registers/<date>-<slug>-auto.md` in this checkout and prints
 its path. The branch checked out here becomes the run's base, the branch the
 finish merges into. Exit 4 means another live run is active, exit 2 that this
 session cannot be bound: say so in one line and continue without an auto run.
+Exit 2 with `auto-run: the cockpit in this session does not see this run`
+means the cockpit did not echo the binding within `DFORGE_BIND_WAIT` seconds
+(default 10); nothing was started.
+
+`start` writes the session's binding file,
+`~/.claude/dforge/sessions/run/<session>.json`, which names the primary
+checkout holding the run's state. Every script, the Stop hook and the cockpit
+find the run through it, so a session started in one repository can run a
+plan in another.
 
 ## While a run is bound to this session
 
@@ -40,8 +49,14 @@ action, the plan, the base and the register, then prints `api rungs: off`
 when the Decisions API is off and every API budget cap is 0. Every `scripts/auto-run` command
 exits 0 when done, 1 when it failed (no handoff file to read, or `jq` or
 `mktemp` failed), 2 on bad usage, 3 when no run is bound to this session, 4
-when refused, 5 when the run stopped (`handoff` for `after-compact`) and 6
-for `compact`. Then:
+when refused, 5 when the run stopped (`handoff` for `after-compact`), 6
+for `compact`, and 7 when a command that reads the working directory's git
+state (`task-complete`, `phase execute|final|finish`, `setup-branch`, `clear`,
+`switch`) runs outside the run's checkout: run the same command again with
+the `cd '<path>' && …` prefix it printed. Exit 7 is never a reason to stop the
+run. Every other command works from any directory. After its status line,
+`status` prints `cockpit: sees this run` or `cockpit: does not see this run`.
+Then:
 
 - **Ask nothing.** No clarifying question, approval or menu. What you would
   have asked goes to the ladder under Rulings.
@@ -58,6 +73,30 @@ for `compact`. Then:
   `Task N: complete` ledger line.
 - **A message from your human partner** does not stop the run: answer it and
   continue, unless it asks you to stop (see Stopping).
+
+## Run log
+
+Each run event appends one row to `<state>/sdd/auto-run-log.tsv` in the run's
+primary checkout, with five tab-separated columns: the UTC time, the event
+(`start`, `bind`, `rebind`, `phase`, `compacted`, `clear`, `switch`,
+`stalled`, `hold`, `stop`, `resume`), the session, the phase at the event and
+a detail (the spec, the primary, the new session or phase, `phase` or
+`resume` for a clear, the stop reason). A new `start` keeps the file, so a
+stopped run's history survives the next run. `scripts/auto-run log` prints
+it, bound or not; exit 3 when the checkout has none.
+
+## Preflight
+
+`scripts/auto-run preflight --isolation <worktree|in-place>` needs no run and
+exits 0. It prints what would stop an unattended run: free space below
+`DFORGE_PREFLIGHT_FREE` percent (default 15) on the checkout's or the temp
+directory's filesystem, a refused git write in the primary checkout, and with
+`--isolation worktree` a refused scratch worktree in `.worktrees` (or an
+existing `worktrees`); `preflight: ok` when there is none. Then one line per
+review family: its gate's answer and its `<id>Review` setting.
+dforge:brainstorming runs it before the spec review and shows every line at
+the top of that message, so a blocker is met while your human partner is
+present.
 
 ## The spec
 
@@ -276,6 +315,10 @@ compaction that left too much
 behind; it stays until `scripts/auto-run clear` turns it into `clear`, and the
 Stop hook holds a turn that tries to end before that.
 
+While the run's checkout lies outside the directory the session started in,
+the first prompt, the after-compaction prompt and the Stop hook's hold
+messages say to run every command as `cd '<checkout>' && …`.
+
 Nothing you started may still run in the background. The Stop hook holds any
 other ending, its retries included, up to three times in a row; the fourth
 stops the run (`the turn ended 3 times in a row without its sentinel line`)
@@ -386,6 +429,9 @@ ends as finished. Run it, then end as the attended flow would, when:
 - `scripts/next-step` exits 4 during a clear (see Clears).
 - `scripts/next-step` exits 5 a second time during a clear (see Clears).
 
+Exit 7 from a `scripts/auto-run` command is never one of these: run the same
+command again with the `cd '<path>' && …` prefix it printed.
+
 When `scripts/auto-run clear` exits 5, or the cockpit's prompt says the run
 stopped, it has already stopped: end with the next-step block. A handoff
 another live session holds stops the run the same way: `scripts/handoff claim`
@@ -413,7 +459,9 @@ It refuses with exit 4, naming why, when:
   here would trip the guard (resume from the run's workspace), or the work is
   gone: an in-place run's branch, or a worktree run's plan worktree.
 
-Exit 2 means this session has no live cockpit.
+Exit 2 means this session has no live cockpit, or, with `auto-run: the
+cockpit in this session does not see this run`, that the cockpit did not echo
+the binding (§Starting); the run is left as it was.
 
 ## Finishing
 

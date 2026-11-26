@@ -23,6 +23,7 @@ When `scripts/auto-run status` exits 0
 ([auto-run.md](../../reference/auto-run.md)) and its phase is not `finish`, run
 `scripts/auto-run phase finish` (exit 4: `scripts/auto-run stop --reason "<path> is a carried path and was committed"` (no path: `--reason "git could not check the carried paths"`), and stop),
 dforge:handoff steps 0-3, `scripts/next-step --notes <notes> PLAN_FILE` and `scripts/auto-run clear --phase`, and end on `Auto run: clearing`.
+On exit 7 from `phase finish` or `clear --phase`, run the same command again with the `cd '<path>' && …` prefix it printed; it is never a reason to stop the run.
 In phase `finish`, follow this skill with these changes:
 
 - **Step 3** asks nothing: the base branch is

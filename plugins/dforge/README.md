@@ -579,6 +579,16 @@ line is held up to three times in a row, retries included; then the run stops
 with a reason, which the cockpit sends to Discord. See
 [auto-run.md](reference/auto-run.md).
 
+A run follows its session into another repository: a binding file under
+`~/.claude/dforge/sessions/run/` names the checkout that holds the run, so the
+scripts, the Stop hook and the cockpit find it from any directory, and the
+prompts say to run each command as `cd '<checkout>' && …` when the session
+started elsewhere. `scripts/auto-run log` prints the run log, one row per run
+event, kept across runs. Before the spec review, brainstorming runs
+`scripts/auto-run preflight`, which reports low disk space, a refused git
+write or scratch worktree, and each review family's gate, so a blocker is met
+while you are there.
+
 ### API budgets
 
 An auto run can spend developer API credit on its rulings instead of the
