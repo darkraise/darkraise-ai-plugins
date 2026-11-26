@@ -168,6 +168,20 @@ valid_output() {
   ' "$out" >/dev/null 2>&1
 }
 
+# A schema-valid review that read nothing: every score 1 and no finding to
+# justify any of them. Told it could not run shell commands, Codex answered so
+# instead of reading the diff it was pointed at.
+unread_output() {
+  [ -n "$schema" ] || return 1
+  jq -e '([.[] | numbers] | length > 0 and all(. == 1)) and (.findings | length == 0)' "$out" >/dev/null 2>&1
+}
+usable_output() { # usable_output <model> <effort>
+  valid_output || return 1
+  unread_output || return 0
+  printf 'run-codex-review: %s/%s read nothing: every score 1 and no finding\n' "$1" "$2" >&2
+  return 1
+}
+
 # The plugin root, resolved once. scripts/codex-plugin owns the locator and the
 # version allowlist; this script never names the codex executable.
 #
@@ -264,7 +278,7 @@ if [ "$rc" -eq 124 ]; then
   status "$model" "$effort" TIMEOUT "$rc"; exit 1
 fi
 
-if [ "$rc" -eq 0 ] && valid_output; then
+if [ "$rc" -eq 0 ] && usable_output "$model" "$effort"; then
   status "$model" "$effort" OK "$rc"; exit 0
 fi
 
@@ -290,7 +304,7 @@ if [ "$(jq -r '.refusal' <<<"$result")" = true ] \
   if [ "$rc" -eq 124 ]; then
     status "$back_model" "$back_effort" TIMEOUT "$rc"; exit 1
   fi
-  if [ "$rc" -eq 0 ] && valid_output; then
+  if [ "$rc" -eq 0 ] && usable_output "$back_model" "$back_effort"; then
     status "$back_model" "$back_effort" FALLBACK "$rc"; exit 0
   fi
   [ "$(jq -r '.quota' <<<"$result")" = true ] && { executor_session_mark_off codex quota; quota_skip; }
