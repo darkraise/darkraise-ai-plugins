@@ -300,5 +300,32 @@ PANEL_GATE_SECONDS=1 PANEL_AGY_GATE="$TMP/stuck-gate" panel --kind task --tier h
 check "gate_call_bounded" "$(head -1 <<<"$out")" "agy-judge none/none status=SKIPPED exit=0 out=- evidence=none reason=gate"
 check "gate_call_bounded: the panel returns within 15 s" "$([ $(( $(date +%s) - t0 )) -le 15 ] && echo inside || echo over)" "inside"
 
+# --- gate_child_reaped: a gate's child outlives a timeout that signals only the gate ---
+# The stub timeout behaves as uutils' does: TERM, then KILL, to the command alone.
+if command -v setsid >/dev/null 2>&1; then
+  mkdir -p "$TMP/utimeout"
+  cat > "$TMP/utimeout/timeout" <<'EOF'
+#!/usr/bin/env bash
+k=0; [ "$1" = -k ] && { k=$2; shift 2; }
+n=$1; shift
+"$@" & c=$!
+end=$(( $(date +%s) + n ))
+while kill -0 "$c" 2>/dev/null && [ "$(date +%s)" -lt "$end" ]; do sleep 0.2; done
+kill -0 "$c" 2>/dev/null || { wait "$c"; exit; }
+kill -TERM "$c" 2>/dev/null; end=$(( $(date +%s) + k ))
+while kill -0 "$c" 2>/dev/null && [ "$(date +%s)" -lt "$end" ]; do sleep 0.2; done
+kill -KILL "$c" 2>/dev/null; wait "$c"; exit 124
+EOF
+  printf '%s\n' '#!/usr/bin/env bash' "trap '' TERM" "sleep 30 & printf '%s\\n' \$! > '$TMP/gate-child.pid'; printf '%s\\n' \$! >> '$TMP/children'" 'wait' > "$TMP/stuck-gate-child"
+  chmod +x "$TMP/utimeout/timeout" "$TMP/stuck-gate-child"
+  rm -f "$TMP/gate-child.pid"
+  PATH="$TMP/utimeout:$PATH" PANEL_GATE_SECONDS=1 PANEL_AGY_GATE="$TMP/stuck-gate-child" panel --kind task --tier heavy --prompt "$TMP/prompt.md"
+  gc=$(cat "$TMP/gate-child.pid" 2>/dev/null)
+  for _ in $(seq 1 20); do [ -n "$gc" ] && kill -0 "$gc" 2>/dev/null || break; sleep 0.1; done
+  check "gate_child_reaped" "$([ -n "$gc" ] && kill -0 "$gc" 2>/dev/null && echo alive || echo dead):$(head -1 <<<"$out" | grep -o 'reason=.*')" "dead:reason=gate"
+else
+  printf 'skip - gate_child_reaped: setsid is not on PATH\n'
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

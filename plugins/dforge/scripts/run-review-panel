@@ -79,7 +79,8 @@ if [ -n "${PANEL_BOUND_SECONDS:-}" ]; then
   [[ $PANEL_BOUND_SECONDS =~ ^[0-9]+$ ]] || die "PANEL_BOUND_SECONDS must be a whole number"
 fi
 gate_secs=${PANEL_GATE_SECONDS:-90}
-[[ $gate_secs =~ ^[0-9]+$ ]] || die "PANEL_GATE_SECONDS must be a whole number"
+# timeout reads 0 as no bound at all.
+[[ $gate_secs =~ ^[1-9][0-9]*$ ]] || die "PANEL_GATE_SECONDS must be a whole number above 0"
 
 start=$(date +%s)
 ids=$(bash "$HERE/executors" ranked) || die "the executor registry could not be read"
@@ -101,6 +102,15 @@ first_secs() { # first_secs <block>
   ' "$LADDER"
 }
 
+have_setsid=false
+command -v setsid >/dev/null 2>&1 && have_setsid=true
+[ -z "${PANEL_NO_SETSID:-}" ] || have_setsid=false
+
+# A gate under setsid leads its own process group, which is killed if a
+# signal to the panel arrives while the panel waits on it.
+gate_pid=''
+trap '[ -z "$gate_pid" ] || kill -KILL -- "-$gate_pid" 2>/dev/null; exit 130' INT TERM
+
 open_ids=() lines_by_id=()
 bound=0
 for id in $ids; do
@@ -116,11 +126,19 @@ for id in $ids; do
   line=""
   # Each gate step has its own bound, but a child that ignores TERM would hold
   # the panel, so the call is bounded too; a killed gate prints nothing and its
-  # family is skipped as gate. The answer comes back through a file: timeout
-  # on uutils signals only the gate, and a child that outlives it must not
-  # hold a pipe the panel is reading.
+  # family is skipped as gate. timeout on uutils signals only the gate, so
+  # under setsid the gate's group is killed once the bound has fired; and the
+  # answer comes back through a file, so a child that outlives the gate (with
+  # no setsid) does not hold a pipe the panel is reading. setsid does not fork
+  # in a background job here, so the job's pid is the group's id.
   if [ -n "$gate" ]; then
-    if [ -n "$DFORGE_TIMEOUT" ]; then
+    if [ -n "$DFORGE_TIMEOUT" ] && [ "$have_setsid" = true ]; then
+      setsid "$DFORGE_TIMEOUT" -k 5 "$gate_secs" bash "$gate" > "$out_dir/$id.gate.out" 2> "$out_dir/$id.gate.log" < /dev/null &
+      gate_pid=$!
+      wait "$gate_pid"
+      case $? in 124 | 137) kill -KILL -- "-$gate_pid" 2>/dev/null ;; esac
+      gate_pid=''
+    elif [ -n "$DFORGE_TIMEOUT" ]; then
       "$DFORGE_TIMEOUT" -k 5 "$gate_secs" bash "$gate" > "$out_dir/$id.gate.out" 2> "$out_dir/$id.gate.log"
     else
       bash "$gate" > "$out_dir/$id.gate.out" 2> "$out_dir/$id.gate.log"
@@ -158,10 +176,6 @@ bound=$((bound + 120))
 deadline=$((start + bound - 15))
 [ -z "${PANEL_BOUND_SECONDS:-}" ] || deadline=$((start + PANEL_BOUND_SECONDS))
 printf 'run-review-panel: bound %s s, watchdog at %s s\n' "$bound" "$((deadline - start))" >&2
-
-have_setsid=false
-command -v setsid >/dev/null 2>&1 && have_setsid=true
-[ -z "${PANEL_NO_SETSID:-}" ] || have_setsid=false
 
 pids=()
 # A runner under setsid leads its own process group, so the whole group can be
