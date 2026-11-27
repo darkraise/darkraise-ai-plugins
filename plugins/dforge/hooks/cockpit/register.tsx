@@ -668,13 +668,11 @@ export const register: Register = on => {
       await update($, refusals, list => [...list, refusal].slice(-20))
       return { deny: denial }
     }
+    // Read before the spawn, and recorded first after it: the judge's first
+    // write is checked against this record.
+    const reports = isJudgeSeat(e.subagentType) ? await judgeReports($, e.prompt) : {}
     const started = await next(e)
     if (started.deny !== undefined || started.agentId === undefined) return started
-    if (isDforge(e.subagentType)) {
-      await update($, isPlanSession, () => true)
-      await flushSettingNote($)
-      if (e.subagentType.split(':')[1]?.startsWith('impl-')) await markRunSession($)
-    }
     const spawn: CockpitSpawn = {
       agentId: started.agentId,
       seat: e.subagentType,
@@ -684,9 +682,14 @@ export const register: Register = on => {
       isDone: false,
       outcome: null,
       startedAt: await $.clock.now(),
-      ...(isJudgeSeat(e.subagentType) ? await judgeReports($, e.prompt) : {}),
+      ...reports,
     }
     await update($, spawns, list => trimmedSpawns([...list, spawn]))
+    if (isDforge(e.subagentType)) {
+      await update($, isPlanSession, () => true)
+      await flushSettingNote($)
+      if (e.subagentType.split(':')[1]?.startsWith('impl-')) await markRunSession($)
+    }
     await writeSessionState($)
     await syncTicker($)
 
