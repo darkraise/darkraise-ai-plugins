@@ -5493,6 +5493,10 @@ async function judgeWriteDenial($: EngineInterface, tool: string, e: { agentId?:
   }
 }
 
+// The fields of a git write tool that become a commit's, pull request's or
+// merge request's text.
+const MESSAGE_FIELDS = ['title', 'body', 'message', 'subject', 'commit_message', 'commit_title', 'description']
+
 // The refusal for an attribution line: the deny text, and the line the
 // refusals list keeps.
 const attributionRefusal = (line: string) => ({ line, deny: `dforge: this project keeps AI attribution out of git. Remove "${line}" and try again.` })
@@ -5539,7 +5543,10 @@ async function attributionLine($: EngineInterface, tool: string, e: object): Pro
     return line === undefined ? undefined : attributionRefusal(line)
   }
   if (!isGitWriteTool(tool)) return undefined
-  for (const text of stringsIn(e)) {
+  // Only the fields that become a commit's, pull request's or merge request's
+  // text: a file's content is not attribution.
+  const fields = e as Record<string, unknown>
+  for (const text of MESSAGE_FIELDS.flatMap(name => stringsIn(fields[name]))) {
     const line = attributionIn(text)
     if (line !== undefined) return attributionRefusal(line)
   }
