@@ -4744,8 +4744,10 @@ async function expand($: EngineInterface, isDocking: boolean) {
   return opened
 }
 
-/** Opens the settings afresh: no half-typed value or pending reset survives a close. */
+/** Opens the settings afresh: no half-typed value, pending consent or pending reset survives a close. */
 async function showSettings($: EngineInterface) {
+  S.consentPending = null
+  if ((await read($, notifier)).editing !== null) await update($, notifier, now => ({ ...now, editing: null, error: null }))
   await update($, settingsView, now => ({ ...now, editing: null, error: null, isConfirmingReset: false }))
   await update($, view, () => 'settings')
 }

@@ -3003,6 +3003,25 @@ describe('settings view', () => {
     expect(await ui.find({ type: 'Button', key: 'set-openAtStart-toggle' })).toBeDefined()
   })
 
+  test('opening the settings again drops an edit and a consent left open', async ($, on) => {
+    world(on, { tokens: 284_000, config: {} })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Notifications' })
+    await ui.press({ key: 'set-notify-url-edit' })
+    expect(await ui.find({ key: 'set-notify-url-input' })).toBeDefined()
+    await $.command.run({ ...COCKPIT, args: '' })
+    await $.command.run({ ...COCKPIT, args: 'settings' })
+    expect(await ui.find({ key: 'set-notify-url-input' })).toBeUndefined()
+    await ui.press({ key: `settings-tab-${SCHEMA.apiBudgetAgentRouter!.group}` })
+    await ui.press({ key: 'set-apiBudgetAgentRouter-more' })
+    expect(await ui.find({ key: 'set-apiBudgetAgentRouter-confirm' })).toBeDefined()
+    await $.command.run({ ...COCKPIT, args: '' })
+    await $.command.run({ ...COCKPIT, args: 'settings' })
+    expect(await ui.find({ key: 'set-apiBudgetAgentRouter-confirm' })).toBeUndefined()
+  })
+
   for (const surface of SURFACES) {
     test(`writes each press to the settings file on ${surface}`, async ($, on) => {
       const written: Record<string, string> = {}
