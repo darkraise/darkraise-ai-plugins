@@ -1,6 +1,6 @@
 # Bash Lens - Review Criteria
 
-Applies: paths *.sh *.bash ; added ^#!.*(bash|/sh)
+Applies: paths *.sh *.bash ; added ^#!.*(bash|/sh) ; shebang ^#!.*(bash|/sh)
 
 A review lens, not a scored rubric: report each hit as a finding tagged
 [lens:lang-bash] at your own severity. Known defect patterns only. Scripts here

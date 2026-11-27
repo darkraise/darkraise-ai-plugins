@@ -79,6 +79,24 @@ out=$(bash "$ROUTE" plan.md --final "$HEAD1" "$(git rev-parse HEAD)")
 check "final: a non-ASCII file name still matches its part's paths" "$(parts <<<"$out")" "lang-python.md "
 git reset -q --hard "$HEAD1"
 
+# An extensionless script: neither its path nor a body edit's added lines
+# name bash, so only its first line at HEAD does.
+commit_file scripts/tool $'#!/usr/bin/env bash\necho one'
+S1=$(git rev-parse HEAD)
+commit_file scripts/tool $'#!/usr/bin/env bash\necho two'
+out=$(bash "$ROUTE" plan.md --final "$S1" "$(git rev-parse HEAD)"); status=$?
+check "final: a body edit to an extensionless bash script carries the lang-bash part" "$status:$(grep -cE '^lens code-quality parts=[^ ]*/lang-bash\.md seat=dforge:judge-sonnet-high reason=shebang$' <<<"$out")" "0:1"
+git rm -q scripts/tool && git commit -q -m "drop scripts/tool"
+out=$(bash "$ROUTE" plan.md --final "$S1" "$(git rev-parse HEAD)"); status=$?
+check "final: a deleted extensionless script is skipped" "$status:$(grep -c 'lang-bash' <<<"$out")" "0:0"
+git reset -q --hard "$HEAD1"
+commit_file scripts/tool $'#!/usr/bin/env node\nconsole.log(1)'
+S1=$(git rev-parse HEAD)
+commit_file scripts/tool $'#!/usr/bin/env node\nconsole.log(2)'
+out=$(bash "$ROUTE" plan.md --final "$S1" "$(git rev-parse HEAD)")
+check "final: an extensionless node script gets no lang-bash part" "$(grep -c 'code-quality' <<<"$out")" "0"
+git reset -q --hard "$HEAD1"
+
 # A2: more applicable lenses than the cap.
 commit_file tests/a.test.ts 'try { run() } catch (e) {}'
 commit_file README.md 'Docs.'

@@ -8,7 +8,7 @@
 #
 # Usage: lens-route PLAN_FILE --final BASE HEAD
 #        lens-route PLAN_FILE --task ID
-# Output: lens <id> criteria=<path> seat=<seat> reason=<always|paths:<glob>|added|ui-paths>
+# Output: lens <id> criteria=<path> seat=<seat> reason=<always|paths:<glob>|added|ui-paths|shebang>
 #         lens code-quality parts=<path>,... seat=<seat> reason=<reason>
 #                                           (--final: one seat for the matching
 #                                           parts, in PARTS order; the reason is
@@ -91,10 +91,11 @@ code_quality_match() {
 }
 
 # lens_match ID — print the first Applies clause that matches the change set
-# ($changed: file names; $added: added lines without their +); status 1 when
-# none does. Globs are bash case patterns, so * crosses /. A ui-paths clause
-# matches a changed UI file (scripts/ui-proof paths) only when the project has
-# a UI profile or the plan's spec has a UI/UX contract.
+# ($changed: file names; $added: added lines without their +; $firsts: the
+# first line of each changed file HEAD still holds); status 1 when none does.
+# Globs are bash case patterns, so * crosses /. A ui-paths clause matches a
+# changed UI file (scripts/ui-proof paths) only when the project has a UI
+# profile or the plan's spec has a UI/UX contract.
 lens_match() {
   local value clause kind arg glob f
   value=$(sed -n 's/^Applies: //p' "$LENSES/$1.md" | head -n 1 | tr -d '\r')
@@ -124,9 +125,23 @@ lens_match() {
         done <<<"$changed" ;;
       added)
         if grep -qE -- "$arg" <<<"$added"; then echo added; return 0; fi ;;
+      shebang)
+        if grep -qE -- "$arg" <<<"$firsts"; then echo shebang; return 0; fi ;;
     esac
   done < <(awk '{ gsub(/ ; /, "\n"); print }' <<<"$value")
   return 1
+}
+
+# first_lines - the first line of each file in $changed that exists at $head,
+# its CR dropped. A deleted path is skipped; head closing the pipe is no error.
+first_lines() {
+  local f line
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    git cat-file -e "$head:$f" 2>/dev/null || continue
+    line=$({ git show "$head:$f" 2>/dev/null || true; } | head -n 1 | tr -d '\r')
+    printf '%s\n' "$line"
+  done <<<"$changed"
 }
 
 case $1 in
@@ -143,6 +158,10 @@ case $1 in
       || die "cannot read the change set $base..$head"
     added=$(git diff -U0 "$base..$head" | awk '/^\+\+\+ /{next} /^\+/{print substr($0, 2)}') \
       || die "cannot read the change set $base..$head"
+    firsts=""
+    if grep -qE '^Applies: (.* ; )?shebang ' "$LENSES"/*.md 2>/dev/null; then
+      firsts=$(first_lines)
+    fi
     # dforge:ui-ux — the UI lens applies where the UI gate does.
     . "$HERE/lib/ui-ux.sh"
     ui_top=$(git rev-parse --show-toplevel)
