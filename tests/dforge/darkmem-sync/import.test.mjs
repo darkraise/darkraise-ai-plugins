@@ -189,6 +189,29 @@ test("a verified import records documents, never progress, as applied darkmem", 
   assert.match(result.stdout, /^note: recorded documents as applied darkmem in .*stores\.json$/m);
 });
 
+test("another writer's append during a fresh ledger import is refused, and the workstream is not closed", async t => {
+  const s = await setup(t);
+  s.stub.db.onRequest = (method, route) => {
+    if (method !== "POST" || route !== "/api/v1/worklog/entries") return;
+    s.stub.db.onRequest = null;
+    const now = new Date().toISOString();
+    s.stub.db.workstreams.push({
+      id: "foreign", project: "proj", key: "p1", title: null, client: "other", state: "open", closed_at: null, retain: false, properties: {},
+      entries: [{ id: "e-foreign", seq: s.stub.db.nextSeq++, run_key: "other", kind: "ledger", body: "theirs\n", properties: {}, created_at: now }],
+      created_at: now, updated_at: now, last_entry_at: now,
+    });
+  };
+  const result = await s.importing();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^failed: sdd\/p1\/progress\.md: darkmem refused an entry: expected the newest ledger entry to be seq 0, but it is \d+$/m);
+  const [first] = s.stub.db.requests.filter(r => r.method === "POST" && r.path === "/api/v1/worklog/entries");
+  assert.equal(first.body.expected_last_seq, 0);
+  const ws = s.stub.db.workstreams.find(w => w.key === "p1");
+  assert.equal(ws.state, "open");
+  assert.deepEqual(ws.entries.map(e => e.run_key), ["other"]);
+  assert.doesNotMatch(result.stdout, /recorded documents as applied darkmem/);
+});
+
 test("an import with documents configured local records nothing", async t => {
   const stub = await startStub();
   t.after(() => stub.close());

@@ -49,21 +49,22 @@ function readSources(roots) {
 
 // `resume` continues a stopped import of the same ledger: { id, lastSeq, from }
 // names darkmem's open workstream, its newest ledger entry and how many pieces
-// it already holds. Each later batch is sent under the last sequence number
-// darkmem answered, so another writer's append is a 409, not interleaved lines.
+// it already holds. A fresh import's first batch expects no ledger entry, and
+// each later batch is sent under the last sequence number darkmem answered, so
+// another writer's append is a 409, not interleaved lines.
 export async function importLedger({ cfg, client, report }, roots, ledger, resume = null) {
   const pieces = ledgerPieces(ledger.text);
   const properties = { ...propertiesFor(roots, ledger.slug, ledgerPlanPath(ledger.text)), imported_mtime: ledger.mtime };
-  let lastSeq = resume?.lastSeq;
+  let lastSeq = resume?.lastSeq ?? 0;
   ledger.id = resume?.id ?? null;
   for (let i = resume?.from ?? 0; i < pieces.length; i += MAX_ENTRIES_PER_APPEND) {
     const entries = pieces.slice(i, i + MAX_ENTRIES_PER_APPEND).map(body => ({ kind: "ledger", body }));
     try {
       const answer = await client.append({ project: cfg.project, workstream: ledger.slug, properties, entries, expectedLastSeq: lastSeq });
       ledger.id = answer.workstream.id;
-      if (resume) lastSeq = answer.last_seq;
+      lastSeq = answer.last_seq;
     } catch (error) {
-      if (!(error instanceof HttpError && (error.status === 422 || (resume && error.status === 409)))) throw error;
+      if (!(error instanceof HttpError && (error.status === 422 || error.status === 409))) throw error;
       report.failures.push(`sdd/${ledger.slug}/progress.md: darkmem refused an entry: ${error.detail}`);
       ledger.id = null;
       return;
