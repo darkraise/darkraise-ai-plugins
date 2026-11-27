@@ -12,6 +12,7 @@ import {
   familiesOf, isArchiveUri, ledgerEntries, ledgerFiles, ledgerPlanPath, listDocumentFiles, pathToUri, propertiesFor, sha256, splitAtLimit,
   recordCheckpointAt, unsupportedPlanDirs, uriFamily, uriProblem, uriToLocal, utcStamp, utf8Fault, validKey,
 } from "./darkmem-mirror.mjs";
+import { readRegular } from "./darkmem-progress-move.mjs";
 import { remoteLedger } from "./darkmem-pull.mjs";
 import { nameSpellings } from "./darkmem-reconcile.mjs";
 
@@ -242,6 +243,19 @@ async function adoptRemoteLedger({ cfg, client }, slug, buffer) {
   return null;
 }
 
+// A ledger that cannot be read (a named pipe, a directory, a file removed
+// since the listing) fails alone; a state file that cannot be saved still
+// stops the push.
+class LedgerReadError extends Error {}
+
+function readLedger(file) {
+  try {
+    return readRegular(file, { follow: true });
+  } catch (error) {
+    throw Object.assign(new LedgerReadError(error.message), { code: error.code });
+  }
+}
+
 // One ledger's appended bytes. Every append names the seq it expects to
 // follow, so another mirror's append since the last sync is a 409 rather than
 // interleaved lines; the 409 is reconciled once, and the bytes darkmem does
@@ -249,7 +263,7 @@ async function adoptRemoteLedger({ cfg, client }, slug, buffer) {
 async function pushLedger(context, slug, file) {
   const { cfg, client, roots, state, persist, report } = context;
   const label = `sdd/${slug}/progress.md`;
-  const buffer = fs.readFileSync(file);
+  const buffer = readLedger(file);
   let record = state.ledgers[slug];
   if (!record || record.pending || record.lastSeq === undefined) {
     record = await adoptRemoteLedger(context, slug, buffer);
@@ -354,7 +368,7 @@ async function closeFinished(context, slug, file) {
   const { cfg, client, roots, state, persist } = context;
   const record = state.ledgers[slug];
   if (!record || record.pending || record.closed) return;
-  const buffer = fs.readFileSync(file);
+  const buffer = readLedger(file);
   if (record.offset !== buffer.length || !planFinished(roots, ledgerPlanPath(buffer.toString("utf8")))) return;
   const existing = await client.resume(cfg.project, slug);
   if (!existing) return;
@@ -373,6 +387,11 @@ async function pushLedgers(context) {
       await pushLedger(context, slug, file);
       await closeFinished(context, slug, file);
     } catch (error) {
+      if (error instanceof LedgerReadError) {
+        report.failures.push(`sdd/${slug}/progress.md: could not be read (${error.code}); not pushed`);
+        report.partial = true;
+        continue;
+      }
       // A pending mark set before a failed append stays: its answer may have
       // been lost, so the next push reconciles before sending.
       failItem(report, `sdd/${slug}/progress.md`, error);

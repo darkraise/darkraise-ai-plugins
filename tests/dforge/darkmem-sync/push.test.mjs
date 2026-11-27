@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { createClient } from "../../../plugins/dforge/scripts/lib/darkmem-client.mjs";
 import { STUB_KEY, sha, startStub, storedDocument } from "./stub-server.mjs";
-import { git, makeHome, makeRepo, markMigrated, read, run, scratch, write } from "./helpers.mjs";
+import { git, makeHome, makeRepo, markMigrated, namedPipe, read, run, scratch, write } from "./helpers.mjs";
 
 async function setup(t, stubOptions = {}) {
   const stub = await startStub(stubOptions);
@@ -887,3 +887,13 @@ test("a project handoff with stale notes is filed by its marker", async t => {
   assert.equal(s.stub.db.workstreams.find(w => w.key === "project").entries.length, 1);
   assert.equal(s.stub.db.workstreams.find(w => w.key === "Q"), undefined, "the stale State section does not name the workstream");
 });
+
+test("a named pipe where a ledger belongs fails that ledger and never blocks the push", { skip: process.platform === "win32" && "no FIFOs" }, async t => {
+  const s = await setup(t);
+  markMigrated(s.mirror);
+  namedPipe(path.join(s.workRoot, "sdd", "p1", "progress.md"));
+  const result = await s.push();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^failed: sdd\/p1\/progress\.md: could not be read \(EFTYPE\); not pushed$/m);
+});
+
