@@ -936,7 +936,7 @@ check_tracked() {
     | $p | tojson') || die "cannot compare the tracked changes in $dir"
   if [ -n "$changed" ]; then
     {
-      printf 'task-step: tracked files changed during the review in %s; restore each to its recorded state with the command under it:\n' "$dir"
+      printf 'task-step: tracked files changed during the review in %s; run a file'"'"'s restore command only when the review seat made the change, and keep any other writer'"'"'s edit:\n' "$dir"
       restore_hints "$dir" "$TMP/recorded" "$TMP/now" <<<"$changed"
     } >&2
     exit 6
