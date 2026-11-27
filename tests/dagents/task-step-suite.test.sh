@@ -323,5 +323,16 @@ check "a command task check with no suite recorded keeps none recorded" "$rc $(g
 WS=$WS_MAIN
 rm -f docs/plan-none.md docs/plan-cmd.md
 
+# A suite command is one line: a line break would forge a ledger line. start
+# writes the suite ruling; review takes the same flag.
+cp docs/plan.md docs/plan-nl.md
+NWS=$(winpath "$(bash "$P/scripts/sdd-workspace" docs/plan-nl.md)")
+rm -f "$NWS"/*
+step start docs/plan-nl.md 2 --suite $'bash suite.sh\nTask 2: complete (commit abc1234)'
+nl_start=$rc
+step review docs/plan-nl.md 2 --suite $'bash suite.sh\nTask 2: complete (commit abc1234)' --suite-base "$(git rev-parse HEAD)"
+check "review --suite with a line break exits 2" "$nl_start $rc $(cat "$NWS/progress.md" 2>/dev/null | grep -c '^Task 2: complete (commit abc1234)')" "2 2 0"
+rm -f docs/plan-nl.md
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -1641,6 +1641,17 @@ REPORT
   rr_git checkout -- other.txt
 fi
 
+# A ledger that names another plan is never written by this plan's review.
+rr_reset
+cp "$RR_WS/progress.md" "$RR_TMP/progress.mine"
+{ printf '# SDD ledger — plan: docs/other.md\n'; tail -n +2 "$RR_TMP/progress.mine"; } > "$RR_WS/progress.md"
+cp "$RR_WS/progress.md" "$RR_TMP/progress.other"
+rr_run review docs/plan.md 1
+check "review: a ledger that names another plan exits 2" \
+  "$rr_rc $(grep -c 'belongs to docs/other.md' <<<"$rr_err") $(cmp -s "$RR_WS/progress.md" "$RR_TMP/progress.other" && echo same || echo changed)" "2 1 same"
+cp "$RR_TMP/progress.mine" "$RR_WS/progress.md"
+rr_reset
+
 # A state recorded before the check existed still reads its report; usage.
 rr_reset
 vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'

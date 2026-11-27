@@ -604,7 +604,11 @@ while [ $# -gt 0 ]; do
     --wave) [ "$sub" = start ] && [ $# -ge 2 ] && [[ $2 =~ ^[1-9][0-9]*$ ]] || usage; wave=$2; shift 2 ;;
     --reset) [ "$sub" = start ] || usage; reset=1; shift ;;
     --inline) [ "$sub" = start ] || usage; inline=1; shift ;;
-    --suite) [[ $sub =~ ^(start|review|group)$ ]] && [ $# -ge 2 ] && [ -n "$2" ] || usage; suite_arg=$2; shift 2 ;;
+    --suite)
+      [[ $sub =~ ^(start|review|group)$ ]] && [ $# -ge 2 ] && [ -n "$2" ] || usage
+      # The command is written into a ledger line: a line break would forge another.
+      [[ $2 != *$'\n'* && $2 != *$'\r'* ]] || usage
+      suite_arg=$2; shift 2 ;;
     --suite-base) [[ $sub =~ ^(review|group)$ ]] && [ $# -ge 2 ] && [ -n "$2" ] || usage; suite_base_arg=$2; shift 2 ;;
     --base) [ "$sub" = review ] && [ $# -ge 2 ] && [ -n "$2" ] || usage; base_arg=$2; shift 2 ;;
     --head) [[ $sub =~ ^(review|hold)$ ]] && [ $# -ge 2 ] && [ -n "$2" ] || usage; head_arg=$2; shift 2 ;;
@@ -652,6 +656,12 @@ done
 slug=$(basename "$plan" .md)
 ws=$(dagents_workspace "$slug" "$ctx")
 ledger="$(dagents_ledger_dir "$slug" "$ctx")/progress.md"
+if [ -f "$ledger" ]; then
+  named=$(ledger_plan "$ledger")
+  if [ -n "$named" ] && [ -z "$(plan_ledger "$plan")" ]; then
+    die "$ledger belongs to $named, not $plan"
+  fi
+fi
 state="$ws/task-$first-step.json"
 plugin_root=$(cd "$HERE/.." && pwd)
 brief="$ws/task-$first-brief.md"
