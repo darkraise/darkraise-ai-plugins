@@ -703,7 +703,11 @@ export const register: Register = on => {
     if (await standsDown($)) return next(e)
     const joined = await next(e)
     const o = await live($)
-    await update($, remote, now => ({ ...now, clients: [...now.clients.filter(one => one.id !== e.clientId), { id: e.clientId, surface: e.surface }] }))
+    // The client seeded at the start for this surface was this one, unnamed.
+    await update($, remote, now => ({
+      ...now,
+      clients: [...now.clients.filter(one => one.id !== e.clientId && !(one.isSeeded === true && one.surface === e.surface)), { id: e.clientId, surface: e.surface }],
+    }))
     // A desktop session's start can come before its window joins: show the
     // pane once it has, unless the person closed it.
     if (o.openAtStart && !o.isMinimized && e.surface === 'desktop' && !S.isClosedByPerson && !(await isPaneUp($))) void $.ui.open(paneFor(o.layout)).catch(() => undefined)
@@ -734,7 +738,12 @@ export const register: Register = on => {
   on('session.detach', async ($, e, next) => {
     if (await standsDown($)) return next(e)
     const left = await next(e)
-    await update($, remote, now => ({ ...now, clients: now.clients.filter(one => one.id !== e.clientId) }))
+    await update($, remote, now => {
+      if (now.clients.some(one => one.id === e.clientId)) return { ...now, clients: now.clients.filter(one => one.id !== e.clientId) }
+      // A client seeded at the start leaves under its real id.
+      const seeded = now.clients.findIndex(one => one.isSeeded === true && one.surface === e.surface)
+      return seeded < 0 ? now : { ...now, clients: now.clients.filter((_, at) => at !== seeded) }
+    })
     return left
   }).catch(($, e, next) => next(e))
 
@@ -5385,7 +5394,7 @@ async function readRemote($: EngineInterface) {
     if (before.setting !== setting) await update($, remote, now => ({ ...now, setting }))
     if (before.clients.length === 0) {
       const away = (await $.session.surfaces()).filter(one => one !== 'terminal')
-      if (away.length > 0) await update($, remote, now => ({ ...now, clients: away.map(surface => ({ id: `${surface}:default`, surface })) }))
+      if (away.length > 0) await update($, remote, now => ({ ...now, clients: away.map(surface => ({ id: `${surface}:default`, surface, isSeeded: true })) }))
     }
   } catch {
     // Attach events still fill it in.
