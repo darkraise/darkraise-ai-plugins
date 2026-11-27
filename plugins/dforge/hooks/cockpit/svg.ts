@@ -208,8 +208,10 @@ const SEGMENT_COLORS: Record<Segment, string> = { done: PALETTE.green, active: P
 /** One segment per task, colored by where it stands. */
 export function segmentsSvg(states: readonly Segment[], width: number, height = 8): string {
   if (states.length === 0) return svg(width, height, '')
-  const gap = states.length > 24 ? 1 : 4
-  const each = Math.max(1, (width - gap * (states.length - 1)) / states.length)
+  const spaced = states.length > 24 ? 1 : 4
+  // Too many segments for a pixel and a gap each: they touch, and share the width.
+  const gap = states.length + spaced * (states.length - 1) > width ? 0 : spaced
+  const each = gap === 0 ? width / states.length : Math.max(1, (width - gap * (states.length - 1)) / states.length)
   const body = states
     .map((state, index) => `<rect x="${n(index * (each + gap))}" y="0" width="${n(each)}" height="${height}" rx="${n(Math.min(3, each / 2))}" fill="${SEGMENT_COLORS[state]}"/>`)
     .join('')

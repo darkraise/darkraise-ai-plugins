@@ -3307,6 +3307,13 @@ describe('settings view', () => {
 })
 
 describe('desktop', () => {
+  test('fits many plan segments inside the drawing', () => {
+    const many = segmentsSvg(Array<'todo'>(100).fill('todo'), 120)
+    const rects = [...many.matchAll(/<rect x="([\d.]+)" y="0" width="([\d.]+)"/g)]
+    expect(rects).toHaveLength(100)
+    for (const [, x, width] of rects) expect(Number(x) + Number(width)).toBeLessThanOrEqual(120)
+  })
+
   test('draws meters, a trend, a stack, run segments and a badge as SVG', () => {
     expect(paint('cyan')).toBe('#1fa8c9')
     expect(paint('#ff8700')).toBe('#ff8700')
