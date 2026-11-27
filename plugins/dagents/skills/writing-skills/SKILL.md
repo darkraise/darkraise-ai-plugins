@@ -169,10 +169,10 @@ digraph when_flowchart {
 
 See `references/graphviz-conventions.dot` for graphviz style rules.
 
-**Visualizing for your human partner:** Use `references/render-graphs.js` to render a skill's flowcharts to SVG:
+**Visualizing for your human partner:** Use `references/render-graphs.mjs` to render a skill's flowcharts to SVG:
 ```bash
-node <plugin-root>/skills/writing-skills/references/render-graphs.js <skill directory>           # Each diagram separately
-node <plugin-root>/skills/writing-skills/references/render-graphs.js <skill directory> --combine # All diagrams in one SVG
+node <plugin-root>/skills/writing-skills/references/render-graphs.mjs <skill directory>           # Each diagram separately
+node <plugin-root>/skills/writing-skills/references/render-graphs.mjs <skill directory> --combine # All diagrams in one SVG
 ```
 
 ## Code Examples
