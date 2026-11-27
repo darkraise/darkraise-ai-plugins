@@ -218,6 +218,11 @@ has "missing section: named" "$out" "ERROR header: missing '## Contracts' sectio
 variant spec-in-task.md '/^\*\*Spec:\*\* `docs\/spec.md`$/d; s/^(### Task 1: First thing)$/\1\n\n**Spec:** `docs\/spec.md`/'
 lint spec-in-task.md
 has "a Spec line inside a task does not stand in for the header's" "$out" "ERROR header: missing **Spec:** line"
+variant axis08.md 's/^(\*\*Evaluation:\*\*) files 0 - spec 0 - coupling 1 - risk 0 = 1$/\1 files 08 - spec 0 - coupling 1 - risk 0 = 9/; s/risk 2 = 4$/risk 2 = 5/'
+out=$(bash "$LINT" axis08.md 2>"$TMP/axis08.err")
+has "an 08 axis is an axis error, not a shell error" "$out" "ERROR Task 1: each axis must be 0-3"
+has "an 08 axis: the next task is still checked" "$out" "ERROR Task 2: scores sum to 4, not 5"
+lacks "an 08 axis: no shell arithmetic error" "$(cat "$TMP/axis08.err")" "value too great for base"
 variant v2.md 's#`docs/spec.md`#`docs/nope.md`#'
 lint v2.md
 has "missing Spec path" "$out" "ERROR header: Spec path does not exist: docs/nope.md"
