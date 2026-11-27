@@ -71,7 +71,11 @@ final review. Because QA commits while the reviewers read, HEAD in steps 1 and
 passed as that SHA, never as the word `HEAD`; with no such line (QA skipped),
 it is the branch head. QA's own tests reach an independent reader in the scoped
 re-review instead (Fixing what it finds). While QA runs, make no commit of
-your own: QA commits on this branch.
+your own: QA commits on this branch. On a `Host: codex` plan whose judge
+restrictions are instruction-only ([native-codex.md](native-codex.md)
+§Dispatch and review), step 0.5 dispatches QA only after step 2's review and
+its after-snapshot, since that review needs no concurrent writer; steps 1 and
+2 then read the branch head.
 
 0. **Gates.** Before the gates, run
    `bash <plugin-root>/scripts/ci-mirror PLAN_FILE`, in the background when it
@@ -213,6 +217,10 @@ your own: QA commits on this branch.
       report shares that single re-dispatch. `PARK`: run
       `scripts/register add <register> "A<n>: <statement>" --state deferred --note "<the ruling>"`
       and change the spec line to `A<n>. deferred — register row <id>`.
+      `<register>` is the register whose `**Covers:**` names the spec; when
+      none does (an attended single-item spec), open one as
+      dforge:brainstorming §Opening an item register says, its Covers set to
+      the spec, and commit it with the spec edit.
       In an auto run a missing ruling follows
       [auto-run.md](auto-run.md) §Rulings.
     - `cannot-test: timeout`: no finding; it is reported, and it keeps the
@@ -270,7 +278,11 @@ your own: QA commits on this branch.
    the base's file exists, the head's holds at least one line, and that grep
    exits 1 (it printed nothing). A missing base file, an empty head list or a
    grep exit of 2 is not baseline, and a digest that names no test
-   (`last 30 lines of <log>:`) never is.
+   (`last 30 lines of <log>:`) never is. A run cut short (`suite-run` exit
+   124, or 126 and up) is never baseline: it adds
+   `[suite] suite did not finish (exit <code>) at <head7>` whatever its
+   partial log shows, as [delegated-task.md](delegated-task.md) §3 does, and a
+   base run cut short makes every head failure new.
 
    **Lenses.** Run `scripts/lens-route PLAN_FILE --final MERGE_BASE HEAD`. In
    the same message as the Claude review, dispatch each printed `seat` with
@@ -490,7 +502,8 @@ rejection upheld, or the ruling seat parking it), or one step 0.5 left to a
 deferred task, is the one edit allowed on an acceptance test: mark that test
 skipped with a reason naming its register row, commit it, and run
 `scripts/register add <register> "A<n>: <statement>" --state deferred --note "<the upheld rejection>"`,
-so finishing's test run is green and the statement is not lost.
+`<register>` chosen or opened as step 0.5's `PARK` says, so finishing's test
+run is green and the statement is not lost.
 
 **Redundant tests.** A `[lens:test-quality]` finding on a redundant test goes
 to the fix wave, which merges the tests into a row of one table or deletes the

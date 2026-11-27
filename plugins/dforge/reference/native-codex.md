@@ -117,7 +117,9 @@ them. A judge's restriction must still allow its report file: scope the write
 permission to that one path. If the tool cannot, keep the judge read-only, have
 it return the full report in its reply, and write that reply to the report path
 yourself. Otherwise disclose that the restrictions are instruction-only, ensure no
-concurrent writers, and take a snapshot before and after the review:
+concurrent writers (in the final review, Acceptance QA waits for the review:
+[final-review.md](final-review.md) step 0.5), and take a snapshot before and
+after the review:
 
 ```bash
 source <plugin-root>/scripts/lib/worktree-snapshot.sh
