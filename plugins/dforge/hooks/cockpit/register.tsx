@@ -750,7 +750,8 @@ export const register: Register = on => {
     const kept = await next(e)
     if (e.message.role === 'user') {
       const text = e.message.content.map(block => (block.type === 'text' ? block.text : '')).join('\n')
-      if (text.includes('<task-notification>')) await endShells($, text)
+      // A person can paste the markup; only the engine's notification row ends a shell.
+      if (e.origin.kind === 'task-notification' && text.includes('<task-notification>')) await endShells($, text)
       if (text.includes('background work of its own still running')) await markPartial($)
     } else if (e.message.role === 'assistant' && e.agentId === undefined) {
       const fast = fastModeLine(e.message.content.map(block => (block.type === 'text' ? block.text : '')).join('\n'))
