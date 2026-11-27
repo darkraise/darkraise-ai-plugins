@@ -68,6 +68,12 @@ check "top limits the tests table" "$(printf '%s\n' "$out" | grep -c '::')" "1"
 bash "$PROFILE" >/dev/null 2>&1; check "no input exits 2" "$?" "2"
 bash "$PROFILE" --top 0 "$T/reports" >/dev/null 2>&1; check "bad --top exits 2" "$?" "2"
 bash "$PROFILE" "$T/missing" >/dev/null 2>&1; check "missing path exits 2" "$?" "2"
+cat > "$T/hidden.xml" <<'EOF'
+<testsuites><testsuite name="s" time="3"><testcase classname="t.x" name="a > b" time="1.0"><system-out><![CDATA[<testcase name="ghost" time="99"/>]]></system-out></testcase><!-- <testcase name="old" time="50"/> --><testcase classname="t.y" name="c" time="2.0"/></testsuite></testsuites>
+EOF
+out=$(bash "$PROFILE" --brief "$T/hidden.xml")
+check "a CDATA block, a comment and a quoted > add no phantom case" "$out" \
+  "tests=2 time=3.0s overhead=0.0s slowest10pct=67% fail=0 skip=0 flaky=0 reran=0"
 printf '<x/>\n' > "$T/empty.xml"
 bash "$PROFILE" "$T/empty.xml" >/dev/null 2>&1; check "no test case exits 2" "$?" "2"
 
