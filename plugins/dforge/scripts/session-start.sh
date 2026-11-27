@@ -132,9 +132,12 @@ fi
 # Open handoffs of every checkout and the mirror, counted only: unclaimed or
 # claimed by a gone session, and younger than three days. repo-audit lists,
 # recomputes and cleans them; nothing here recomputes or deletes.
+# One bounded runner for the scripts below: with-timeout needs GNU timeout,
+# and _darkmem_bounded falls back to a watchdog without it.
+bounded() { if [ "$darkmem_hook" = 1 ]; then _darkmem_bounded "$@"; else bash "${SCRIPT_DIR}/with-timeout" "$@"; fi; }
 handoffs_line=""
 if [ -n "$roadmap_root" ]; then
-  open_handoffs=$(bash "${SCRIPT_DIR}/with-timeout" 10 bash "${SCRIPT_DIR}/handoff" list "$roadmap_root" 2>/dev/null </dev/null \
+  open_handoffs=$(bounded 10 bash "${SCRIPT_DIR}/handoff" list "$roadmap_root" 2>/dev/null </dev/null \
     | tr -d '\r' | awk -F'\t' '$4 < 259200 && ($5 == "unclaimed" || $5 ~ / gone$/)' | grep -c . || true)
   if [ "${open_handoffs:-0}" -ge 1 ]; then
     handoffs_line="$open_handoffs open handoffs (scripts/repo-audit lists them)."
@@ -166,7 +169,7 @@ if [ -n "$roadmap_root" ]; then
   while IFS=$'\t' read -r lh_path lh_subject; do
     [ -n "$lh_path" ] || continue
     legacy_line="${legacy_line:+$legacy_line$'\n'}dforge: $lh_path is a handoff in an older layout (subject $lh_subject); run the dforge:migrate skill (/dforge:migrate)"
-  done < <(cd "$roadmap_root" && bash "${SCRIPT_DIR}/with-timeout" 10 bash "$SCRIPT_DIR/dforge-migrate" --legacy-handoffs 2>/dev/null </dev/null | tr -d '\001-\010\013-\037')
+  done < <(cd "$roadmap_root" && bounded 10 bash "$SCRIPT_DIR/dforge-migrate" --legacy-handoffs 2>/dev/null </dev/null | tr -d '\001-\010\013-\037')
   [ -z "$legacy_line" ] || context="${context}\n\n$(escape_for_json "$legacy_line")"
 fi
 

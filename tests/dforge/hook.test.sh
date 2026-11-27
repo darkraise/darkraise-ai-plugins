@@ -218,6 +218,23 @@ check "A10 count: no handoff is deleted" "$(cd "$OC" && find .dforge/handoff "$O
 printf 'session=s-gone\nat=%s\n' "$(date +%s)" > "$OC/.dforge/handoff/claims/adhoc-0000000a"
 oc_ctx=$(oc_payload startup | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
 check "A10 count: a gone session's claim still counts" "$(grep -c '^2 open handoffs ' <<<"$oc_ctx")" "1"
+notimeout_path() { # PATH with no timeout or gtimeout: a directory holding one is stood in for by links to its other programs
+  local d f m out='' IFS=:
+  for d in $PATH; do
+    if [ -x "$d/timeout" ] || [ -x "$d/gtimeout" ]; then
+      m="$TMP/notimeout/$(printf '%s' "$d" | tr -c 'A-Za-z0-9' '_')"
+      mkdir -p "$m"
+      for f in "$d"/*; do case ${f##*/} in timeout | gtimeout | timeout.exe) ;; *) ln -s "$f" "$m/" 2>/dev/null ;; esac; done
+      d=$m
+    fi
+    out=${out:+$out:}$d
+  done
+  printf '%s\n' "$out"
+}
+NT_PATH=$(notimeout_path)
+oc_ctx=$(oc_payload startup | HOME="$HOME_D" PATH="$NT_PATH" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
+check "A10 count: without timeout or gtimeout the open handoffs are still counted" \
+  "$(grep -c '^2 open handoffs [(]scripts/repo-audit lists them)\.$' <<<"$oc_ctx")" "1"
 touch -d '4 days ago' "$OC/.dforge/handoff/adhoc-0000000a.md" "$OCW/.dforge/handoff/adhoc-0000000b.md"
 oc_ctx=$(oc_payload startup | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
 check "A10 count: no line when none is open" "$(grep -c 'open handoffs' <<<"$oc_ctx")" "0"
