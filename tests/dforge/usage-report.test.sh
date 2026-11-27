@@ -474,6 +474,15 @@ J=$(node "$REPORT" --markers "$TR/ra/.dforge/sdd/usage-markers.tsv" "$TR/rb/.dfo
 check "splits_and_all_plans: one plan path in two repositories stays two plans" \
   "$(q "$J" '[.plans[] | [.plan, (.repo | gsub("\\\\"; "/") | sub(".*/"; ""))]] | sort')" '[["docs/plans/p.md","ra"],["docs/plans/p.md","rb"]]'
 
+# --- main_module: the core run through a symbolic link ---
+ln -s "$HERE/../../plugins/dforge" "$TMP/link" 2>/dev/null
+if [ -L "$TMP/link" ]; then
+  check "main_module: runs through a symbolic link" \
+    "$(node "$TMP/link/scripts/lib/usage-report.mjs" --format json 2>/dev/null | jq -c . 2>/dev/null | tr -d '\r')" '{"plans":[]}'
+else
+  printf 'skip - main_module\n'
+fi
+
 # --- prices_unreadable ---
 mkdir -p "$TMP/noprices/lib"
 cp "$REPORT" "$TMP/noprices/lib/"

@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PRICES = path.join(HERE, '..', '..', 'reference', 'api-prices.json');
@@ -869,4 +869,15 @@ function main() {
   process.stdout.write(opts.format === 'json' ? `${JSON.stringify(rep, null, 2)}\n` : `${markdown(rep)}\n`);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) main();
+// Run as a script, also through a symbolic link: node resolves the module's
+// own URL to the real file, while argv[1] keeps the link.
+function isMain() {
+  if (!process.argv[1]) return false;
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isMain()) main();
