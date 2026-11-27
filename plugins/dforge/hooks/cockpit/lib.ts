@@ -505,9 +505,36 @@ function gitDirs(words: readonly string[]): string[] | null {
   return dirs
 }
 
+// The files a simple command writes: its redirection targets and tee's operands.
+function writtenFiles(words: readonly string[]): string[] {
+  const files: string[] = []
+  words.forEach((word, at) => {
+    const redirect = /^(?:\d*|&)>>?\|?(.*)$/.exec(word)
+    const target = redirect === null ? undefined : redirect[1] === '' ? words[at + 1] : redirect[1]
+    if (target !== undefined && !target.startsWith('&')) files.push(target)
+  })
+  const tee = words.findIndex(word => isProgram(word, 'tee'))
+  if (tee >= 0) files.push(...words.slice(tee + 1).filter(word => !word.startsWith('-')))
+  return files
+}
+
 /** A file's path: `base` with each of `parts` applied in turn, an absolute part replacing what came before. */
 export function sourcePath(base: string, parts: readonly string[]): string {
   return parts.reduce((path, part) => (isAbsolutePath(part) || path === '' ? part : `${path.replace(/[\\/]+$/, '')}/${part}`), base)
+}
+
+// A path relative to the session's directory, or absolute, with its . and ..
+// segments applied, so two spellings of one file compare equal; null when a
+// directory before it is not spelled out.
+function sourceKey(dirs: readonly string[] | null, file: string): string | null {
+  if (dirs === null && !isAbsolutePath(file)) return null
+  const segments: string[] = []
+  for (const segment of sourcePath('.', [...(dirs ?? []), file]).split('/')) {
+    if (segment === '.' || (segment === '' && segments.length > 0)) continue
+    if (segment === '..' && segments.length > 0 && segments[segments.length - 1] !== '..' && segments[segments.length - 1] !== '') segments.pop()
+    else segments.push(segment)
+  }
+  return segments.join('/')
 }
 
 /** A file a commit or pull request command takes its text from. */
@@ -515,6 +542,8 @@ export type GitTextSource = {
   file: string
   /** The directories the file is read below, in order (cd and pushd targets, git -C values); null when one is not spelled out. */
   dirs: string[] | null
+  /** Whether an earlier command writes the file, so its text before the command runs is not what git reads. */
+  isWritten: boolean
 }
 
 /**
@@ -524,14 +553,21 @@ export type GitTextSource = {
  */
 export function gitTextSources(command: string): GitTextSource[] {
   const sources: GitTextSource[] = []
+  const written: string[] = []
   let dirs: string[] | null = []
   for (const one of shellCommands(command)) {
     if (isGitWriteCommand(one.words)) {
       const own = gitDirs(one.words)
       const gitRuns = dirs === null || own === null ? null : [...dirs, ...own]
       for (const { kind, value } of messageOptions(one.words)) {
-        if (kind === 'file' && value !== '' && !STDIN_PATH.test(value)) sources.push({ file: value, dirs: gitRuns })
+        if (kind !== 'file' || value === '' || STDIN_PATH.test(value)) continue
+        const key = sourceKey(gitRuns, value)
+        sources.push({ file: value, dirs: gitRuns, isWritten: key !== null && written.includes(key) })
       }
+    }
+    for (const file of writtenFiles(one.words)) {
+      const key = sourceKey(dirs, file)
+      if (key !== null) written.push(key)
     }
     const change = dirChange(one.words)
     if (change !== undefined) dirs = dirs === null || change === null ? null : [...dirs, change]
