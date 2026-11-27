@@ -65,15 +65,13 @@ _dforge_local() { # DIR TOP
 # darkmem for TOP's primary checkout; without jq, for any checkout. A file that
 # does not parse may record either, so it counts as applied, said on stderr.
 _dforge_applied_darkmem() {
-  local stores="${HOME:-}/.dforge/stores.json" common primary=$1
+  local stores="${HOME:-}/.dforge/stores.json" primary=$1
   [ -n "${HOME:-}" ] && [ -f "$stores" ] || return 1
   if ! command -v jq >/dev/null 2>&1; then
     grep -q '"darkmem"' "$stores"
     return
   fi
-  if common=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
-    primary=$(git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null) || primary=$1
-  fi
+  primary=$(plan_primary_root "$1") || primary=$1
   # Every file that parses gives true or false, so exit 4 (no result) is an
   # empty file, which may have held either.
   jq -e --arg k "$primary" '(.[$k] | objects | .documents == "darkmem" or .progress == "darkmem") // false' \

@@ -255,5 +255,16 @@ check "handoff_file_darkmem: dforge-path handoffs lists the mirror's" "$(cd "$WT
 check "handoff_file_darkmem: and every checkout's" "$(cd "$WT" && bash "$FP" handoffs | grep -c "^$WT/.dforge/handoff/Q.md\$")" "1"
 rm -rf "$REPO/.dforge/handoff" "$WT/.dforge/handoff" "$MIRROR/work/handoff/M.md"
 
+# --- a --separate-git-dir checkout is its own primary in every helper ---
+LIB="$HERE/../../plugins/dforge/scripts/lib"
+SEP="$TMP/separate"
+git init -q -b main --separate-git-dir "$TMP/separate.git" "$SEP"
+git -C "$SEP" commit -q --allow-empty -m init
+SEPT=$(git -C "$SEP" rev-parse --show-toplevel)
+check "separate git dir: auto-run's primary root" "$(cd "$SEP" && (. "$LIB/auto-run.sh" && ar_primary_root))" "$SEPT"
+check "separate git dir: context's primary root" "$(cd "$SEP" && (. "$LIB/context.sh" && ctx_primary_root))" "$SEPT"
+check "separate git dir: context's candidates end with the primary" "$(cd "$SEP" && (. "$LIB/context.sh" && ctx_candidates > "$TMP/candidates") && printf '%s %s' "$(wc -l < "$TMP/candidates" | tr -d ' ')" "$(tail -n 1 "$TMP/candidates")")" "3 $SEPT"
+check "separate git dir: no older layout named" "$(dforge_legacy_layout "$SEP")" ""
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

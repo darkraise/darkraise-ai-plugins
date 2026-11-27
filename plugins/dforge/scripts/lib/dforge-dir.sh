@@ -62,9 +62,28 @@ dforge_legacy_layout() {
   done
   common=$(git -C "$root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 0
   [ "$common" != "$gitdir" ] || return 0
-  primary=$(git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null) || return 0
+  primary=$(plan_primary_root "$root") || return 0
   for name in .superpowers .forge; do
     [ ! -e "$primary/$name" ] || printf '%s\n' "$primary/$name"
   done
   return 0
+}
+
+# plan_primary_root [DIR] — the primary checkout's top level for the worktree
+# containing DIR (default: the current directory); nothing outside a repository.
+# A checkout whose git directory is the common one (a standard, separate-git-dir
+# or submodule checkout) is its own primary. A linked worktree's primary is the
+# common directory's core.worktree when set (a submodule's), else its parent.
+# A linked worktree of a --separate-git-dir repository without core.worktree
+# still returns 1: git records no primary path for it.
+plan_primary_root() {
+  local dir=${1:-.} gitdir common
+  common=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  gitdir=$(git -C "$dir" rev-parse --absolute-git-dir 2>/dev/null) || return 1
+  if [ "$gitdir" -ef "$common" ]; then
+    git -C "$dir" rev-parse --show-toplevel 2>/dev/null
+  else
+    git -C "$common" rev-parse --show-toplevel 2>/dev/null \
+      || git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null
+  fi
 }

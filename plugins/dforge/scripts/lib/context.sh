@@ -45,11 +45,10 @@ ctx_key() { printf '%s' "$(ctx_native "$1")" | tr -c 'A-Za-z0-9' '-'; }
 
 ctx_candidates() {
   printf '%s\n' "$PWD"
-  local root common
+  local root
   root=$(git rev-parse --show-toplevel 2>/dev/null) || return 0
   printf '%s\n' "$root"
-  common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 0
-  git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null || true
+  plan_primary_root || true
 }
 
 # Sets CTX_TRANSCRIPT and CTX_SOURCE (record | record? | guessed); returns 1
@@ -378,11 +377,7 @@ ctx_hard() {
 
 # The primary checkout's root: a worktree's .dforge/ lives with the checkout
 # that owns the repository, so every session logs to one file.
-ctx_primary_root() {
-  local common
-  common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
-  git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null || return 1
-}
+ctx_primary_root() { plan_primary_root; }
 
 # ctx_log_observation TOKENS — append one row, and never fail the caller: the
 # budget line is printed whether or not the observation is recorded.
