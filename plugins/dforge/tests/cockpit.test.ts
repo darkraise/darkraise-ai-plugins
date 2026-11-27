@@ -8588,6 +8588,16 @@ describe('auto run', () => {
     expect(w.autoRuns?.filter(call => call === '--session sess-1 api-error --clear')).toHaveLength(1)
   })
 
+  test('books an API error when the transcript ends in a null line', async ($, on) => {
+    const files: NonNullable<World['files']> = { ...autoFiles({ pending: null }), ...byId() }
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], transcript: `${API_ERROR_TEXT}null\n` }
+    world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'error' })
+    expect(w.autoRuns?.filter(call => call === '--session sess-1 api-error')).toHaveLength(1)
+  })
+
   const apiErrorPrompts = (w: World) => (w.prompts ?? []).filter(text => text.startsWith('The last turn ended on an API error'))
 
   test('stop auto cancels the api-error retry', async ($, on) => {
