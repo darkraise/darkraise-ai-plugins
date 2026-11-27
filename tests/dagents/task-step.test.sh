@@ -765,6 +765,22 @@ rr_fix 1 1 "- app.txt: wrong value"
 rr_run rereview docs/plan.md 01 --covered
 check "rereview names Task 1 as 01" "$rr_rc $(rr_verdict 1 1)" "0 re-review: skipped (2 changed lines, 1 finding, app.txt)"
 
+# A second rereview before the round's report reprints the round.
+rr_reset
+rr_edit app.txt mod
+rr_git add -A && rr_git commit -qm fix
+rr_fix 1 1 "- app.txt: wrong value"
+rr_run rereview docs/plan.md 1
+rr_run rereview docs/plan.md 1
+check "rereview repeated before its report: reprints round 1 and keeps the round" \
+  "$rr_rc $(jq -r '.round' "$RR_WS/task-1-step.json") $(head -n 1 <<<"$rr_out")" \
+  "0 1 task 1: re-review round 1: prompt already written, no report yet"
+rr_reset
+rr_fix 1 1 "- app.txt: wrong value"
+rr_run rereview docs/plan.md 1
+check "rereview with no commit since the review exits 6" \
+  "$rr_rc $(grep -c 'no commit since the reviewed head' <<<"$rr_err") $(cmp -s "$RR_WS/task-1-step.json" "$RR_TMP/state1.0" && echo same || echo changed)" "6 1 same"
+
 # Refusals write nothing.
 rr_reset
 rr_run rereview docs/plan.md 3
@@ -1269,7 +1285,9 @@ check "wave group: and the file" "$(grep -cx 'app.txt' <<<"$rr_err")" "1"
 rr_run verdict docs/plan.md 1 3 --group --cwd "$RR_TMP/wt1"
 check "wave group: --cwd cannot stand for two checkouts" "$rr_rc" "2"
 printf -- '- app.txt: judge edit\n' > "$RR_WS/task-3-fix-1.md"
-rr_run rereview docs/plan.md 3
+# rereview needs a commit since the reviewed head: the member's fix.
+git -C "$RR_TMP/wt3" commit -qam "fix 3"
+rr_run rereview docs/plan.md 3 --head "$(git -C "$RR_TMP/wt3" rev-parse HEAD)"
 check "wave group: a member's re-review snapshots its own checkout" "$rr_rc $(rr_state 3 .reviewCheck.cwd)" "0 $RR_TMP/wt3"
 printf 'member edit\n' >> "$RR_TMP/wt3/app.txt"
 rr_run verdict docs/plan.md 3 --rereview 1
