@@ -257,7 +257,7 @@ export async function checkProgressTargets({ cfg, client }, sources) {
       else problems.push(`${item.rel}: darkmem already holds a different ledger for workstream ${item.slug}`);
     }
   }
-  return { problems, filed, partial };
+  return { problems, filed, partial, held: notes };
 }
 
 const refuse = (reason, details = []) => ({ moved: false, reason, details });
@@ -370,15 +370,24 @@ export async function progressToDarkmem(context) {
       ids.set(slug, id);
       await client.updateWorkstream(id, { state: "closed", retain: true });
     }
+    // A note is put under the hash darkmem held at the check, so one changed
+    // since is a 409; one filed since, with nothing to expect, is replaced and
+    // named.
+    const replaced = [];
     for (const item of sources) {
       if (item.kind === "ledger" && !ids.has(item.slug)) {
         const ledger = { slug: item.slug, text: decodeUtf8(item.buffer), mtime: fs.statSync(item.file).mtime.toISOString(), id: null };
         await importLedger({ ...context, report }, checkoutRoots(cfg, item.stateDir), ledger, checked.partial.get(item.slug));
         if (ledger.id) ids.set(item.slug, ledger.id);
       } else if (isPlanDocument(item)) {
-        await client.putDocument({ project: cfg.project, uri: item.uri, content: decodeUtf8(item.buffer) });
+        const expectedHash = checked.held.get(item.uri);
+        const answer = await client.putDocument({ project: cfg.project, uri: item.uri, content: decodeUtf8(item.buffer), expectedHash });
+        if (expectedHash === undefined && answer?.outcome === "updated") {
+          replaced.push(`${item.uri}: another client filed it during the move, and this move replaced its content; darkmem's revisions keep the other version`);
+        }
       }
     }
+    if (replaced.length) return refuse("another client filed progress on darkmem during the move; nothing was moved locally", replaced);
     if (report.failures.length) {
       // Every handoff note and amendments file was put (a put darkmem refuses throws), and ids
       // holds each ledger darkmem has in full.
