@@ -1,15 +1,17 @@
 # CI parity
 
 A plan names the project's CI jobs, the commands this host can run from them,
-and the CI platforms this host does not cover. This file says how to find
-those, and lists what breaks on each uncovered platform.
+and the CI platforms of the Pitfalls table below that this host does not
+cover. This file says how to find those, and lists what breaks on each
+uncovered platform.
 
 ## Finding the CI configuration
 
-Look for the CI configuration in this order: `.github/workflows/*.yml` first,
-then `.gitlab-ci.yml`, `azure-pipelines.yml`, `.circleci/config.yml`. The
-first configuration found is the project's CI. When several workflow files
-exist under `.github/workflows/`, read every one. When none of these files
+Look for the CI configuration in this order: `.github/workflows/*.yml` and
+`.github/workflows/*.yaml` first, then `.gitlab-ci.yml`,
+`azure-pipelines.yml`, `.circleci/config.yml`. The first configuration found
+is the project's CI. When several workflow files (`*.yml` or `*.yaml`) exist
+under `.github/workflows/`, read every one. When none of these files
 exists, the project has no CI, and the plan's CI line is `none`.
 
 ## Reading jobs, platforms and commands
@@ -31,7 +33,8 @@ names only Platform-column names.
 Read the local platform with `uname -s`. `Linux` is a GNU Linux host.
 `Darwin` is macOS. `MINGW*` or `MSYS*` is Git Bash on Windows.
 
-A platform is uncovered when the host running dforge is not that platform.
+A platform of the Pitfalls table is uncovered when the host running dforge
+is not that platform; a platform with no row is never uncovered.
 The host covers `uutils (ubuntu-latest)` only when `cp --version` names
 uutils.
 
