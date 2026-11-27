@@ -249,6 +249,9 @@ check "scan: a command opening with a dash is a command, not a jq option" "$(inf
 check "scan: a classification jq cannot run is said on stderr" \
   "$(_INFLIGHT_SERVICES="$TMP/no-services.json" inflight_scan "$TP" 2>&1 >/dev/null | grep -c 'every shell counts as work')" "1"
 mv "$TP.keep" "$TP"
+inflight_scan "$TMP/no-such.jsonl" >/dev/null 2>&1; gone_rc=$?
+inflight_scan "" >/dev/null 2>&1; empty_rc=$?
+check "scan: a transcript that is gone is a scan failure" "$gone_rc:$empty_rc" "1:0"
 
 SD="$HOME/.claude/dforge/sessions/state"; mkdir -p "$SD" "$HOME/.claude/dforge/sessions/turns"
 touch -d '-60 seconds' "$HOME/.claude/dforge/sessions/turns/$SID"

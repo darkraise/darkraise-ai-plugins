@@ -55,13 +55,15 @@ inflight_idle() {
 # The start is the launch result's own timestamp in local time ("-" when it
 # has none); the idle age is inflight_idle's; <what> is cut at 80 characters;
 # the role is inflight_role's for a shell's command, and work for the rest.
-# Returns 1 when the transcript could not be scanned, which is not "nothing".
+# Returns 1 when the transcript could not be scanned, one named but missing
+# included, which is not "nothing"; an empty TRANSCRIPT is nothing.
 # jq reads it on stdin: under MSYS_NO_PATHCONV, jq.exe cannot open the /c/...
 # form the session record's lookup yields.
 inflight_scan() {
   local tp=$1 since=${2:-} events launched stopped latest running kind id start out what cmd roles
   local -a cmds=()
-  [ -n "$tp" ] && [ -f "$tp" ] || return 0
+  [ -n "$tp" ] || return 0
+  [ -f "$tp" ] || return 1
   events=$(set -o pipefail; jq -rR --arg since "$since" 'def hm($t): try ($t | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601 | localtime | strftime("%H:%M")) catch "-";
       def path_end: sub("\\s+$"; "") | sub("\\.(\\s.*)?$"; "");
       fromjson? | select(.isSidechain? != true)
