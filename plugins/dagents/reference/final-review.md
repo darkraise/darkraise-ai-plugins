@@ -460,8 +460,10 @@ only, neither fixed nor rejected.
 
 **Suites.** Any test or validation suite you run in the final review — the
 check after the fix wave, or the project's full suite in inline mode — goes
-through `bash <plugin-root>/scripts/suite-run -- <command>`, which records the
-HEAD it ran at and prints a digest in place of the output. Tell the fix
+through `bash <plugin-root>/scripts/suite-run -- bash -c '<command>'`
+(suite-run takes `COMMAND [ARG ...]`, so an unwrapped `a && b` runs `b`
+unbounded and unrecorded), which records the HEAD it ran at and prints a
+digest in place of the output. Tell the fix
 subagent to run the plan's `**Integration check:**` command the same way,
 `bash <plugin-root>/scripts/suite-run -- bash -c '<integration check>'`,
 after its last commit, on a clean tree: finishing's verification then
