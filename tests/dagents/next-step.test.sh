@@ -1227,5 +1227,18 @@ for args in "$PLAN_REL" "--draft $OTHER_REL --next x" "--adhoc --phase build --n
   check "dagents_path_handoff_matches_target ($args)" "$(cd "$WA" && CLAUDE_CODE_SESSION_ID=$S0 bash "$PATHCMD" handoff $args)" "$want"
 done
 
+# --- amendments, notes and a terminal block ---
+TR="$TMP/term"
+git init -q -b main "$TR"
+TR_ROOT="$(git -C "$TR" rev-parse --show-toplevel)"
+mkdir -p "$TR/docs/plans"
+write_plan "$TR/$PLAN_REL" "$EXEC_SUB" ""
+git -C "$TR" add -A && git -C "$TR" commit -qm init
+AMD="$TR/.dagents/sdd/2026-01-01-demo"
+mkdir -p "$AMD"
+printf '## A1 — Task 1\nReason: r\nCost if wrong: c\n### Old\n````text\n### Task 1: First thing\n````\n### New\n````text\n### Task 1: Renamed thing\n````\n' > "$AMD/amendments.md"
+CLAUDE_CODE_SESSION_ID=s-term run "$TR" --print "$PLAN_REL"
+has "amendments: routing reads the amended task title" "$out" "**Next:** Start at Task 1 (Renamed thing)."
+rm -f "$AMD/amendments.md"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
