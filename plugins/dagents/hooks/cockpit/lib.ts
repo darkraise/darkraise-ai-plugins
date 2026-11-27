@@ -391,6 +391,10 @@ const STDIN_PATH = /^(?:-|\/dev\/stdin|\/dev\/fd\/0|\/proc\/self\/fd\/0)$/
 // delimiter is quoted, or when the body expands nothing.
 const CAT_HEREDOC = /^\$\(\s*cat\s+<<-?[ \t]*(\\|['"])?([A-Za-z0-9_.-]+)['"]?[ \t]*\n([\s\S]*)\n[ \t]*\2[ \t]*\n?\s*\)$/
 
+// A `$(cat file)` or `$(< file)` message word: the file it names, read as a
+// -F file is.
+const CAT_FILE = /^\$\(\s*(?:cat[ \t]+|<[ \t]*)([^\s$`'"\\()<>;&|]+)\s*\)$/
+
 // Whether a message word expands to text the command does not spell out.
 function isExpanding(text: string): boolean {
   const doc = CAT_HEREDOC.exec(text)
@@ -554,7 +558,7 @@ export type GitTextSource = {
 
 /**
  * The files a commit or pull request command takes its text from (`git commit
- * -F`, `gh pr create --body-file`), each with the
+ * -F`, `gh pr create --body-file`, a `$(cat file)` message), each with the
  * directories it is read below; stdin's names are the command's own text.
  */
 export function gitTextSources(command: string): GitTextSource[] {
@@ -566,9 +570,12 @@ export function gitTextSources(command: string): GitTextSource[] {
       const own = gitDirs(one.words)
       const gitRuns = dirs === null || own === null ? null : [...dirs, ...own]
       for (const { kind, value } of messageOptions(one.words)) {
-        if (kind !== 'file' || value === '' || STDIN_PATH.test(value)) continue
-        const key = sourceKey(gitRuns, value)
-        sources.push({ file: value, dirs: gitRuns, isWritten: key !== null && written.includes(key) })
+        const cat = kind === 'text' ? CAT_FILE.exec(value)?.[1] : undefined
+        // A substitution runs where the shell is: git -C moves only git.
+        const source = kind === 'file' && value !== '' && !STDIN_PATH.test(value) ? { file: value, dirs: gitRuns } : cat === undefined ? undefined : { file: cat, dirs }
+        if (source === undefined) continue
+        const key = sourceKey(source.dirs, source.file)
+        sources.push({ ...source, isWritten: key !== null && written.includes(key) })
       }
     }
     for (const file of writtenFiles(one.words)) {
