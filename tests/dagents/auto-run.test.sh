@@ -445,6 +445,11 @@ for lock in flock no-such-flock; do
   check "$lock: a start that waited for the lock finds the run made live meanwhile" "$status:$(field session):$(field active)" "4:s-1:true"
 done
 
+# --- a run's identity: an update and a start refused under the lock ---
+ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+rc=$( cd "$REPO" && . "$HERE/../../plugins/dagents/scripts/lib/context.sh" && . "$HERE/../../plugins/dagents/scripts/lib/auto-run.sh" && AR_SESSION=s-1 AR_RUN_SEEN=r-old ar_write "$STATE" '.x = 1' >/dev/null 2>&1; echo $? )
+check "under the lock: an update observed against a replaced run is refused" "$rc:$(field x)" "3:null"
+
 # --- stop ---
 ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
 ar --session s-1 stop --reason "owner asked"

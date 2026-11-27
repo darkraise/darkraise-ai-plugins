@@ -61,14 +61,20 @@ ar_bound() {
 # each reading the file the other is about to replace. The binding is checked
 # again under the lock: a caller that saw the run bound before it waited may
 # find it stopped, replaced or rebound to another session.
+# The run's id is read before the wait, so a run replaced meanwhile (a
+# --force start of the same session) is refused too.
 ar_update() {
-  local path
+  local path seen
   path=$(ar_path) || return 1
-  dr_locked "$path" ar_write "$path" "$@"
+  seen=$(ar_jq -r '.runId // empty' < "$path" 2>/dev/null)
+  AR_RUN_SEEN=$seen dr_locked "$path" ar_write "$path" "$@"
 }
 
-ar_write() { # ar_write PATH FILTER [jq options…]
-  ar_jq -e --arg s "${AR_SESSION:-}" '.active == true and .session == $s' < "$1" >/dev/null 2>&1 \
+# ar_write PATH FILTER [jq options…] — with AR_RUN_SEEN set, the run must
+# still be the one of that id; a state written before run ids skips that.
+ar_write() {
+  ar_jq -e --arg s "${AR_SESSION:-}" --arg r "${AR_RUN_SEEN:-}" \
+    '.active == true and .session == $s and ($r == "" or .runId == null or .runId == $r)' < "$1" >/dev/null 2>&1 \
     || { echo "auto-run: no auto run is bound to this session" >&2; return 3; }
   ar_put "$@"
 }
@@ -176,7 +182,7 @@ ar_start() {
   # session's read and write of the state and is lost.
   dr_locked "$path" ar_create_unless_busy "$force" "$path" --arg s "$AR_SESSION" --arg spec "$spec" --arg reg "$register" --arg base "$base" \
     --arg iso "$iso" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
-    active: true, session: $s, rebind: false, stopped: null, startedAt: $now,
+    active: true, session: $s, runId: $runId, rebind: false, stopped: null, startedAt: $now,
     spec: $spec, plan: null, register: $reg, base: (if $base == "" then null else $base end),
     phase: "spec", regime: "normal", pending: null, resumePrompt: null, launch: null,
     failures: 0, compactions: 0, resumes: 0, decisions: [], rulings: [],
@@ -184,7 +190,7 @@ ar_start() {
     totals: {compactionSeconds: 0, holds: 0, stalls: 0, apiErrors: 0, reconcilePrompts: 0, panelFailures: 0},
     isolation: $iso, branch: null, branchBase: null, carried: null,
     version: $version, root: $root
-  }' --arg version "$(ar_plugin_version)" --arg root "$AR_PLUGIN_ROOT" || return $?
+  }' --arg version "$(ar_plugin_version)" --arg root "$AR_PLUGIN_ROOT" --arg runId "$(date +%s)-$$-$RANDOM" || return $?
   # A register opened at the spec review before the spec existed may still
   # cover nothing, and next-step finds a register only through its Covers.
   [ -z "$regfile" ] && [ -n "$register" ] && regfile=$(dagents_resolve "$register" "$top")
