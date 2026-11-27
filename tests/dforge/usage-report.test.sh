@@ -392,6 +392,16 @@ check "quality_unknowns: one unreadable repository of several leaves the count u
     --review-record "$FX/quality/record.md" --register "$FX/quality/reg.md" --repo "$TMP/notrepo" --repo "$QR" --format json 2>/dev/null \
     | jq -c '.plans[0].quality | [.findings, .fixCommits]')" '[{"Critical":1,"Important":2},null]'
 
+# --- quality_pairing: a register name inside a longer one ---
+FD="$TMP/fu"; mkdir -p "$FD/plans" "$FD/reg" "$FD/proj"
+say "$FD/proj/f1.jsonl" f1 2026-01-01T00:00:01Z 5
+{ mark open 2026-01-01T00:00:00Z docs/plans/p.md 1 f1 0; mark close 2026-01-01T00:00:02Z docs/plans/p.md 1 f1 "$(at "$FD/proj/f1.jsonl")" a..b; } > "$FD/markers.tsv"
+printf '# P\n\n### Task 1: one\n' > "$FD/plans/p.md"
+printf '# Next\n\n**Items:** milestone-10 2, 3\n\n### Task 1: a\n\n### Task 2: b\n\n### Task 3: c\n' > "$FD/plans/next.md"
+printf '# Register\n' > "$FD/reg/milestone-1.md"
+J=$(node "$REPORT" --markers "$FD/markers.tsv" --transcripts "$FD/proj" --plan "$FD/plans/p.md" --register "$FD/reg/milestone-1.md" --format json 2>/dev/null)
+check "quality_pairing: a register name inside a longer one is not its follow-up" "$(q "$J" '.plans[0].quality.followUpTasks')" "0"
+
 # --- prices_unreadable ---
 mkdir -p "$TMP/noprices/lib"
 cp "$REPORT" "$TMP/noprices/lib/"
