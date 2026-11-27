@@ -143,6 +143,10 @@ run bash "$RM" settle --root "$ROOT" --spec "$BILLING"
 check "settle: exits 0" "$RC" "0"
 check "settle: the epic moves to verify, never done" "$(register_rows "$D/registers/m1.md" | awk -F'\t' '$1 == 1 { print $5 }')" "verify"
 check "settle: with the owner note" "$(register_rows "$D/registers/m1.md" | awk -F'\t' '$1 == 1 { print $6 }')" "built; owner confirms at the milestone audit"
+bash "$REG" set "$D/registers/m1.md" 1 doing >/dev/null
+run bash "$RM" settle --root "$ROOT" --spec "$D/specs/2026-10-08-billing-design.md"
+check "settle: an absolute --spec path settles the epic" \
+  "$RC:$(register_rows "$D/registers/m1.md" | awk -F'\t' '$1 == 1 { print $5 }')" "0:verify"
 run bash "$RM" settle --root "$ROOT" --spec "$BILLING"
 check "settle: idempotent" "$(grep -c '^no open epic row' <<<"$OUT")" "1"
 bash "$REG" set "$D/registers/m1.md" 1 doing >/dev/null

@@ -364,7 +364,7 @@ cmd_settle() {
   done
   [ -n "$spec" ] || usage
   [ -f "$FILE" ] || { echo "no roadmap; nothing to settle"; return 0; }
-  spec=${spec#./}
+  spec=$(dforge_name "$spec" "$root")
   # A verify row is built work waiting on the owner's check, the state settle
   # itself gives the epic, so only the other unresolved rows hold it back.
   if [ -n "$(register_for_spec "$root" "$spec" | while IFS= read -r f; do register_open "$f"; done | awk -F'\t' '$5 != "verify"')" ]; then
