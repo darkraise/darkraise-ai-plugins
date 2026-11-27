@@ -236,5 +236,11 @@ has "staged_change_is_wrote" "$out" "evidence=wrote reason=wrote"
 check "staged_change_is_wrote: the index is named" "$(grep -cx index "$TMP/out.json.wrote" 2>/dev/null)" "1"
 git -C "$TMP/work" reset -q
 
+# --- out_inside_cwd_ok: the runner's own out files are no write ---
+reset_work
+STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md" --out "$TMP/work/review.json"
+check "out_inside_cwd_ok" "$out" "agy-judge claude-opus-5-5/high status=OK exit=0 out=$TMP/work/review.json evidence=none"
+reset_work
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

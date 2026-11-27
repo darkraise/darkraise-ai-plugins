@@ -300,10 +300,13 @@ wrote_check() { # wrote_check; succeeds when the run changed nothing
   top=$(jq -r .root < "$snapdir/before.json" | tr -d '\r')
   {
     {
-      jq -rn --slurpfile b "$snapdir/before.json" --slurpfile a "$snapdir/after.json" '
+      # --out inside the worktree, and the files beside it named after it,
+      # are the runner's own writes.
+      jq -rn --arg own "$(own_path "$top")" --slurpfile b "$snapdir/before.json" --slurpfile a "$snapdir/after.json" '
         def idx: reduce .files[] as $f ({}; .[$f.path] = $f);
+        def mine: $own != "" and (. == $own or startswith($own + "."));
         ($b[0] | idx) as $x | ($a[0] | idx) as $y |
-        (($x | keys) + ($y | keys) | unique)[] | select($x[.] != $y[.])' | tr -d '\r'
+        (($x | keys) + ($y | keys) | unique)[] | select((mine | not) and $x[.] != $y[.])' | tr -d '\r'
       newer_files "$top"
     } | LC_ALL=C sort -u
     [ "$(jq -r .index < "$snapdir/before.json")" = "$(jq -r .index < "$snapdir/after.json")" ] || echo index
