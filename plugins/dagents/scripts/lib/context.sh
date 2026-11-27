@@ -92,12 +92,21 @@ ctx_find_transcript() {
   return 1
 }
 
+# ctx_count VALUE — VALUE, once a positive integer, else status 1. Callers do
+# arithmetic on it, and bash arithmetic on a string runs any $(...) inside it.
+ctx_count() {
+  local v=${1//$'\r'/}
+  [[ $v =~ ^[1-9][0-9]*$ ]] || return 1
+  printf '%s\n' "$v"
+}
+
 # stdin: transcript lines. stdout: token count, or nothing.
 ctx_reduce() {
   tr -d '\r' | ctx_jq -R -r -n '
     [inputs | select(length > 0) | (try fromjson catch null) | objects
      | select((.isSidechain // false) == false)
-     | if .type == "system" and .subtype == "compact_boundary" then {b: .compactMetadata.postTokens}
+     | if .type == "system" and .subtype == "compact_boundary"
+       then {b: (.compactMetadata.postTokens | if type == "number" and . == floor and . > 0 then . else null end)}
        elif .type == "assistant" and (.message.model // "") != "<synthetic>"
             and ((.message.usage | type) == "object") then
          ((.message.usage.input_tokens // 0) + (.message.usage.cache_creation_input_tokens // 0)
@@ -115,8 +124,7 @@ ctx_measure() {
   local out
   out=$(tail -n 400 "$1" | ctx_reduce)
   [ -n "$out" ] || out=$(ctx_reduce < "$1")
-  [ -n "$out" ] || return 1
-  printf '%s\n' "$out"
+  ctx_count "$out"
 }
 
 # ctx_model FILE — the model of the last main-chain assistant entry, or nothing.
@@ -164,8 +172,7 @@ ctx_measure_rollout() {
   local out
   out=$(tail -n 400 "$1" | ctx_rollout_reduce)
   [ -n "$out" ] || out=$(ctx_rollout_reduce < "$1")
-  [ -n "$out" ] || return 1
-  printf '%s\n' "$out"
+  ctx_count "$out"
 }
 
 # A session being written to is among the very newest files, and the sessions
