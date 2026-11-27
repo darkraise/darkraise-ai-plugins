@@ -133,10 +133,29 @@ const notObject = value => value === null || typeof value !== "object" || Array.
 // What readOrRefuse answers for a file it refused.
 const UNREADABLE = Symbol("unreadable");
 
+// Replaces a file in one rename keeping its mode, and its owner when run as
+// root, as dforge-config's writeFile does: the temporary file would otherwise
+// take the umask's mode and root's ownership.
 function writeJson(file, data) {
+  let mode;
+  let owner;
+  try {
+    const stat = fs.statSync(file);
+    mode = stat.mode & 0o777;
+    owner = { uid: stat.uid, gid: stat.gid };
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
   const temporary = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.tmp`);
-  fs.writeFileSync(temporary, `${JSON.stringify(data, null, 2)}\n`);
-  fs.renameSync(temporary, file);
+  try {
+    fs.writeFileSync(temporary, `${JSON.stringify(data, null, 2)}\n`, mode === undefined ? undefined : { mode });
+    if (owner && process.getuid?.() === 0) fs.chownSync(temporary, owner.uid, owner.gid);
+    if (mode !== undefined) fs.chmodSync(temporary, mode);
+    fs.renameSync(temporary, file);
+  } catch (error) {
+    fs.rmSync(temporary, { force: true });
+    throw error;
+  }
 }
 
 function sameFile(a, b) {

@@ -521,3 +521,26 @@ test("migrateMirror keeps the new uri's hash when an old one renames onto it", (
   assert.deepEqual({ ...state.documents }, { "dforge/a.md": "h2" });
 });
 
+test("migrateHome keeps the mode of a config.json it merges into", t => {
+  const home = scratch("dms-home-");
+  const config = path.join(home, ".dforge", "config.json");
+  write(config, JSON.stringify({ layout: "auto" }));
+  fs.chmodSync(config, 0o640);
+  const mode = fs.statSync(config).mode & 0o777;
+  write(path.join(home, ".dr-forge", "config.json"), JSON.stringify({ handoffTokens: 325000 }));
+  const { lines, refused } = migrateHome({ HOME: home });
+  assert.equal(refused, 0, lines.join("\n"));
+  assert.equal(JSON.parse(read(config)).handoffTokens, 325000);
+  assert.equal(fs.statSync(config).mode & 0o777, mode);
+  const failing = scratch("dms-home-");
+  write(path.join(failing, ".dforge", "config.json"), JSON.stringify({ layout: "auto" }));
+  write(path.join(failing, ".dr-forge", "config.json"), JSON.stringify({ handoffTokens: 325000 }));
+  const rename = fs.renameSync;
+  t.mock.method(fs, "renameSync", (from, to) => {
+    if (/^\.config\.json\..*\.tmp$/.test(path.basename(String(from)))) throw Object.assign(new Error("EIO: rename refused by the test"), { code: "EIO" });
+    return rename(from, to);
+  });
+  assert.throws(() => migrateHome({ HOME: failing }), /EIO: rename refused by the test/);
+  assert.deepEqual(fs.readdirSync(path.join(failing, ".dforge")).filter(name => /^\.config\.json\..*\.tmp$/.test(name)), []);
+});
+
