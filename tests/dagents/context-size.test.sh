@@ -103,14 +103,21 @@ posix() { if command -v cygpath >/dev/null 2>&1; then cygpath -u "$1"; else prin
 check "no usage: line" "$out" "budget: unknown of 465k — unknown — no usage entry in $(posix "$T")"
 
 # --- a postTokens that is no positive integer reads as unknown ---
-boundary "\"x[\$(touch $TMP/pwned)]\"" > "$T"
+# The assistant entry names the model, so the window is known; the boundary
+# after it resets the reading to its postTokens alone.
+badboundary() { # badboundary <postTokens JSON> — a transcript ending in that boundary
+  asst 1000
+  jq -nc --argjson p "$1" '{type:"system",subtype:"compact_boundary",isSidechain:false,compactMetadata:{trigger:"auto",preTokens:460000,postTokens:$p}}'
+}
+badboundary "$(jq -n --arg p "x[\$(touch $TMP/pwned)]" '$p')" > "$T"
 run
 check "a string postTokens is unknown and never evaluated" \
   "$status|$out|$([ -e "$TMP/pwned" ] && echo pwned || echo clean)" \
   "3|budget: unknown of 465k — unknown — no usage entry in $(posix "$T")|clean"
-boundary 0 > "$T"; run; a=$status
-boundary 1.5 > "$T"; run
-check "a zero or fractional postTokens is unknown" "$a|$status" "3|3"
+badboundary 0 > "$T"; run; a="$status|$out"
+badboundary 1.5 > "$T"; run
+check "a zero or fractional postTokens is unknown" "$a|$status|$out" \
+  "3|budget: unknown of 465k — unknown — no usage entry in $(posix "$T")|3|budget: unknown of 465k — unknown — no usage entry in $(posix "$T")"
 
 # --- budget override ---
 asst 285000 > "$T"
