@@ -76,9 +76,11 @@ register_rows() {
   return 0
 }
 
-# register_open FILE — the rows whose state is unresolved.
+# register_open FILE — the rows whose state is unresolved, or not a state at
+# all: a hand-edited row is never read as settled.
 register_open() {
-  register_rows "$1" | awk -F'\t' -v u=" $REGISTER_UNRESOLVED " 'index(u, " " $5 " ") > 0'
+  register_rows "$1" | awk -F'\t' -v u=" $REGISTER_UNRESOLVED " -v s=" $REGISTER_STATES " \
+    'index(u, " " $5 " ") > 0 || index(s, " " $5 " ") == 0'
   return 0
 }
 

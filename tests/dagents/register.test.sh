@@ -105,6 +105,9 @@ reg "$ROOT/clean.md" \
 run bash "$REG" check "$ROOT/clean.md"
 check "check: a clean register" "$RC" "0"
 check "check: clean summary" "$(tail -n 1 <<<"$OUT")" "register: 0 errors"
+reg "$TMP/unknown.md" '| 1 | Shipped | - | - | done | - |' '| 2 | Waiting | - | - | blocked | - |'
+run bash "$REG" open "$TMP/unknown.md"
+check "register_open: an unknown state counts as open" "$(register_open "$TMP/unknown.md" | cut -f1):$RC" "2:1"
 
 reg "$ROOT/dup.md" '| 1 | A | - | - | open | - |' '| 1 | B | - | - | open | - |'
 run bash "$REG" check "$ROOT/dup.md"
