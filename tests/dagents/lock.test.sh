@@ -72,5 +72,20 @@ check "a stale claimed guard: the lock is reclaimed" "$status:$([ -e "$LOCK" ] &
 check "a stale claimed guard: no guard is left" "$(ls -d "$LOCK".reclaim* 2>/dev/null | grep -c .)" "0"
 check "a stale claimed guard: nothing printed" "$err" ""
 
+# An owner kill -0 cannot signal (EPERM: another user's process) is alive.
+sleep 30 & live=$!
+mkdir "$LOCK"
+printf '%s\n' "$live" > "$LOCK/pid"
+uname -n > "$LOCK/host"
+kill() {
+  if [ "$1" = -0 ] && [ "${2:-}" = "$live" ]; then return 1; fi
+  command kill "$@"
+}
+dr_lock_reclaim "$LOCK"; status=$?
+unset -f kill
+check "an owner kill -0 cannot signal: not reclaimed" "$status:$([ -e "$LOCK" ] && echo left || echo gone)" "1:left"
+kill "$live" 2>/dev/null; wait "$live" 2>/dev/null
+rm -rf -- "$LOCK"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

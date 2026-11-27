@@ -52,6 +52,17 @@ dr_dir_take() {
   mkdir -- "$1" 2>/dev/null && ( set -o noclobber; : > "$1/claim" ) 2>/dev/null
 }
 
+# dr_proc_absent PID — no process PID exists. kill -0 also fails on a live
+# process this user may not signal (EPERM), so absence is read from /proc where
+# it exists, else from ps.
+dr_proc_absent() {
+  if [ -d /proc/self ]; then
+    [ ! -e "/proc/$1" ]
+  else
+    [ -z "$(ps -p "$1" -o pid= 2>/dev/null)" ]
+  fi
+}
+
 # dr_lock_reclaim DIR — remove DIR when its owner provably exited: same host,
 # and its PID is gone or names a process started at another time. A lock with
 # no pid is taken once it is old. Reclaims are serialized so one cannot remove
@@ -77,7 +88,7 @@ dr_lock_reclaim() {
   if [ -d "$lock" ] && [ -z "$pid" ]; then
     dr_lock_old "$lock" && stale=0
   elif [[ "$pid" =~ ^[0-9]+$ ]] && [ -n "$host" ] && [ "$host" = "$(uname -n)" ]; then
-    if ! kill -0 "$pid" 2>/dev/null; then
+    if ! kill -0 "$pid" 2>/dev/null && dr_proc_absent "$pid"; then
       stale=0
     else
       now="$(dr_proc_start "$pid")"
