@@ -966,6 +966,16 @@ describe('attribution guard', () => {
     expect(clean).toEqual([undefined, undefined])
   })
 
+  test('judges only the message fields of a git write tool', async ($, on) => {
+    world(on, { ...SIGNED_IN })
+    signedIn(on, {})
+    const file = await $.tool.call({ tool: 'mcp__github__create_or_update_file', path: 'NOTES.md', message: 'docs: add notes', content: `x\n\n${A6_AI}\n` } as never)
+    expect(file.deny).toBeUndefined()
+    const pushed = await $.tool.call({ tool: 'mcp__github__push_files', message: 'docs: add', files: [{ path: 'a.md', content: `x\n\n${A6_AI}\n` }] } as never)
+    expect(pushed.deny).toBeUndefined()
+    const dirty = await $.tool.call({ tool: 'mcp__github__create_or_update_file', path: 'NOTES.md', message: `docs: add\n\n${A6_AI}`, content: 'x\n' } as never)
+    expect(dirty.deny).toBe(A6_DENY)
+  })
 
   test('finds AI attribution and leaves human co-authors alone', () => {
     expect(attributionIn('fix\n\nCo-Authored-By: Claude Opus <noreply@anthropic.com>')).toMatch(/Co-Authored-By/)
