@@ -434,5 +434,22 @@ printf 'Final review: clean (commits 0000000..%s)\n' "$reviewed" > "$TMP/long-le
 check "final review: a later code commit is stale on a long history" \
   "$(cd "$LH" && HOME="$TMP/long-home" plan_final_review_state "$TMP/long-ledger.md")" "stale $reviewed"
 
+# --- plan_primary_root ---
+gq() { git -c user.name=t -c user.email=t@example.com -c init.defaultBranch=main "$@"; }
+gq init -q "$TMP/std" && gq -C "$TMP/std" commit -q --allow-empty -m one
+gq -C "$TMP/std" worktree add -q "$TMP/std-wt" 2>/dev/null
+check "plan_primary_root: a linked worktree names its primary" \
+  "$(plan_primary_root "$TMP/std-wt")" "$(git -C "$TMP/std" rev-parse --show-toplevel)"
+mkdir -p "$TMP/meta" && gq init -q --separate-git-dir="$TMP/meta/r.git" "$TMP/sep"
+out=$(plan_primary_root "$TMP/sep"); status=$?
+check "plan_primary_root: a separate git directory is its own primary" \
+  "$status:$out" "0:$(git -C "$TMP/sep" rev-parse --show-toplevel)"
+gq init -q "$TMP/subsrc" && gq -C "$TMP/subsrc" commit -q --allow-empty -m one
+gq init -q "$TMP/sup" && gq -C "$TMP/sup" commit -q --allow-empty -m one
+gq -C "$TMP/sup" -c protocol.file.allow=always submodule add -q "$TMP/subsrc" sub >/dev/null 2>&1
+out=$(plan_primary_root "$TMP/sup/sub"); status=$?
+check "plan_primary_root: a submodule is its own primary" \
+  "$status:$out" "0:$(git -C "$TMP/sup/sub" rev-parse --show-toplevel)"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
