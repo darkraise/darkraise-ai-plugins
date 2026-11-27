@@ -32,6 +32,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
 . "$HERE/lib/timeout.sh"
+. "$HERE/lib/lock.sh"
 
 die() { printf 'task-step: %s\n' "$1" >&2; exit "${2:-2}"; }
 # plan_budget_line SCRIPTS CALLER PLAN_SRC LEDGER — the session budget line,
@@ -385,10 +386,155 @@ rr_render() { # rr_render TEMPLATE FINDINGS_FILE — the fenced prompt body, de-
 
 # A subshell body: every exit below leaves only the subshell, so the
 # dispatch branch passes the status on.
+# rereview_transition: cmd_rereview from its round read to its state write,
+# run under the step file's lock by dr_locked, which needs a return: its
+# lock-directory fallback releases the lock only after the command returns.
+rereview_transition() {
+  round=$(jq -r '.round // 0' "$state" | tr -d '\r')
+  # A repeat before the round's report is in reprints the round: a second
+  # call must not spend the next fix round.
+  if [ "$round" -ge 1 ] && [ ! -f "$ws/task-$first-fix-$((round + 1)).md" ] \
+    && [ -f "$ws/task-$first-rereview-$round-prompt.md" ] && [ ! -f "$ws/task-$first-rereview-$round-report.md" ]; then
+    printf 'task %s: re-review round %s: prompt already written, no report yet\n' "$first" "$round"
+    printf 'seat: dagents:judge-sonnet-high prompt: %s\n' "$ws/task-$first-rereview-$round-prompt.md"
+    printf 'state: base %s review-head %s round %s t0 %s\n' \
+      "$(jq -r '.base' "$state" | tr -d '\r' | cut -c1-7)" "$(jq -r '.reviewHead' "$state" | tr -d '\r' | cut -c1-7)" "$round" "$(jq -r '.t0 // empty' "$state" | tr -d '\r')"
+    return 0
+  fi
+  new_round=$((round + 1))
+  if [ "$new_round" -gt 2 ]; then
+    echo "task-step: fix round $new_round is past the cap of 2; send the open findings to the breaker (reference/delegated-task.md §4)" >&2
+    return 7
+  fi
+
+  fix=$ws/task-$first-fix-$new_round.md
+  if [ ! -f "$fix" ]; then
+    echo "task-step: no fix message $fix; write it before rereview" >&2
+    return 6
+  fi
+  bullets=$(awk '{ sub(/\r$/, "") } /^- / { print; next } { exit }' "$fix")
+  nopen=$(printf '%s\n' "$bullets" | awk 'NF { n++ } END { print n + 0 }')
+  if [ "$nopen" -lt 1 ]; then
+    echo "task-step: $fix must start with one '- <file>: <finding>' bullet per open finding" >&2
+    return 2
+  fi
+  file=${bullets%%$'\n'*}
+  file=${file#- }
+  file=${file%%: *}
+  file=$(printf '%s' "$file" | tr -d '`' | sed -E 's/:[0-9][0-9,-]*$//; s#^\./##')
+
+  head_ref=$head_arg
+  [ -n "$head_ref" ] || head_ref=$(jq -r '.head // empty' "$state" | tr -d '\r')
+  [ -n "$head_ref" ] || head_ref=HEAD
+  head_sha=$(git rev-parse --verify --quiet "$head_ref^{commit}") || { echo "bad HEAD: $head_ref" >&2; return 2; }
+  # A sequential group member's fixes run one after another in one checkout,
+  # so its fix diff starts where the group's last review ended. A wave member
+  # (one with a head ref) keeps its own review head.
+  group=$(jq -r '.group // empty' "$state" | tr -d '\r')
+  gstate=""
+  if [ -n "$group" ] && [ -z "$(jq -r '.head // empty' "$state" | tr -d '\r')" ] && [ -f "$ws/group-$group-step.json" ]; then
+    gstate=$ws/group-$group-step.json
+  fi
+  fix_base=$base_arg
+  [ -n "$fix_base" ] || [ -z "$gstate" ] || fix_base=$(jq -r '.reviewHead // empty' "$gstate" | tr -d '\r')
+  [ -n "$fix_base" ] || fix_base=$review_head
+  fix_base_sha=$(git rev-parse --verify --quiet "$fix_base^{commit}") || { echo "bad BASE: $fix_base" >&2; return 2; }
+  if [ "$fix_base_sha" = "$head_sha" ]; then
+    echo "task-step: no commit since the reviewed head ${head_sha:0:7}; commit the fix before rereview" >&2
+    return 6
+  fi
+
+  scores=$(plan_scores "$src")
+  risk3=0
+  for t in "${tasks[@]}"; do
+    row=$(awk -F'\t' -v n="$t" '$1 == n' <<<"$scores")
+    risk=$(cut -f3 <<<"$row")
+    case $risk in 0|1|2) ;; *) risk3=1 ;; esac
+  done
+
+  lines=0 over=0 touched=0
+  numstat=$(git -c core.quotepath=off diff --numstat --no-renames "$fix_base_sha..$head_sha")
+  while IFS=$'\t' read -r a d f; do
+    [ -n "$f" ] || continue
+    f=${f%$'\r'}
+    if [ "$a" = "-" ] || [ "$d" = "-" ]; then over=1; else lines=$((lines + a + d)); fi
+    [ "$f" != "$file" ] || touched=1
+  done <<<"$numstat"
+
+  skip=0 why=""
+  if [ "$nopen" -ne 1 ]; then why="$nopen findings open"
+  elif [ "$risk3" -eq 1 ]; then why="risk 3 or unscored"
+  elif [ "$covered" -ne 1 ]; then why="--covered not given"
+  elif [ "$over" -eq 1 ]; then why="binary file in the fix"
+  elif [ "$lines" -gt 3 ]; then why="$lines changed lines"
+  elif [ "$touched" -ne 1 ]; then why="the fix does not touch $file"
+  else skip=1
+  fi
+  suite_why=""
+  if [ "$skip" -eq 1 ]; then
+    suite_dir=$(jq -r '.reviewCheck.cwd // .heldCwd // empty' "$state" | tr -d '\r')
+    require_step_file "$state"
+    suite_why=$(suite_gap "$state" "$first" "$head_sha" "$suite_dir")
+    if [ -n "$suite_why" ]; then skip=0 why="suite $suite_why"; fi
+  fi
+
+  pkg=$(bash "$here/review-package" "$plan" "$fix_base_sha" "$head_sha") || { printf '%s\n' "$pkg" >&2; return 2; }
+  diff_file=$(printf '%s\n' "$pkg" | sed -n -E '/^wrote /{s/^wrote (.*): [0-9]+ commit\(s\), [0-9]+ bytes$/\1/;p;q;}')
+
+  prompt=$ws/task-$first-rereview-$new_round-prompt.md
+  if [ "$skip" -eq 0 ]; then
+    tpl=$here/../skills/subagent-driven-development/references/re-review-prompt.md
+    [ -f "$tpl" ] || { echo "task-step: missing template $tpl" >&2; return 2; }
+    printf '%s\n\nThe fix message holds each finding'"'"'s detail: %s\n' "$bullets" "$fix" > "$tmp/findings"
+    judge_report=$ws/task-$first-rereview-$new_round-report.md
+    RR_BRIEF=$ws/task-$first-brief.md RR_REPORT=$ws/task-$first-report.md RR_JUDGE_REPORT=$judge_report \
+      RR_FIX_BASE=$fix_base_sha RR_HEAD=$head_sha RR_DIFF=$diff_file rr_render "$tpl" "$tmp/findings" > "$tmp/prompt"
+    if grep -qE '\[(BRIEF_FILE|FINDINGS|IMPLEMENTER_REPORT_FILE|REPORT_FILE|FIX_BASE_SHA|HEAD_SHA|DIFF_FILE|MODEL)\]' "$tmp/prompt"; then
+      echo "task-step: $tpl holds a placeholder rereview does not fill" >&2
+      return 2
+    fi
+    rm -f "$judge_report"
+    cp "$tmp/prompt" "$prompt"
+  fi
+
+  check_dir=$(jq -r '.reviewCheck.cwd // .heldCwd // empty' "$state" | tr -d '\r')
+  [ -n "$check_dir" ] || check_dir=$(git rev-parse --show-toplevel | tr -d '\r')
+  snap=$(tracked_snapshot "$check_dir") || {
+    echo "task-step: cannot record the tracked files of $check_dir for the verdict check" >&2
+    return 2
+  }
+  now=$(date +%s)
+  old_base=$(suite_base_sha "$state")
+  old_suite=$(jq -r '.suite // empty' "$state" | tr -d '\r')
+  jq --arg rh "$head_sha" --argjson r "$new_round" --argjson t "$now" \
+    --arg base "$base_arg" --arg bsha "$fix_base_sha" --arg head "$head_arg" --argjson chk "$snap" \
+    '.reviewHead = $rh | .round = $r | .t0 = $t | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)
+     | .reviewCheck = $chk' \
+    "$state" > "$tmp/state.new" && dr_replace "$state" "$tmp/state.new" \
+    || { echo "task-step: cannot update $state" >&2; return 2; }
+  drop_base_cache "$state" "$first" "$old_base" "$old_suite"
+  if [ -n "$gstate" ]; then
+    jq --arg rh "$head_sha" '.reviewHead = $rh' "$gstate" > "$tmp/group.new" && dr_replace "$gstate" "$tmp/group.new" \
+      || { echo "task-step: cannot update $gstate" >&2; return 2; }
+  fi
+
+  if [ "$skip" -eq 1 ]; then
+    printf 'task %s: re-review round %s: packaged %s..%s, skipped\n' "$ids" "$new_round" "${fix_base_sha:0:7}" "${head_sha:0:7}"
+    printf 're-review: skipped (%s changed lines, 1 finding, %s)\n' "$lines" "$file"
+  else
+    printf 'task %s: re-review round %s: packaged %s..%s, prompt written (not skipped: %s)\n' "$ids" "$new_round" "${fix_base_sha:0:7}" "${head_sha:0:7}" "$why"
+    printf 'seat: dagents:judge-sonnet-high prompt: %s\n' "$prompt"
+    [ -z "$suite_why" ] || printf 're-review: not skipped (suite %s)\n' "$suite_why"
+  fi
+  printf 'state: base %s review-head %s round %s t0 %s\n' \
+    "$(jq -r '.base' "$state" | tr -d '\r' | cut -c1-7)" "${head_sha:0:7}" "$new_round" "$now"
+  plan_budget_line "$here" task-step:rereview "$src" "$(dagents_ledger_dir "$(basename "$plan" .md)" "$(_plan_ctx "$plan")")/progress.md" || true
+}
+
 cmd_rereview() (
   local here plan_arg plan tmp src header ws state first t scores row risk
   local fix bullets nopen file review_head round new_round head_ref head_sha fix_base fix_base_sha
-  local pkg diff_file numstat a d f lines over touched risk3 skip why now prompt tpl ids group gstate check_dir snap suite_why suite_dir old_base old_suite
+  local pkg diff_file numstat a d f lines over touched risk3 skip why now prompt tpl ids group gstate check_dir snap suite_why suite_dir old_base old_suite lock
   local tasks=() base_arg="" head_arg="" covered=0
   here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
   . "$here/lib/plan.sh"
@@ -440,143 +586,9 @@ cmd_rereview() (
     echo "task-step: --base does not apply to a group member; see delegated-task.md §3a" >&2
     exit 2
   fi
-  round=$(jq -r '.round // 0' "$state" | tr -d '\r')
-  # A repeat before the round's report is in reprints the round: a second
-  # call must not spend the next fix round.
-  if [ "$round" -ge 1 ] && [ ! -f "$ws/task-$first-fix-$((round + 1)).md" ] \
-    && [ -f "$ws/task-$first-rereview-$round-prompt.md" ] && [ ! -f "$ws/task-$first-rereview-$round-report.md" ]; then
-    printf 'task %s: re-review round %s: prompt already written, no report yet\n' "$first" "$round"
-    printf 'seat: dagents:judge-sonnet-high prompt: %s\n' "$ws/task-$first-rereview-$round-prompt.md"
-    printf 'state: base %s review-head %s round %s t0 %s\n' \
-      "$(jq -r '.base' "$state" | tr -d '\r' | cut -c1-7)" "$(jq -r '.reviewHead' "$state" | tr -d '\r' | cut -c1-7)" "$round" "$(jq -r '.t0 // empty' "$state" | tr -d '\r')"
-    exit 0
-  fi
-  new_round=$((round + 1))
-  if [ "$new_round" -gt 2 ]; then
-    echo "task-step: fix round $new_round is past the cap of 2; send the open findings to the breaker (reference/delegated-task.md §4)" >&2
-    exit 7
-  fi
-
-  fix=$ws/task-$first-fix-$new_round.md
-  if [ ! -f "$fix" ]; then
-    echo "task-step: no fix message $fix; write it before rereview" >&2
-    exit 6
-  fi
-  bullets=$(awk '{ sub(/\r$/, "") } /^- / { print; next } { exit }' "$fix")
-  nopen=$(printf '%s\n' "$bullets" | awk 'NF { n++ } END { print n + 0 }')
-  if [ "$nopen" -lt 1 ]; then
-    echo "task-step: $fix must start with one '- <file>: <finding>' bullet per open finding" >&2
-    exit 2
-  fi
-  file=${bullets%%$'\n'*}
-  file=${file#- }
-  file=${file%%: *}
-  file=$(printf '%s' "$file" | tr -d '`' | sed -E 's/:[0-9][0-9,-]*$//; s#^\./##')
-
-  head_ref=$head_arg
-  [ -n "$head_ref" ] || head_ref=$(jq -r '.head // empty' "$state" | tr -d '\r')
-  [ -n "$head_ref" ] || head_ref=HEAD
-  head_sha=$(git rev-parse --verify --quiet "$head_ref^{commit}") || { echo "bad HEAD: $head_ref" >&2; exit 2; }
-  # A sequential group member's fixes run one after another in one checkout,
-  # so its fix diff starts where the group's last review ended. A wave member
-  # (one with a head ref) keeps its own review head.
-  group=$(jq -r '.group // empty' "$state" | tr -d '\r')
-  gstate=""
-  if [ -n "$group" ] && [ -z "$(jq -r '.head // empty' "$state" | tr -d '\r')" ] && [ -f "$ws/group-$group-step.json" ]; then
-    gstate=$ws/group-$group-step.json
-  fi
-  fix_base=$base_arg
-  [ -n "$fix_base" ] || [ -z "$gstate" ] || fix_base=$(jq -r '.reviewHead // empty' "$gstate" | tr -d '\r')
-  [ -n "$fix_base" ] || fix_base=$review_head
-  fix_base_sha=$(git rev-parse --verify --quiet "$fix_base^{commit}") || { echo "bad BASE: $fix_base" >&2; exit 2; }
-  if [ "$fix_base_sha" = "$head_sha" ]; then
-    echo "task-step: no commit since the reviewed head ${head_sha:0:7}; commit the fix before rereview" >&2
-    exit 6
-  fi
-
-  scores=$(plan_scores "$src")
-  risk3=0
-  for t in "${tasks[@]}"; do
-    row=$(awk -F'\t' -v n="$t" '$1 == n' <<<"$scores")
-    risk=$(cut -f3 <<<"$row")
-    case $risk in 0|1|2) ;; *) risk3=1 ;; esac
-  done
-
-  lines=0 over=0 touched=0
-  numstat=$(git -c core.quotepath=off diff --numstat --no-renames "$fix_base_sha..$head_sha")
-  while IFS=$'\t' read -r a d f; do
-    [ -n "$f" ] || continue
-    f=${f%$'\r'}
-    if [ "$a" = "-" ] || [ "$d" = "-" ]; then over=1; else lines=$((lines + a + d)); fi
-    [ "$f" != "$file" ] || touched=1
-  done <<<"$numstat"
-
-  skip=0 why=""
-  if [ "$nopen" -ne 1 ]; then why="$nopen findings open"
-  elif [ "$risk3" -eq 1 ]; then why="risk 3 or unscored"
-  elif [ "$covered" -ne 1 ]; then why="--covered not given"
-  elif [ "$over" -eq 1 ]; then why="binary file in the fix"
-  elif [ "$lines" -gt 3 ]; then why="$lines changed lines"
-  elif [ "$touched" -ne 1 ]; then why="the fix does not touch $file"
-  else skip=1
-  fi
-  suite_why=""
-  if [ "$skip" -eq 1 ]; then
-    suite_dir=$(jq -r '.reviewCheck.cwd // .heldCwd // empty' "$state" | tr -d '\r')
-    require_step_file "$state"
-    suite_why=$(suite_gap "$state" "$first" "$head_sha" "$suite_dir")
-    if [ -n "$suite_why" ]; then skip=0 why="suite $suite_why"; fi
-  fi
-
-  pkg=$(bash "$here/review-package" "$plan" "$fix_base_sha" "$head_sha") || { printf '%s\n' "$pkg" >&2; exit 2; }
-  diff_file=$(printf '%s\n' "$pkg" | sed -n -E '/^wrote /{s/^wrote (.*): [0-9]+ commit\(s\), [0-9]+ bytes$/\1/;p;q;}')
-
-  prompt=$ws/task-$first-rereview-$new_round-prompt.md
-  if [ "$skip" -eq 0 ]; then
-    tpl=$here/../skills/subagent-driven-development/references/re-review-prompt.md
-    [ -f "$tpl" ] || { echo "task-step: missing template $tpl" >&2; exit 2; }
-    printf '%s\n\nThe fix message holds each finding'"'"'s detail: %s\n' "$bullets" "$fix" > "$tmp/findings"
-    judge_report=$ws/task-$first-rereview-$new_round-report.md
-    RR_BRIEF=$ws/task-$first-brief.md RR_REPORT=$ws/task-$first-report.md RR_JUDGE_REPORT=$judge_report \
-      RR_FIX_BASE=$fix_base_sha RR_HEAD=$head_sha RR_DIFF=$diff_file rr_render "$tpl" "$tmp/findings" > "$tmp/prompt"
-    if grep -qE '\[(BRIEF_FILE|FINDINGS|IMPLEMENTER_REPORT_FILE|REPORT_FILE|FIX_BASE_SHA|HEAD_SHA|DIFF_FILE|MODEL)\]' "$tmp/prompt"; then
-      echo "task-step: $tpl holds a placeholder rereview does not fill" >&2
-      exit 2
-    fi
-    rm -f "$judge_report"
-    cp "$tmp/prompt" "$prompt"
-  fi
-
-  check_dir=$(jq -r '.reviewCheck.cwd // .heldCwd // empty' "$state" | tr -d '\r')
-  [ -n "$check_dir" ] || check_dir=$(git rev-parse --show-toplevel | tr -d '\r')
-  snap=$(tracked_snapshot "$check_dir") || {
-    echo "task-step: cannot record the tracked files of $check_dir for the verdict check" >&2
-    exit 2
-  }
-  now=$(date +%s)
-  old_base=$(suite_base_sha "$state")
-  old_suite=$(jq -r '.suite // empty' "$state" | tr -d '\r')
-  jq --arg rh "$head_sha" --argjson r "$new_round" --argjson t "$now" \
-    --arg base "$base_arg" --arg bsha "$fix_base_sha" --arg head "$head_arg" --argjson chk "$snap" \
-    '.reviewHead = $rh | .round = $r | .t0 = $t | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)
-     | .reviewCheck = $chk' \
-    "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
-  drop_base_cache "$state" "$first" "$old_base" "$old_suite"
-  if [ -n "$gstate" ]; then
-    jq --arg rh "$head_sha" '.reviewHead = $rh' "$gstate" > "$gstate.tmp" && mv "$gstate.tmp" "$gstate" || die "cannot update $gstate"
-  fi
-
-  if [ "$skip" -eq 1 ]; then
-    printf 'task %s: re-review round %s: packaged %s..%s, skipped\n' "$ids" "$new_round" "${fix_base_sha:0:7}" "${head_sha:0:7}"
-    printf 're-review: skipped (%s changed lines, 1 finding, %s)\n' "$lines" "$file"
-  else
-    printf 'task %s: re-review round %s: packaged %s..%s, prompt written (not skipped: %s)\n' "$ids" "$new_round" "${fix_base_sha:0:7}" "${head_sha:0:7}" "$why"
-    printf 'seat: dagents:judge-sonnet-high prompt: %s\n' "$prompt"
-    [ -z "$suite_why" ] || printf 're-review: not skipped (suite %s)\n' "$suite_why"
-  fi
-  printf 'state: base %s review-head %s round %s t0 %s\n' \
-    "$(jq -r '.base' "$state" | tr -d '\r' | cut -c1-7)" "${head_sha:0:7}" "$new_round" "$now"
-  plan_budget_line "$here" task-step:rereview "$src" "$(dagents_ledger_dir "$(basename "$plan" .md)" "$(_plan_ctx "$plan")")/progress.md" || true
+  lock=$(dr_lock_base "$state") || { echo "task-step: cannot lock $state" >&2; exit 2; }
+  dr_locked "$lock" rereview_transition
+  exit $?
 )
 
 # One version check per call (lib/auto-run.sh); the task-brief, auto-run and
@@ -871,14 +883,14 @@ do_start() {
 
   if [ "$kept" -eq 0 ]; then
     jq -n --argjson tasks "$(printf '%s\n' "${ids[@]}" | jq -sc .)" --arg base "$base" --argjson wave "${wave:-null}" \
-      '{tasks: $tasks, base: $base, head: null, reviewHead: null, round: 0, t0: null, wave: $wave}' > "$state.tmp" \
-      && mv "$state.tmp" "$state" || die "cannot update $state"
+      '{tasks: $tasks, base: $base, head: null, reviewHead: null, round: 0, t0: null, wave: $wave}' > "$TMP/state.new" \
+      && dr_replace "$state" "$TMP/state.new" || die "cannot update $state"
   fi
 
   if [ -n "$suite_arg" ]; then
     old_base=$(suite_base_sha "$state")
     old_suite=$(jq -r '.suite // empty' "$state" | tr -d '\r')
-    jq --arg s "$suite_arg" '.suite = $s' "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
+    jq --arg s "$suite_arg" '.suite = $s' "$state" > "$TMP/state.new" && dr_replace "$state" "$TMP/state.new" || die "cannot update $state"
     drop_base_cache "$state" "$first" "$old_base" "$old_suite"
     ledger_init
     if [ "$(tr -d '\r' < "$ledger" | grep -cF 'Ruling: suite command —')" -eq 0 ]; then
@@ -1024,7 +1036,7 @@ do_review() {
     --arg suite "$suite_arg" --arg sbase "$suite_base_sha_arg" \
     '.reviewHead = $rh | .t0 = $t0 | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)
      | .reviewCheck = $chk | (if $suite == "" then . else .suite = $suite end) | (if $sbase == "" then . else .suiteBase = $sbase end)' \
-    "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
+    "$state" > "$TMP/state.new" && dr_replace "$state" "$TMP/state.new" || die "cannot update $state"
   drop_base_cache "$state" "$first" "$old_base" "$old_suite"
 
   printf 'task %s: reviewed %s..%s (%s commit(s)), diff %s\n' "$idlist" "${basesha:0:7}" "${headsha:0:7}" \
@@ -1068,7 +1080,7 @@ do_hold() {
   [ -n "$held_cwd" ] || held_cwd=$(git rev-parse --show-toplevel | tr -d '\r')
   jq --arg h "$held" --arg head "$head_arg" --arg hc "$held_cwd" \
     '.heldHead = $h | .heldCwd = $hc | (if $head == "" then . else .head = $head end)' \
-    "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
+    "$state" > "$TMP/state.new" && dr_replace "$state" "$TMP/state.new" || die "cannot update $state"
 
   if [ "$appended" -eq 1 ]; then
     printf 'task %s: held for group review (commits %s..%s)\n' "$first" "${base:0:7}" "${held:0:7}"
@@ -1189,17 +1201,17 @@ do_group() {
   t0=$(date +%s)
   jq -n --argjson tasks "$(printf '%s\n' "${members[@]}" | jq -sc .)" --arg rh "$ghead" --argjson t0 "$t0" \
     --argjson checks "$(printf '%s' "$snaps" | jq -sc .)" \
-    '{tasks: $tasks, reviewHead: $rh, t0: $t0, reviewChecks: $checks}' > "$gstate.tmp" && mv "$gstate.tmp" "$gstate" || die "cannot write $gstate"
+    '{tasks: $tasks, reviewHead: $rh, t0: $t0, reviewChecks: $checks}' > "$TMP/gstate.new" && dr_replace "$gstate" "$TMP/gstate.new" || die "cannot write $gstate"
   for n in "${members[@]}"; do
     mstate="$ws/task-$n-step.json"
     # A member held with --head is a wave task: its own held head is what was reviewed.
     jq --arg g "$ghead" --argjson t0 "$t0" --arg list "$list" \
       '.reviewHead = (if (.head // "") != "" then .heldHead else $g end) | .t0 = $t0 | .round = 0 | .group = $list' \
-      "$mstate" > "$mstate.tmp" && mv "$mstate.tmp" "$mstate" || die "cannot update $mstate"
+      "$mstate" > "$TMP/mstate.new" && dr_replace "$mstate" "$TMP/mstate.new" || die "cannot update $mstate"
   done
   jq --arg suite "$suite_arg" --arg sbase "$suite_base_sha_arg" \
     '(if $suite == "" then . else .suite = $suite end) | (if $sbase == "" then . else .suiteBase = $sbase end)' \
-    "$last_step" > "$last_step.tmp" && mv "$last_step.tmp" "$last_step" || die "cannot update $last_step"
+    "$last_step" > "$TMP/last_step.new" && dr_replace "$last_step" "$TMP/last_step.new" || die "cannot update $last_step"
   drop_base_cache "$last_step" "${members[${#members[@]}-1]}" "$old_base" "$old_suite"
 
   printf 'group %s: packaged %s task(s) at head %s, package %s\n' "$list" "${#members[@]}" "${ghead:0:7}" "$pkg"
