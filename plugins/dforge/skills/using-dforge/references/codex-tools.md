@@ -115,6 +115,13 @@ not only on an early stop: a plan finishing, a milestone audit's stop or
 close, a handoff. Add `--host codex` to a `--project`, `--draft` or `--adhoc`
 call, and end the message with the block it prints, verbatim.
 
+Codex sets no `CLAUDE_CODE_SESSION_ID`, so a `--project` or `--adhoc` write
+without `--key` exits 2. First run the same call with `--target`; the basename
+of the path it prints, without `.md`, is the key (`adhoc-<8 hex>`); pass
+`--key <key>` on the write. A session that resumed an `adhoc-` handoff passes
+the key its first prompt names. This covers every such call, closing-a-milestone
+steps 2, 6 and 9 and finishing-a-development-branch Steps 1 and 7 included.
+
 ## Codex App Finishing
 
 When the sandbox blocks branch/push operations (detached HEAD in an
