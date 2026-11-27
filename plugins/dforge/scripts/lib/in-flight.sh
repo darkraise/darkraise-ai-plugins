@@ -210,11 +210,11 @@ inflight_text() {
 }
 
 # inflight_list TRANSCRIPT SINCE SID: the session state file's launches when
-# lib/session-state.sh trusts them (ss_launches), else inflight_scan's lines,
-# with its exit status.
+# lib/session-state.sh trusts them (ss_launches, an agent with no output file
+# aged by its transcript), else inflight_scan's lines, with its exit status.
 inflight_list() {
   local out
-  if [ -n "${3:-}" ] && out=$(ss_launches "$3"); then
+  if [ -n "${3:-}" ] && out=$(ss_launches "$3" "$1"); then
     [ -z "$out" ] || printf '%s\n' "$out"
     return 0
   fi

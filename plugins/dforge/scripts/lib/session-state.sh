@@ -80,15 +80,16 @@ ss_model() {
   printf '%s\n' "${out#ok	}"
 }
 
-# ss_launches SID — the running launches as in-flight lines: kind, task id,
-# started HH:MM, idle age (inflight_idle's when lib/in-flight.sh is sourced),
+# ss_launches SID [TRANSCRIPT] — the running launches as in-flight lines: kind,
+# task id, started HH:MM, idle age (inflight_idle's when lib/in-flight.sh is
+# sourced, an agent with no output file read from TRANSCRIPT's subagents),
 # what, and the role service, timer or work.
 ss_launches() {
   local out kind id start file what role idle
   out=$(_ss_read "$1" launches) || return 1
   while IFS=$'\t' read -r _ kind id start file what role; do
     [ -n "$kind" ] || continue
-    if declare -F inflight_idle >/dev/null 2>&1; then idle=$(inflight_idle "$kind" "$id" "$file" "")
+    if declare -F inflight_idle >/dev/null 2>&1; then idle=$(inflight_idle "$kind" "$id" "$file" "${2:-}")
     else idle="idle -"; fi
     printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$kind" "$id" "$start" "$idle" "$what" "$role"
   done <<<"$out"
