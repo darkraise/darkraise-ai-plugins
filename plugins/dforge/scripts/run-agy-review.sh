@@ -103,7 +103,8 @@ status() { # status <model> <effort> <state> <exit> [reason]
     "$1" "$2" "$3" "$4" "$out" "$evidence" "${5:+ reason=$5}" "${until:+ until=$until}"
 }
 
-rm -f "$out" "$out.wrote"
+# A dry run writes no report, so it leaves an earlier one alone.
+[ "$dry_run" = true ] || rm -f "$out" "$out.wrote"
 
 # Only `usable` is read, never the review surface, so a run works while the
 # policy's trust.review is still pending: that is how the surface gets trusted.

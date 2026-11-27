@@ -203,5 +203,10 @@ command -v cygpath >/dev/null 2>&1 && pd_native=$(cygpath -m "$TMP/pd")
 check "prompt_says_headless: agy may still read the --prompt file's directory" "$(grep -cxF "$pd_native" "$TMP/args")" "1"
 check "prompt_says_headless: the review still runs" "$(grep -c 'status=OK' <<<"$out")" "1"
 
+# --- dry_run_keeps_report: a dry run leaves an earlier report alone ---
+printf 'keep\n' > "$TMP/out.json"; printf 'x\n' > "$TMP/out.json.wrote"
+run --kind task --tier heavy --prompt "$TMP/prompt.md" --dry-run
+check "dry_run_keeps_report" "$(cat "$TMP/out.json" 2>/dev/null)/$(cat "$TMP/out.json.wrote" 2>/dev/null)" "keep/x"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
