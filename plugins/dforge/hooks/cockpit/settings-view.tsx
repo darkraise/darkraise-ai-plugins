@@ -267,7 +267,10 @@ export function drawSettings(table: Elements, model: SettingsModel, act: Setting
           ? [press('settings-reset-confirm', 'Confirm reset', act.resetGroup, { hotkey: 'r', isMain: true }), press('settings-reset-cancel', 'Cancel', act.cancelReset)]
           : changed > 0 && press('settings-reset', 'Reset group', act.askResetGroup, { hotkey: 'r' })}
       </Box>
-      <Text dimColor>Saved to ~/.dforge/config.json{model.tab === 'Context' ? "; the auto-compact rows save to Claude's settings file" : ''}.</Text>
+      <Text dimColor>
+        Saved to ~/.dforge/config.json
+        {model.tab === 'Context' ? "; the auto-compact rows save to Claude's settings file" : model.tab === 'Notifications' ? "; the webhook and mention rows are kept in the cockpit's own store" : ''}.
+      </Text>
     </Box>
   )
 }
