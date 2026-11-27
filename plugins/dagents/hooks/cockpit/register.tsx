@@ -503,6 +503,13 @@ export const register: Register = on => {
     return { text: opened.isPlaced ? 'Cockpit pane opened.' : `Cockpit pane is waiting: ${opened.reason}` }
   })
 
+  // The person chose a model or effort: the launch values no longer stand in.
+  on('command.run', async ($, e, next) => {
+    if (await standsDown($)) return next(e)
+    if (e.command === 'model' || e.command === 'effort') S.launch = null
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
   on('session.measure', async ($, e, next) => {
     if (await standsDown($)) return next(e)
     const done = await next(e)
