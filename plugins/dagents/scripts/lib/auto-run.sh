@@ -530,7 +530,8 @@ ar_stop_stale() {
 # SID still owns it, it is active, and SID is gone. Return 3 otherwise.
 _ar_stop_if_stale() {
   ar_jq -e --arg s "$2" '.active == true and .session == $s' < "$1" >/dev/null 2>&1 && ar_is_stale || return 3
-  ar_put "$1" '.active = false | .stopped = $r | .pending = null' --arg r "owner session $2 is gone"
+  ar_put "$1" '.active = false | .stopped = $r | .pending = null | .stoppedAt = $now | .stoppedKind = null' \
+    --arg r "owner session $2 is gone" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 
 # ar_set_phase PHASE — refuses (return 4) execute where ar_guard does, since
