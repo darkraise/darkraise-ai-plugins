@@ -495,12 +495,20 @@ migrate_latest() {
   elif [ -e "$target" ] || [ -L "$target" ] \
     || { [ "$as" != "$f" ] && { [ -e "${f%/*}/$key.md" ] || [ -L "${f%/*}/$key.md" ]; }; }; then
     refuse "$as is the handoff for $key, and $target already exists; keep one by hand, then run dforge-migrate again"
-  elif [ "$dry" -eq 1 ] || mv -- "$f" "$target"; then
+  # A hard link fails on an existing name, so a <key>.md another session
+  # writes after the test above is never replaced, as mv would replace it.
+  elif [ "$dry" -eq 0 ] && ! ln -- "$f" "$target" 2>/dev/null; then
+    if [ -e "$target" ] || [ -L "$target" ]; then
+      refuse "$as is the handoff for $key, and $target already exists; keep one by hand, then run dforge-migrate again"
+    else
+      refuse "could not move $f to $target"
+    fi
+  elif [ "$dry" -eq 0 ] && ! rm -f -- "$f"; then
+    refuse "could not remove $f once it was linked to $target; remove it by hand"
+  else
     done_move "$as" "$target"
     [ "$dry" -eq 1 ] || rewrite_moved "$target" "$(older_spellings "$f")" \
       || printf 'dforge-migrate: %s could not be rewritten to name itself; its first prompt still names %s\n' "$target" "$f"
-  else
-    refuse "could not move $f to $target"
   fi
 }
 
