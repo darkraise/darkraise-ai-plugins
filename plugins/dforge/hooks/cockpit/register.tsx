@@ -557,6 +557,8 @@ export const register: Register = on => {
   // The engine's own commands change what the Account section and the band show: read it again once they ran.
   on('command.run', async ($, e, next) => {
     if (await standsDown($)) return next(e)
+    // The person chose a model or effort: the launch values no longer stand in.
+    if (e.command === 'model' || e.command === 'effort') S.launch = null
     const done = await next(e)
     if (REREAD_COMMANDS.includes(e.command)) {
       try {

@@ -7993,6 +7993,26 @@ describe('auto run', () => {
     ])
   })
 
+  for (const how of ['/model', 'a stopped run'] as const) {
+    test(`drops the launch model and effort after ${how}`, async ($, on) => {
+      const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
+      const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]', effortLevel: 'max' }, autoFile: files[AUTO] }
+      const clock = world(on, w)
+      const sent = sentSteps(on)
+      signedIn(on, files)
+      await $.session.start(START)
+      await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+      await settle(clock)
+      if (how === '/model') await $.command.run({ command: 'model' } as never)
+      else {
+        files[AUTO]!.text = JSON.stringify({ ...JSON.parse(files[AUTO]!.text), active: false, stopped: 'stopped' })
+        await $.tool.call({ tool: 'Bash', command: 'ls' })
+      }
+      await drain($.turn.step({ turnId: 't2', index: 0, model: 'claude-opus-5-5', effort: 'max', messageCount: 1 }))
+      expect(sent[sent.length - 1]).toEqual({ model: 'claude-opus-5-5', effort: 'max' })
+    })
+  }
+
   test('leaves the requests and the settings alone when the clear sets no model', async ($, on) => {
     const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: null })
     const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, autoFile: files[AUTO] }
