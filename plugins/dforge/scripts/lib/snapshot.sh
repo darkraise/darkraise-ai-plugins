@@ -202,6 +202,9 @@ if the next budget line says `handoff`, run the dforge handoff skill.'
     out="$s1"$'\n\n'
     [ -n "$s2" ] && out+="$s2"$'\n\n'
     [ -n "$s3" ] && out+="$s3"$'\n\n'
+    # Section 1 alone over the cap (a long fast line): cut it to the cap less
+    # the closing newline, and drop sections 2 and 3.
+    [ "${#s1}" -lt "$cap" ] || out="${s1:0:cap - 1}"$'\n\n'
   fi
   printf '%s\n' "${out%$'\n\n'}"
 }

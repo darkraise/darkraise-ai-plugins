@@ -155,6 +155,8 @@ has "its age is stated" "$out" "(0m old)"
 out=$(snapshot_build "$TS" "$REPO" 900 s-snap)
 check "a small cap still fits" "$([ "${#out}" -le 900 ] && echo yes || echo no)" "yes"
 has "a small cap keeps the ledger's newest line" "$out" "$(tr -d '\r' < "$WT/.dforge/sdd/plan/progress.md" | grep -v '^[[:space:]]*$' | tail -n 1)"
+out=$(snapshot_build "$TS" "$REPO" 200 s-snap)
+check "a cap below section 1 still fits" "$([ "${#out}" -le 200 ] && echo yes || echo no)" "yes"
 
 # --- an oversized Next session block: s1+s2 alone still fits under cap ---
 LONG_NEXT=$(printf '%08000d' 0)
