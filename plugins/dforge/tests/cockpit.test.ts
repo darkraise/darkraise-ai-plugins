@@ -4745,6 +4745,23 @@ describe('discord', () => {
     expect((quiet.embeds as Record<string, unknown>[])[0]?.description).toBeUndefined()
   })
 
+  test('a message after a cd into another repository names that repository', async ($, on) => {
+    const fetches: World['fetches'] = []
+    const w: World = { tokens: 50_000, fetches, config: { notifyAfter: 60 } }
+    let cwd = '/home/me/code/shop/web'
+    world(on, w)
+    on('session.cwd', () => ({ value: cwd }))
+    mock.store(on, { notifyUrl: WEBHOOK })
+    await $.session.start(START)
+    cwd = '/home/me/code/depot'
+    w.checkout = '/home/me/code/depot'
+    w.primary = '/home/me/code/depot'
+    await $.tool.call({ tool: 'Bash', command: 'cd /home/me/code/depot' } as never)
+    await $.turn.start({ text: 'go', turnId: 't1' })
+    await $.turn.complete({ answer: 'Done.', durationMs: 125_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect((fetches[0]?.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.author).toEqual({ name: 'devbox · depot' })
+  })
+
   test('sends a long turn\'s end, and nothing without a webhook', async ($, on) => {
     const fetches: World['fetches'] = []
     world(on, { tokens: 50_000, fetches, config: { notifyAfter: 60 } })
@@ -7584,6 +7601,30 @@ describe('auto run', () => {
       expect(runDirFor('/home/me/code/depot-wt', DEPOT, DEPOT)).toBe('/home/me/code/depot-wt')
       expect(runDirFor('/home/me/code/shop', '/home/me/code/shop', DEPOT)).toBe(DEPOT)
       expect(runDirFor('/home/me/code/shop', '/home/me/code/shop', null)).toBe('/home/me/code/shop')
+    })
+
+    test('a cd into another repository keeps auto-run calls in the bound primary', async ($, on) => {
+      const SHOP = '/home/me/code/shop'
+      const files: NonNullable<World['files']> = {
+        ...autoFiles({ pending: 'compact' }),
+        [BINDING]: { text: JSON.stringify({ primary: SHOP, nonce: 'n1', at: 1 }) },
+        [DEPOT]: { text: '', kind: 'dir' },
+      }
+      const w: World = { ...SIGNED_IN, autoRuns: [], written: {}, processRuns: [], autoFile: files[AUTO] }
+      let cwd = `${SHOP}/web`
+      const clock = world(on, w)
+      signedIn(on, files, undefined, SHOP, () => cwd)
+      await $.session.start(START)
+      cwd = DEPOT
+      w.checkout = DEPOT
+      w.primary = DEPOT
+      await $.tool.call({ tool: 'Bash', command: `cd ${DEPOT}` } as never)
+      const from = autoCalls(w).length
+      await $.turn.complete({ answer: 'Done.\n\nAuto run: compacting', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+      await settle(clock)
+      const after = autoCalls(w).slice(from)
+      expect(after.length).toBeGreaterThan(0)
+      expect(after.filter(argv => !argv.startsWith(`bash -c cd -- "$1" && shift && exec bash "$@" auto-run ${SHOP} `))).toEqual([])
     })
 
     test('reads the bound run from another repository (A2)', async ($, on) => {
