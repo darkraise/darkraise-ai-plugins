@@ -483,7 +483,7 @@ while [ $# -gt 0 ]; do
   case $1 in
     --suite)
       [ "$sub" = review ] && [ $# -ge 2 ] && [ -n "$2" ] || usage
-      # The command is written into a ledger line: a line break would forge another.
+      # The command is written into a ledger line: a line break would add a false one.
       [[ $2 != *$'\n'* && $2 != *$'\r'* ]] || usage
       suite_arg=$2; shift 2 ;;
     --suite-base) [ "$sub" = review ] && [ $# -ge 2 ] && [ -n "$2" ] || usage; suite_base_arg=$2; shift 2 ;;
