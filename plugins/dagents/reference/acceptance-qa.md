@@ -135,9 +135,13 @@ is missing) or `cannot-test: timeout`. Mutation is `red`, `green` or `n/a`.
 
 ## Never
 
-- Never edit the code under test, and never weaken a test so that it passes.
+- Never edit the code under test, except in step 4's `[WORKSPACE]/qa-mutation`
+  worktree, which step 4 removes; never weaken a test so that it passes.
 - Never leave the mutation worktree behind.
 - Never write outside the test layout and `[WORKSPACE]/acceptance-report.md`,
-  except to append to `[WORKSPACE]/qa-touched.txt`; never write, create or
-  delete a path before you have appended it there.
+  except to append to `[WORKSPACE]/qa-touched.txt` and in step 4's
+  `[WORKSPACE]/qa-mutation` worktree, which step 4 removes; never write,
+  create or delete any other path before you have appended it there. The
+  mutation worktree is not listed in `qa-touched.txt`: the session removes one
+  left behind when you return or are stopped (final-review.md step 0.5).
 - Never run a test without a timeout.

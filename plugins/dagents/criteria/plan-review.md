@@ -41,7 +41,9 @@ catch it. A task whose Step 1 reads "No new test, because" is judged by its
 reason: score LOW when the reason names neither a property that rules a fault
 out nor an existing test that catches it, or when a realistic fault exists
 that no existing test catches. Score LOW a task whose Step 1 heading is none
-of the four forms in test-step-forms.md; a line in the plan's Assumptions does
+of the four forms in test-step-forms.md: `Write the failing test`,
+``Extend the test `<file>::<name>` ``, ``Covered by Task <N>'s test `<name>` ``
+or `No new test, because <reason>`; a line in the plan's Assumptions does
 not excuse it. Score LOW a plan that writes one test per task where one test
 per behaviour would do, and name the tasks whose tests one test would cover.
 Score LOW a planned test that checks the wording of a document no script

@@ -35,7 +35,9 @@ Compare each screenshot with the state board and the UI and Output promise
 items it answers. Score HIGH when components, tokens, hierarchy, spacing
 rhythm and copy match what was promised; pixel offsets need not. Score LOW
 when the build drops an element, substitutes a different component, uses
-colours or type outside the design system, or changes the copy.
+colours or type outside the design system, or changes the copy. Ignore
+whether an item has evidence at all; Coverage owns a missing or unreadable
+screenshot.
 
 ### Every State Is Shown {#states}
 
@@ -44,14 +46,16 @@ each data state (loading, empty, error, worst-case content and the others the
 contract lists) and each control state (hover, keyboard focus, disabled,
 pending, invalid) has a screenshot or a test at the viewports and themes the
 report names, and the keyboard-only walk is evidenced. Score LOW when only the
-default path is shown.
+default path is shown. Ignore how a shown state looks against what was
+promised; Fidelity owns that.
 
 ### Deviations Are Cited {#deviations}
 
 Look at every row marked deviation and every difference you found yourself.
 Score HIGH when each one cites the user's answer, a profile decision or an
 accessibility need that forced it. Score LOW when a difference is uncited or
-marked pass.
+marked pass. Ignore missing evidence, which Coverage owns, and whether a
+cited deviation was a good choice.
 
 ## Output
 
