@@ -1,6 +1,7 @@
 # turn_refs DIR — the repository's common git directory, DIR's worktree, then
-# one "<commit><TAB><worktree>" line per local branch: the worktree that has it
-# checked out, or nothing. Status 1 outside git.
+# one "<commit><TAB><worktree>" line per distinct pair: the worktree that has
+# a branch checked out, or nothing; branches at one commit with no worktree
+# share a line. Status 1 outside git.
 turn_refs() {
   local common top
   common=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
