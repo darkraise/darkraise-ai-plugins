@@ -1106,6 +1106,9 @@ has "ui: an item no task names" "$out" "item UX-2 is named by no task"
 ui_plan '**UI/UX:** UI-1, UX-1' '**UI/UX:** UX-2' > ui-good.md
 out=$(bash "$LINT" ui-good.md 2>&1)
 lacks "ui: a covered plan has no UI/UX finding" "$out" "UI/UX"
+ui_plan "$(printf '#### Part A: layout\n\n**UI/UX:** UI-1, UX-1\n\n#### Part B: focus\n\n**UI/UX:** UX-2')" '' > ui-split.md
+out=$(bash "$LINT" ui-split.md 2>&1)
+lacks "ui: a split task's Part B citation counts" "$out" "item UX-2 is named by no task"
 sed 's#docs/ui-spec.md#docs/spec.md#' ui-bad.md > ui-nocontract.md
 out=$(bash "$LINT" ui-nocontract.md 2>&1)
 lacks "ui: a spec without a contract asks for no line" "$out" "UI/UX"
