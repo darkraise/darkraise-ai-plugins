@@ -42,7 +42,15 @@ Read the commands from each job's `run:` or `script:` steps. Keep the lines
 that test, validate or build, and that this host can run without secrets or
 services. Drop checkout, setup, install, cache and upload steps. List a
 command once, however many platforms run it. A multi-line block gives one
-command per test or validation line.
+command per test or validation line, and each keeps the `cd` and the
+variables the lines before it in that block set.
+
+Each kept command runs from the checkout's top level (`scripts/ci-mirror`
+runs it with `bash -c`), so it carries the step's context. The step's
+`working-directory:` (GitLab's `cd` in `before_script`, Azure's
+`workingDirectory:`), or a `cd <dir>` earlier in the same block, becomes a
+`cd <dir> && ` prefix. The non-secret `env:` values the job or the step sets
+(GitLab's and Azure's `variables:`) become `NAME=value ` prefixes.
 
 Note whether the workflow's `on:` declares `workflow_dispatch`. Only such a
 workflow can be started early.

@@ -64,7 +64,11 @@ final review. Because QA commits while the reviewers read, HEAD in steps 1 and
 passed as that SHA, never as the word `HEAD`; with no such line (QA skipped),
 it is the branch head. QA's own tests reach an independent reader in the scoped
 re-review instead (Fixing what it finds). While QA runs, make no commit of
-your own: QA commits on this branch.
+your own: QA commits on this branch. On a `Host: codex` plan whose judge
+restrictions are instruction-only ([native-codex.md](native-codex.md)
+§Dispatch and review), step 0.5 dispatches QA only after step 2's review and
+its after-snapshot, since that review needs no concurrent writer; steps 1 and
+2 then read the branch head.
 
 0. **Gates.** Before the gates, run
    `bash <plugin-root>/scripts/ci-mirror PLAN_FILE`, in the background when it
@@ -206,6 +210,10 @@ your own: QA commits on this branch.
       report shares that single re-dispatch. `PARK`: run
       `scripts/register add <register> "A<n>: <statement>" --state deferred --note "<the ruling>"`
       and change the spec line to `A<n>. deferred — register row <id>`.
+      `<register>` is the register whose `**Covers:**` names the spec; when
+      none does (an attended single-item spec), open one as
+      dagents:brainstorming §Opening an item register says, its Covers set to
+      the spec, and commit it with the spec edit.
       In an auto run a missing ruling follows
       [auto-run.md](auto-run.md) §Rulings.
     - `cannot-test: timeout`: no finding; it is reported, and it keeps the
@@ -246,8 +254,11 @@ your own: QA commits on this branch.
    `git worktree remove --force` once step 3 has read the run's log.
    A failing line that does not also fail at MERGE_BASE is a finding: run the
    command once at MERGE_BASE in a temporary worktree and compare the failing
-   lines, as [parallel-waves.md](parallel-waves.md) §1 does. Write each such
-   finding as `[suite] <failing line>`. A `[suite]` finding enters the fix
+   lines, as [parallel-waves.md](parallel-waves.md) §1 does. A run cut short
+   (`suite-run` exit 124, or 126 and up) is never baseline: it adds
+   `[suite] suite did not finish (exit <code>) at <head7>` whatever its
+   partial log shows, and a base run cut short makes every head failure new.
+   Write each such finding as `[suite] <failing line>`. A `[suite]` finding enters the fix
    wave as confirmed, as a `[qa]` finding does. The fix subagent runs the
    command again after its last commit through `suite-run` (**Suites.**
    below), and finishing reuses a pass at the same commit.
@@ -441,7 +452,8 @@ rejection upheld, or the ruling seat parking it), or one step 0.5 left to a
 deferred task, is the one edit allowed on an acceptance test: mark that test
 skipped with a reason naming its register row, commit it, and run
 `scripts/register add <register> "A<n>: <statement>" --state deferred --note "<the upheld rejection>"`,
-so finishing's test run is green and the statement is not lost.
+`<register>` chosen or opened as step 0.5's `PARK` says, so finishing's test
+run is green and the statement is not lost.
 
 **Redundant tests.** A `[lens:test-quality]` finding on a redundant test goes
 to the fix wave, which merges the tests into a row of one table or deletes the
