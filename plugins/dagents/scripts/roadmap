@@ -21,7 +21,8 @@
 #       add    0 written, 1 the roadmap is locked by another writer, 2 usage
 #       close  0 written, 1 refused (rows open, an earlier milestone open, or
 #              a register below it missing or failing register check) or
-#              locked, 2 usage, unknown milestone or a missing note
+#              the roadmap or a register below it locked, 2 usage, unknown
+#              milestone or a missing note
 #       reopen 0 written, 1 the roadmap is locked by another writer, 2 usage,
 #              unknown milestone or a missing note
 #       settle 0 done (whether or not a row changed), 2 usage
@@ -292,8 +293,30 @@ close_row() {
     exit 1
   fi
   # Unresolved rows are read from these registers, and one that is missing or
-  # malformed would read as having none.
-  while IFS= read -r f; do
+  # malformed would read as having none. Each is checked and read under its
+  # own lock, taken in roadmap_registers' order and held through the write:
+  # register takes only its own file's lock, so the order cannot deadlock.
+  local regs=()
+  while IFS= read -r f; do regs+=("$f"); done < <(roadmap_registers "$root" "$reg")
+  with_register_locks ${regs[@]+"${regs[@]}"} -- close_checked
+}
+
+# with_register_locks FILE... -- COMMAND [ARGS…] — run COMMAND holding the
+# lock of each FILE that exists, nested in the order given.
+with_register_locks() {
+  local f base
+  if [ "$1" = -- ]; then shift; "$@"; return; fi
+  f=$1; shift
+  if [ ! -f "$f" ]; then with_register_locks "$@"; return; fi
+  base=$(dr_lock_base "$f") || { echo "cannot lock $f" >&2; exit 2; }
+  dr_locked "$base" with_register_locks "$@"
+}
+
+# close_checked — close_row's register checks, unresolved read and write,
+# under the roadmap's lock and every register's.
+close_checked() {
+  local f out
+  for f in ${regs[@]+"${regs[@]}"}; do
     if [ ! -f "$f" ]; then
       echo "refused: $want's register does not exist: $reg"
       exit 1
@@ -303,7 +326,7 @@ close_row() {
       grep '^ERROR' <<<"$out" | sed 's/^/  /'
       exit 1
     fi
-  done < <(roadmap_registers "$root" "$reg")
+  done
   if [ -n "$(roadmap_unresolved "$root" "$reg")" ]; then
     echo "refused: rows below $want are unresolved:"
     roadmap_unresolved "$root" "$reg" | awk -F'\t' '{ printf "  %s #%s %s — %s\n", $1, $2, $3, $4 }'
