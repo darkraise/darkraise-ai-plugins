@@ -293,5 +293,12 @@ HOME="$TMP/home" DR_EXECUTORS_DIR="$TMP/reg" PANEL_AGY_TWO_GATE="$TMP/agy-gate" 
   panel --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "hyphen_id_seam" "$(grep '^agy-two-judge' <<<"$out")" "agy-two-judge claude-opus-5-5/high status=OK exit=0 out=$TMP/out/agy-two.json evidence=none"
 
+# --- gate_call_bounded: a gate whose child ignores TERM is killed and skipped ---
+printf '%s\n' '#!/usr/bin/env bash' "trap '' TERM" 'sleep 30' > "$TMP/stuck-gate"; chmod +x "$TMP/stuck-gate"
+t0=$(date +%s)
+PANEL_GATE_SECONDS=1 PANEL_AGY_GATE="$TMP/stuck-gate" panel --kind task --tier heavy --prompt "$TMP/prompt.md"
+check "gate_call_bounded" "$(head -1 <<<"$out")" "agy-judge none/none status=SKIPPED exit=0 out=- evidence=none reason=gate"
+check "gate_call_bounded: the panel returns within 15 s" "$([ $(( $(date +%s) - t0 )) -le 15 ] && echo inside || echo over)" "inside"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -25,8 +25,9 @@
 # Env seams: PANEL_<ID>_GATE and PANEL_<ID>_RUNNER, <ID> being the family id
 #   upper-cased with each hyphen turned into _, PANEL_LADDER, and
 #   PANEL_BOUND_SECONDS, the seconds from panel start at which the watchdog
-#   fires, in place of the computed bound, and PANEL_NO_SETSID, which runs
-#   the runners as on a host without setsid.
+#   fires, in place of the computed bound, PANEL_GATE_SECONDS, the bound on
+#   each gate call (90 by default; unbounded with no timeout on PATH), and
+#   PANEL_NO_SETSID, which runs the runners as on a host without setsid.
 # Exit: 0 answered, whatever the reviewers did; 2 usage error.
 set -uo pipefail
 
@@ -34,6 +35,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 LADDER="${PANEL_LADDER:-$HERE/../reference/ladder.md}"
 
 die() { printf 'run-review-panel: %s\n' "$1" >&2; exit 2; }
+. "$HERE/lib/timeout.sh"
+dforge_timeout
 
 kind="" tier="" cwd="" out_dir="" prompt="" base=""
 while [ $# -gt 0 ]; do
@@ -75,6 +78,8 @@ out_dir="$(cd "$out_dir" && pwd)"
 if [ -n "${PANEL_BOUND_SECONDS:-}" ]; then
   [[ $PANEL_BOUND_SECONDS =~ ^[0-9]+$ ]] || die "PANEL_BOUND_SECONDS must be a whole number"
 fi
+gate_secs=${PANEL_GATE_SECONDS:-90}
+[[ $gate_secs =~ ^[0-9]+$ ]] || die "PANEL_GATE_SECONDS must be a whole number"
 
 start=$(date +%s)
 ids=$(bash "$HERE/executors" ranked) || die "the executor registry could not be read"
@@ -109,7 +114,20 @@ for id in $ids; do
     gate=$(bash "$HERE/executors" path "$id" gate) || gate=""
   fi
   line=""
-  [ -n "$gate" ] && line=$(bash "$gate" 2> "$out_dir/$id.gate.log" | tail -1 | tr -d '\r')
+  # Each gate step has its own bound, but a child that ignores TERM would hold
+  # the panel, so the call is bounded too; a killed gate prints nothing and its
+  # family is skipped as gate. The answer comes back through a file: timeout
+  # on uutils signals only the gate, and a child that outlives it must not
+  # hold a pipe the panel is reading.
+  if [ -n "$gate" ]; then
+    if [ -n "$DFORGE_TIMEOUT" ]; then
+      "$DFORGE_TIMEOUT" -k 5 "$gate_secs" bash "$gate" > "$out_dir/$id.gate.out" 2> "$out_dir/$id.gate.log"
+    else
+      bash "$gate" > "$out_dir/$id.gate.out" 2> "$out_dir/$id.gate.log"
+    fi
+    line=$(tail -1 "$out_dir/$id.gate.out" 2>/dev/null | tr -d '\r')
+    rm -f "$out_dir/$id.gate.out"
+  fi
   if [[ " $line " == *" review=true "* ]]; then
     block=$(bash "$HERE/executors" get "$id" blocks.judge 2>/dev/null) || block="$id-judge"
     secs=$(first_secs "$block")
