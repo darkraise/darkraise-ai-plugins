@@ -27,8 +27,8 @@ V=$(jq -r .min_version < "$HERE/../../plugins/dagents/reference/agy-policy.json"
 printf '#!%s\necho "%s"\n' "$BASH" "$V" > "$BIN/agy"; chmod +x "$BIN/agy"
 out=$(timeout 30 env PATH="$BIN" "$BASH" "$S/agy-locate"); rc=$?
 check "only gtimeout: agy-locate bounds agy --version and reports it ok" "$rc:$out" "0:agy-locate ok version=$V root=$BIN"
-# The bound cut to 1 s, so a hang shows quickly.
-printf '#!%s\nshift; exec "%s" 1 "$@"\n' "$BASH" "$(command -v timeout)" > "$BIN/gtimeout"; chmod +x "$BIN/gtimeout"
+# The bound cut to 1 s, so a hang shows quickly; a -k option before it passes through.
+printf '#!%s\nk=(); [ "$1" = -k ] && { k=("$1" "$2"); shift 2; }\nshift; exec "%s" "${k[@]}" 1 "$@"\n' "$BASH" "$(command -v timeout)" > "$BIN/gtimeout"; chmod +x "$BIN/gtimeout"
 printf '#!%s\nexec sleep 60\n' "$BASH" > "$BIN/agy"; chmod +x "$BIN/agy"
 out=$(timeout 30 env PATH="$BIN" "$BASH" "$S/agy-locate"); rc=$?
 check "only gtimeout: an agy --version that hangs is a timeout, not a missing CLI" "$rc:$out" "1:agy-locate off reason=version-timeout"
