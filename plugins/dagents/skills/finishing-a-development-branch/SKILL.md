@@ -320,8 +320,8 @@ prose note is not written. In the same commit as the index line:
   when the row's acceptance names a check only your human partner can perform;
   a row any task cites whose complete line reads
   `(deferred by the auto run)`, even when a completed task also cites it, is set with
-  `scripts/register set <register> <id> deferred --note "deferred by the auto run: <the line's Ruling>[; unmerged task ref <ref>]"`
-  instead, with the line's `unmerged task ref <ref>` clause when it has one,
+  `scripts/register set <register> <id> deferred --note "deferred by the auto run: <the line's Ruling>[; partial commits <a7>..<b7> | ; unmerged task ref <ref>]"`
+  instead, with the line's `partial commits` or `unmerged task ref` clause when it has one,
   whichever finish action runs this step, never `done` or `verify`; a row
   already `done` or `n/a` is left as it is;
 - add a row for every `minor (deferred)` line, every `parked` line, every
