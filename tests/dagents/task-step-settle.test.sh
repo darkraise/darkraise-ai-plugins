@@ -240,6 +240,7 @@ sed 's/^|//' > "$REPO/docs/named.md" <<'PLAN'
 |
 |1. One
 |2. Two
+|3. Three
 |
 |### Task 1: One
 |
@@ -274,6 +275,16 @@ sed 's/^|//' > "$REPO/docs/named.md" <<'PLAN'
 |Run: `bash mark.sh dblclose 0``
 |Run: `  bash mark.sh padded 0 `
 |**Check:** ` ` prints nothing.
+|
+|### Task 3: Three
+|
+|**Files:**
+|- Modify: `lib/new.sh`
+|
+|**Implementer:** dagents:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|Run: `kill -TERM $$`
 PLAN
 g add -A && g commit -qm "named commands fixture"
 ts start docs/named.md 1 --suite 'bash mark.sh suite 0'
@@ -365,6 +376,34 @@ ts verdict docs/named.md 2
 check "named spans: verdict exits 0" "$rc" "0"
 check "named spans: only the trimmed suite command and the trimmed span ran" "$(ls "$MARK_DIR" | sort | tr '\n' ' ')" "padded suite2 "
 check "named spans: the spans name nothing" "$(grep -c '(command not named in the plan)$' <<<"$out")" "2"
+
+# A baseline command killed by a signal answers neither pass nor fail.
+rm -f "$MARK_DIR"/*
+ts start docs/named.md 3 --suite 'bash mark.sh suite3 0'
+printf 'echo three\n' >> "$REPO/lib/new.sh"
+g add -A && g commit -qm "named work 3"
+(cd "$REPO" && MARK_DIR="$TMP/marks-sr" bash "$S/suite-run" -- bash -c 'bash mark.sh suite3 0' >/dev/null 2>&1)
+ts review docs/named.md 3
+cat > "$NWS/task-3-review-report.md" <<'REPORT'
+## Verdict
+spec: cannot-verify
+quality: approved
+scores: spec 15 / scope 17 / verification 12 / quality 16
+
+## Strengths
+Fine.
+
+## Findings
+
+## Cannot verify
+- cannot-verify: baseline kill -TERM $$, expect fail — killed
+
+## Assessment
+Fine.
+REPORT
+ts verdict docs/named.md 3
+check "named: a signalled baseline command is left for the seat" \
+  "$(grep -cxF 'cannot-verify: baseline kill -TERM $$, expect fail — killed' <<<"$out") $(grep -c '^Task 3: Ruling: cannot-verify — settled by task-step check baseline' "$NLEDGER")" "1 0"
 
 # A symbol that only a binary file holds is absent, and a root file written ./<name>
 # reads as a path when verdict runs from a subdirectory.
