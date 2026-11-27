@@ -371,9 +371,10 @@ plan_ledger() {
 
 # plan_apply_amendments PLAN AMEND — the plan with every amendments.md entry
 # applied in file order; the plan unchanged when AMEND is missing or empty,
-# with the read's own status. Exit 1, naming the entry on stderr, when an entry
-# does not apply: its Old lines must match a contiguous run of whole lines of
-# its target exactly once.
+# with the read's own status. Exit 1, naming the entry on stderr, before
+# applying any, when an entry lacks a closed Old or a closed New block, or does
+# not apply: its Old lines must match a contiguous run of whole lines of its
+# target exactly once.
 plan_apply_amendments() {
   if [ ! -s "${2:-}" ]; then tr -d '\r' < "$1"; return; fi
   awk "$_PLAN_AWK"'
@@ -390,7 +391,7 @@ plan_apply_amendments() {
     FNR == NR {
       sub(/\r$/, "")
       if (mode != "" ) {
-        if (close_marker($0, open)) { mode = ""; next }
+        if (close_marker($0, open)) { CLOSED[m, mode] = 1; mode = ""; next }
         if (mode == "old") OLD[m, ++OC[m]] = $0; else NEW[m, ++NC[m]] = $0
         next
       }
@@ -409,6 +410,13 @@ plan_apply_amendments() {
     }
     { sub(/\r$/, ""); L[++n] = $0 }
     END {
+      # An entry is applied only whole: a missing or unclosed block would
+      # otherwise apply as an empty one and delete its Old text.
+      for (e = 1; e <= m; e++)
+        if (!((e, "old") in CLOSED) || !((e, "new") in CLOSED)) {
+          print "amendment " ID[e] " is not complete: it needs a closed Old and a closed New block" > "/dev/stderr"
+          exit 1
+        }
       for (e = 1; e <= m; e++) {
         bounds(e)
         k = OC[e] + 0; hits = 0
