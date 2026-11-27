@@ -1013,6 +1013,13 @@ D="$TMP/rs5"; rs_repo "$D"
 rs_state "$D" '.active = false | .stopped = "x" | .phase = "spec" | .plan = null | .branch = "gone"'
 rs_resume "$D"
 check "resume_early_phase: an in-place run stopped in the spec phase resumes without its branch" "$status" "0"
+D="$TMP/rs6"; rs_repo "$D"; git -C "$D" switch -q main
+W="$TMP/rs6-wt"; git -C "$D" worktree add -q "$W" -b w
+mkdir -p "$W/docs"; printf '# W\n' > "$W/docs/wplan.md"
+rs_state "$D" '.active = false | .stopped = "x" | .isolation = "worktree" | .branch = null | .plan = "docs/wplan.md"'
+rs_resume "$W"
+check "resume_early_phase: a worktree run stopped before its ledger exists resumes from its worktree" \
+  "$status:$(jq -r .active "$D/.dagents/sdd/auto-run.json")" "0:true"
 
 # --- one plugin version per run: copies of this plugin at other roots ---
 vcopy() { # vcopy DIR VERSION — this plugin's scripts, agents and manifest at DIR, with VERSION
