@@ -13,15 +13,18 @@
 # document deleted from the mirror under dforge/archive/<stamp>/; restore
 # brings back the newest archived copy of a document name; revision prints
 # NAME@r<id>, the darkmem revision a synced, unchanged document cites. A
-# disabled or unmapped repository is local mode: every command except import
-# prints one line and does nothing, and only reconcile and status act while a
-# family is still in the mirror.
+# disabled or unmapped repository is local mode: status, pull, push and
+# reconcile print one line and exit 0, and import exits 2. restore and revision
+# need documents applied darkmem, so in local mode (or with documents applied
+# local) restore exits 2 and revision prints its `refused:` line and exits 1.
+# Only reconcile and status act while a family is still in the mirror.
 #
 # Usage: darkmem-sync status | pull | push [--handoff FILE [--workstream KEY]] | import [--replace] | restore NAME | revision NAME | reconcile
 # Exit: 0 done, or no family applied darkmem; 1 conflicts, refused or failed
-#       items, a refused restore, revision or reconcile move, or another sync
-#       holds the mirror; 2 usage, a malformed config, stores or state file, or import in
-#       local mode; 3 darkmem unreachable, the API key unset (pull, push,
+#       items, a refused restore, revision or reconcile move, revision with
+#       documents not applied darkmem, or another sync holds the mirror; 2
+#       usage, a malformed config, stores or state file, import in local mode,
+#       or restore with documents not applied darkmem; 3 darkmem unreachable, the API key unset (pull, push,
 #       import, restore, revision), or an answer that stopped the command; 4 an
 #       unexpected error (a bug)
 set -uo pipefail
