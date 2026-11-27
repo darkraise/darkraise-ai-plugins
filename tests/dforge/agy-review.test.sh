@@ -112,7 +112,7 @@ STUB_AGY_SIDE=reorder STUB_AGY_MODE=review run --kind task --tier heavy --prompt
 has "a config reorder that changes the last value is wrote" "$out" "evidence=wrote reason=wrote"
 git -C "$TMP/work" config --unset-all dforge.order
 
-rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_FINDING='{"severity":"Minor","where":"a","what":"quota wording"}' STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
+rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_FINDING='{"severity":"Minor","file":"a","line":1,"summary":"quota wording"}' STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
 has "a clean answer mentioning quota is a list" "$out" "status=OK"
 check "a clean answer marks nothing" "$([ -f "$DR_AGY_SESSION_DIR/s1.json" ] && echo marked || echo none)" "none"
 
@@ -241,6 +241,12 @@ reset_work
 STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md" --out "$TMP/work/review.json"
 check "out_inside_cwd_ok" "$out" "agy-judge claude-opus-5-5/high status=OK exit=0 out=$TMP/work/review.json evidence=none"
 reset_work
+
+# --- nested_answer_checked: each finding is held to the schema too ---
+STUB_AGY_FINDING='{"severity":"High","file":"a.sh","line":3,"summary":"x"}' STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
+has "nested_answer_checked: a severity outside the enum" "$out" "reason=schema"
+STUB_AGY_FINDING='{"severity":"Minor","file":"a.sh","summary":"x"}' STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
+has "nested_answer_checked: a finding without line" "$out" "reason=schema"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

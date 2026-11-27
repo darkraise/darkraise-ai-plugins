@@ -26,6 +26,7 @@ GATE="${CODEX_REVIEW_GATE:-$HERE/codex-gate}"
 . "$HERE/lib/executor-session.sh"
 . "$HERE/lib/timeout.sh"
 . "$HERE/lib/native-path.sh"
+. "$HERE/lib/schema-check.sh"
 
 die() { printf 'run-codex-review: %s\n' "$1" >&2; exit 2; }
 
@@ -151,22 +152,7 @@ fi
 # Final reviews are prose and only have to hold a non-blank character.
 valid_output() {
   [ -n "$schema" ] || { grep -q '[^[:space:]]' "$out" 2>/dev/null; return; }
-  jq -e -s --slurpfile schema "$schema" '
-    def valid($s):
-      . as $v |
-      (if $s.type == "object" then
-         type == "object" and
-         (($s.required - keys) | length == 0) and
-         (if $s.additionalProperties == false then
-            ((keys - ($s.properties | keys)) | length == 0)
-          else true end) and
-         all(to_entries[]; .key as $k | .value | valid($s.properties[$k]))
-       elif $s.type == "array" then type == "array" and all(.[]; valid($s.items))
-       elif $s.type == "integer" then type == "number" and floor == .
-       else type == $s.type end) and
-      (if $s | has("enum") then $s.enum | index($v) != null else true end);
-    length == 1 and (.[0] | valid($schema[0]))
-  ' "$out" >/dev/null 2>&1
+  dr_schema_valid "$schema" "$out"
 }
 
 # A schema-valid review that read nothing: every score 1 and no finding to

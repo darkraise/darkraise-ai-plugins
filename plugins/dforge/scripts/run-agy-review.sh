@@ -26,6 +26,7 @@ FINAL_CRITERIA="$HERE/../criteria/codex-final-review.md"
 . "$HERE/lib/executor-session.sh"
 . "$HERE/lib/native-path.sh"
 . "$HERE/lib/timeout.sh"
+. "$HERE/lib/schema-check.sh"
 
 die() { printf 'run-agy-review: %s\n' "$1" >&2; exit 2; }
 
@@ -373,13 +374,9 @@ classify() { # classify <model> <log-prefix>; sets result and reason (empty when
     reason=refused; return
   fi
   if [ "$ok" = no ] || [ "$raw" = yes ]; then reason=error; return; fi
-  if ! jq -e --argjson s "$(jq -c . < "$schema")" '
-      . as $r | (.structured_output | type) == "object" and
-      ((($s.required // []) - (.structured_output | keys)) | length == 0) and
-      ([$s.properties // {} | to_entries[]
-        | select((.value.enum | type) == "array")
-        | select(.key as $k | .value.enum | index([$r.structured_output[$k]]) == null)] | length == 0)' \
-      <<<"$result" >/dev/null 2>&1; then
+  # The whole answer, findings and their fields included.
+  if ! jq '.structured_output' <<<"$result" > "$snapdir/answer.json" 2>/dev/null ||
+    ! dr_schema_valid "$schema" "$snapdir/answer.json"; then
     reason=schema; return
   fi
   if [ "$kind" = final ] && ! jq -e '.structured_output.review | type == "string" and test("\\S")' \
