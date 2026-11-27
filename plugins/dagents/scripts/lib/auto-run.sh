@@ -122,6 +122,17 @@ ar_busy_refusal() {
   return 4
 }
 
+# ar_stale_holds — true, with the refusal on stderr, when the recorded run is
+# active, its owner gone, and its state still holds a decision or a ruling: a
+# start over it would lose them, so stop --stale reads them first.
+ar_stale_holds() {
+  local counts
+  ar_state | ar_jq -e '.active == true' >/dev/null 2>&1 && ar_is_stale || return 1
+  counts=$(ar_state | ar_jq -r '"\((.decisions // []) | length) \((.rulings // []) | length)"')
+  [ -n "$counts" ] && [ "$counts" != "0 0" ] || return 1
+  echo "auto-run: the run of gone session $(ar_get session) ($(ar_get spec)) still holds ${counts% *} pending decisions and ${counts#* } rulings; run auto-run stop --stale to read them, then start again" >&2
+}
+
 # ar_create_unless_busy FORCE PATH [jq options…] FILTER — ar_create, run under
 # the state's lock: a start that waited for the lock looks again, because the
 # run it found absent may have been started meanwhile.
@@ -129,6 +140,7 @@ ar_create_unless_busy() {
   local force=$1
   shift
   if [ "$force" != 1 ] && ar_busy; then ar_busy_refusal; return; fi
+  if [ "$force" != 1 ] && ar_stale_holds; then return 4; fi
   ar_create "$@"
 }
 
@@ -142,6 +154,7 @@ ar_start() {
   age=$(ar_beat_age "$AR_SESSION") && [ "$age" -le "$AR_BEAT_SECONDS" ] \
     || { echo "auto-run: no live cockpit in this session" >&2; return 2; }
   if [ "$force" != 1 ] && ar_busy; then ar_busy_refusal; return; fi
+  if [ "$force" != 1 ] && ar_stale_holds; then return 4; fi
   top=$(git rev-parse --show-toplevel)
   dagents_stores_init "$top"
   if [ -z "$register" ]; then
