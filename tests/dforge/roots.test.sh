@@ -196,6 +196,9 @@ else
   printf '{"broken": \n' > "$HOME/.dforge/stores.json"
   out=$(cd "$REPO" && _DFORGE_KEY= PATH="$NONODE_PATH" dforge_ledger_dir p1 2>&1); rc=$?
   check "no node, a stores.json that does not parse: exit 2, never local" "$rc:$(grep -c 'does not parse' <<<"$out")" "2:1"
+: > "$HOME/.dforge/stores.json"
+  out=$(cd "$REPO" && _DFORGE_KEY= PATH="$NONODE_PATH" dforge_ledger_dir p1 2>&1); rc=$?
+  check "no node, an empty stores.json: exit 2, never local" "$rc:$(grep -c 'does not parse' <<<"$out")" "2:1"
   printf '{"/elsewhere":{"documents":"darkmem","progress":"darkmem"}}\n' > "$HOME/.dforge/stores.json"
   check "no node, darkmem applied only for another checkout: still local" "$(cd "$REPO" && _DFORGE_KEY= PATH="$NONODE_PATH" dforge_ledger_dir p1 2>&1)" "$TOP/.dforge/sdd/p1"
   rm -f "$HOME/.dforge/stores.json"

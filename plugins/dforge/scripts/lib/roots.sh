@@ -74,11 +74,13 @@ _dforge_applied_darkmem() {
   if common=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
     primary=$(git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null) || primary=$1
   fi
-  jq -e --arg k "$primary" '.[$k] | objects | .documents == "darkmem" or .progress == "darkmem"' \
+  # Every file that parses gives true or false, so exit 4 (no result) is an
+  # empty file, which may have held either.
+  jq -e --arg k "$primary" '(.[$k] | objects | .documents == "darkmem" or .progress == "darkmem") // false' \
     < "$stores" >/dev/null 2>&1
   case $? in
     0) return 0 ;;
-    1 | 4) return 1 ;;
+    1) return 1 ;;
     *) printf 'roots.sh: %s does not parse, so darkmem stores may be applied\n' "$stores" >&2; return 0 ;;
   esac
 }
