@@ -821,3 +821,21 @@ test("a second mirror receives the project checkpoint", async t => {
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.equal(read(path.join(s.workRoot, "handoff", "P.md")), note);
 });
+
+test("an older checkpoint from a reopened workstream never replaces a newer synced handoff", async t => {
+  const s = await setup(t);
+  const marked = (key, subject, text) => `${text}<!-- next-step: kind=plan key=${key} session=- done=0 closed=0 subject=${subject} at=1795000000 -->\n`;
+  await s.seed.append({ project: "proj", workstream: "c", entries: [{ kind: "checkpoint", body: keyed("c", "# Handoff c\n") }] });
+  assert.equal((await s.pull()).code, 0);
+  const b = await s.seed.append({ project: "proj", workstream: "b", entries: [{ kind: "checkpoint", body: marked("k", "docs/dforge/plans/b.md", "# Older handoff from b\n") }] });
+  await s.seed.updateWorkstream(b.workstream.id, { state: "closed" });
+  const newer = marked("k", "docs/dforge/plans/a.md", "# Newer handoff from a\n");
+  await s.seed.append({ project: "proj", workstream: "a", entries: [{ kind: "checkpoint", body: newer }] });
+  assert.equal((await s.pull()).code, 0);
+  assert.equal(read(handoffFile(s, "k")), newer);
+  await s.seed.updateWorkstream(b.workstream.id, { state: "open" });
+  const result = await s.pull();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, / 0 checkpoints;/);
+  assert.equal(read(handoffFile(s, "k")), newer);
+});

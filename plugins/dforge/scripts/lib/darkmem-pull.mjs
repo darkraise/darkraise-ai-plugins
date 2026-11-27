@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { failItem } from "./darkmem-client.mjs";
 import {
-  DOC_PREFIX, caseGroups, checkpointAtOf, familiesOf, handoffMarker, isArchiveUri, isoMicros, newestCheckpointAt, recordCheckpointAt, refuseLinkedDirs, sha256, uriFamily, uriProblem,
+  DOC_PREFIX, caseGroups, checkpointAtOf, checkpointTarget, decodeUtf8, familiesOf, handoffMarker, isArchiveUri, isoMicros, newestCheckpointAt, recordCheckpointAt, refuseLinkedDirs, sha256, uriFamily, uriProblem,
   uriToLocal, usableHandoffKey, validKey, writeFileAtomic,
 } from "./darkmem-mirror.mjs";
 import { readRegular } from "./darkmem-progress-move.mjs";
@@ -301,17 +301,28 @@ export async function pullCheckpoints({ cfg, client, roots, state, persist, repo
     const file = path.join(roots.workRoot, "handoff", `${key}.md`);
     const remote = Buffer.from(checkpoint.body, "utf8");
     const remoteHash = sha256(remote);
-    let local;
+    let bytes;
     try {
-      local = localHash(file);
+      bytes = localBytes(file);
     } catch (error) {
       report.failures.push(`${rel}: could not be read (${error.code}); not pulled`);
       report.partial = true;
       continue;
     }
+    const local = bytes && sha256(bytes);
     if (local !== null && local !== remoteHash && local !== state.checkpoints[key]) {
       report.conflicts.push(`${rel}: changed locally, and darkmem holds a newer checkpoint; ${RESOLVE}`);
       continue;
+    }
+    // The synced handoff may be another workstream's newer checkpoint for this
+    // key, as when a closed workstream is reopened without a new checkpoint.
+    if (local !== null && local !== remoteHash) {
+      const owner = checkpointTarget(decodeUtf8(bytes) ?? "", { marker: true })?.slug;
+      const ownerAt = owner ? checkpointAtOf(state, owner) : null;
+      if (ownerAt && isoMicros(checkpoint.created_at) <= isoMicros(ownerAt)) {
+        seen({ checkpoint, workstream });
+        continue;
+      }
     }
     try {
       if (local !== remoteHash) {
