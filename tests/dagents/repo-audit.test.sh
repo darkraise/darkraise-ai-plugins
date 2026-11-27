@@ -414,13 +414,18 @@ count_in() { # count_in TEXT NEEDLE — how many times NEEDLE occurs in TEXT
   echo "$n"
 }
 # --- a worktree whose path holds a newline ---
-NR="$TMP/nl-audit"
-git init -q -b main "$NR"
-git -C "$NR" commit -q --allow-empty -m init
-NW="$TMP/nl"$'\n'"audit"
-git -C "$NR" worktree add -q -b nl "$NW"
-out=$(cd "$NR" && bash "$SCRIPT" 2>/dev/null)
-check "worktree list: a path with a newline is listed once, whole" \
-  "$(count_in "$out" "- \`$NW\`"):$(grep -c 'skipped' <<<"$out")" "1:0"
+case "$(uname -s)" in
+  MINGW* | MSYS* | CYGWIN*) printf 'skip - worktree list: a path with a newline is listed once, whole (Windows file names cannot hold a newline)\n' ;;
+  *)
+    NR="$TMP/nl-audit"
+    git init -q -b main "$NR"
+    git -C "$NR" commit -q --allow-empty -m init
+    NW="$TMP/nl"$'\n'"audit"
+    git -C "$NR" worktree add -q -b nl "$NW"
+    out=$(cd "$NR" && bash "$SCRIPT" 2>/dev/null)
+    check "worktree list: a path with a newline is listed once, whole" \
+      "$(count_in "$out" "- \`$NW\`"):$(grep -c 'skipped' <<<"$out")" "1:0"
+    ;;
+esac
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
