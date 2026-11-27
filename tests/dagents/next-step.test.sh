@@ -1262,8 +1262,9 @@ count_in() { # count_in TEXT NEEDLE — how many times NEEDLE occurs in TEXT
 NLW="$TMP/roots"$'\n'"wt"
 git -C "$GREPO" worktree add -q -b roots-newline "$NLW"
 roots=$(cd "$GREPO" && bash -c '. "$1/lib/plan.sh"; dagents_stores_init "$2" 2>/dev/null; eval "$(sed -n "/^_plan_roots() {\$/,/^}\$/p" "$1/next-step")"; _plan_roots "$2"' _ "$HERE/../../plugins/dagents/scripts" "$GREPO" 2>&1)
-check "worktree list: a path with a newline is one root, whole" \
-  "$(count_in "$roots" "$NLW"$'\t'):$(grep -cx "$TMP/roots"$'\t' <<<"$roots")" "1:0"
+# Read as its readers read it, line by line: no fragment of the path is a root.
+check "worktree list: a path with a newline gives no bogus root" \
+  "$(grep -c "$TMP/roots" <<<"$roots"):$(awk -F'\t' '$1 !~ /^(\/|[A-Za-z]:)/' <<<"$roots" | grep -c .)" "0:0"
 git -C "$GREPO" worktree remove --force "$NLW"
 git -C "$GREPO" branch -q -D roots-newline
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

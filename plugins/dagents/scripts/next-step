@@ -189,7 +189,9 @@ handoff_counts() {
 
 # _plan_roots ROOT — "<root>\t<name prefix>" for each place a plan name can be
 # read from: the docs root in use, then the docs directory and top level of the
-# checkout and of every worktree (the primary among them).
+# checkout and of every worktree (the primary among them). A worktree whose
+# path holds a newline is left out: the records are lines, which every reader
+# splits, so its path would read as two bogus roots.
 _plan_roots() {
   local top=${_DAGENTS_TOP:-$1} tree
   printf '%s\t%s\n' "$_DAGENTS_DOCS_ROOT" "$(dagents_dir_rel docs "$top")"
@@ -197,6 +199,7 @@ _plan_roots() {
   { printf 'worktree %s\0' "$top"; git -C "$top" worktree list --porcelain -z 2>/dev/null; } |
   while IFS= read -r -d '' tree; do
     case $tree in 'worktree '*) tree=${tree#worktree } ;; *) continue ;; esac
+    case $tree in *$'\n'*) continue ;; esac
     tree=$(_dagents_path "$tree")
     printf '%s\t%s\n' "$(dagents_dir docs "$tree")" "$(dagents_dir_rel docs "$tree")"
     printf '%s\t\n' "$tree"
