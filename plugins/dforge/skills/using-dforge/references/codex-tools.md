@@ -122,6 +122,19 @@ of the path it prints, without `.md`, is the key (`adhoc-<8 hex>`); pass
 the key its first prompt names. This covers every such call, closing-a-milestone
 steps 2, 6 and 9 and finishing-a-development-branch Steps 1 and 7 included.
 
+## Invoking a skill
+
+Where a skill says to call the Skill tool with `dforge:<name>`, open
+`<plugin-root>/skills/<name>/SKILL.md` and follow it in the same turn. Naming
+the skill in a message is still not invoking it.
+
+## Asking your human partner
+
+`scripts/ask` with no plan argument exits 2 on Codex (`scripts/ask:35`: no
+session id), and it only releases a Claude Code Stop hook. Ask in chat and end
+the turn on the question. This covers finishing-a-development-branch's
+`scripts/ask "<question>"` and closing-a-milestone step 6.
+
 ## Codex App Finishing
 
 When the sandbox blocks branch/push operations (detached HEAD in an
