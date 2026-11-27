@@ -47,7 +47,7 @@ _ss_read() {
   [ "$2" != launches ] || stamp=$(_ss_stamp "$1") || stamp=-1
   out=$(jq -r --arg sid "$1" --arg reader "$2" --argjson stamp "$stamp" '
       def hm: try (. / 1000 | floor | localtime | strftime("%H:%M")) catch "-";
-      def text: tostring | gsub("[\t\r\n]+"; " ") | .[0:80];
+      def text: tostring | gsub("[\t\r\n\u001f]+"; " ") | .[0:80];
       if type != "object" then "unparseable"
       elif .session != $sid then "session mismatch"
       elif $reader == "window" then
@@ -57,7 +57,7 @@ _ss_read() {
       elif .partial != false then "partial"
       elif $stamp < 0 or ((.updated | type) != "number") or .updated < $stamp * 1000 then "stale"
       else "ok", (.launches // [] | .[]
-        | "ok\t\(.kind)\t\(.id)\t\(.startedAt | hm)\t\(if (.outputFile // "") == "" then "-" else .outputFile end)\t\(.what // "" | text)\t\(if .service == true then "service" elif .timer == true then "timer" else "work" end)")
+        | "ok\u001f\(.kind)\u001f\(.id)\u001f\(.startedAt | hm)\u001f\(if (.outputFile // "") == "" then "-" else .outputFile end)\u001f\(.what // "" | text)\u001f\(if .service == true then "service" elif .timer == true then "timer" else "work" end)")
       end' < "$f" 2>/dev/null | tr -d '\r') || out=unparseable
   [ -n "$out" ] || out=unparseable
   case $out in
@@ -87,7 +87,9 @@ ss_model() {
 ss_launches() {
   local out kind id start file what role idle
   out=$(_ss_read "$1" launches) || return 1
-  while IFS=$'\t' read -r _ kind id start file what role; do
+  # \037 separates the fields: a tab is whitespace to IFS, so an empty field
+  # between tabs would collapse and shift the role into the what column.
+  while IFS=$'\037' read -r _ kind id start file what role; do
     [ -n "$kind" ] || continue
     if declare -F inflight_idle >/dev/null 2>&1; then idle=$(inflight_idle "$kind" "$id" "$file" "${2:-}")
     else idle="idle -"; fi

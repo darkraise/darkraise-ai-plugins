@@ -32,6 +32,10 @@ state s-1 "$(ms)"
 check "window" "$(ss_window s-1)" "200000"
 check "model" "$(ss_model s-1)" "claude-x"
 check "launches: six fields with the service role" "$(ss_launches s-1 | cut -f1,2,4,5,6)" $'shell\tb1\tidle -\tDev server\tservice'
+jq -nc --argjson u "$(ms)" --argjson at "$(ms)" \
+  '{session:"s-1", updated:$u, window:200000, model:"claude-x", partial:false,
+    launches:[{id:"a1", kind:"agent", what:"", startedAt:$at, outputFile:"", service:false, timer:false}]}' > "$SD/s-1.json"
+check "launches: an empty what keeps the role column" "$(ss_launches s-1 | cut -f5,6)" $'\twork'
 
 state s-1 "$(ms 120)"
 ss_launches s-1 >/dev/null; rc=$?
