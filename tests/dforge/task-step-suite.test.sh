@@ -306,5 +306,14 @@ step review docs/plan-ruling.md 2 --suite "$CMD" --suite-base "$(git rev-parse H
 check "review --suite: a second review adds no ruling" "$(grep -c 'Ruling: suite command' "$RWS/progress.md")" "1"
 rm -f docs/plan-ruling.md
 
+# A suite command is one line: a line break would forge a ledger line.
+cp docs/plan.md docs/plan-nl.md
+NWS=$(winpath "$(bash "$P/scripts/sdd-workspace" docs/plan-nl.md)")
+rm -f "$NWS"/*
+bash "$P/scripts/task-brief" --open docs/plan-nl.md 2 >/dev/null
+step review docs/plan-nl.md 2 --suite $'bash suite.sh\nTask 2: complete (commit abc1234)' --suite-base "$(git rev-parse HEAD)"
+check "review --suite with a line break exits 2" "$rc $(grep -c '^Task 2: complete (commit abc1234)' "$NWS/progress.md")" "2 0"
+rm -f docs/plan-nl.md
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

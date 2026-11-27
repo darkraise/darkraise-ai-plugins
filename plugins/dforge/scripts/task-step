@@ -469,7 +469,11 @@ plan_arg=$1; shift
 first="" rereview_arg="" suite_arg="" suite_base_arg="" suite_base_sha_arg=""
 while [ $# -gt 0 ]; do
   case $1 in
-    --suite) [ "$sub" = review ] && [ $# -ge 2 ] && [ -n "$2" ] || usage; suite_arg=$2; shift 2 ;;
+    --suite)
+      [ "$sub" = review ] && [ $# -ge 2 ] && [ -n "$2" ] || usage
+      # The command is written into a ledger line: a line break would forge another.
+      [[ $2 != *$'\n'* && $2 != *$'\r'* ]] || usage
+      suite_arg=$2; shift 2 ;;
     --suite-base) [ "$sub" = review ] && [ $# -ge 2 ] && [ -n "$2" ] || usage; suite_base_arg=$2; shift 2 ;;
     --rereview) [ "$sub" = verdict ] && [ $# -ge 2 ] && [[ $2 =~ ^[1-9][0-9]*$ ]] || usage; rereview_arg=$2; shift 2 ;;
     -*) usage ;;
@@ -505,6 +509,12 @@ plan_task_text "$src" "$first" >/dev/null || die "no Task $first in $plan" 3
 slug=$(basename "$plan" .md)
 ws=$(dforge_workspace "$slug" "$ctx")
 ledger="$(dforge_ledger_dir "$slug" "$ctx")/progress.md"
+if [ -f "$ledger" ]; then
+  named=$(ledger_plan "$ledger")
+  if [ -n "$named" ] && [ -z "$(plan_ledger "$plan")" ]; then
+    die "$ledger belongs to $named, not $plan"
+  fi
+fi
 state="$ws/task-$first-step.json"
 plugin_root=$(cd "$HERE/.." && pwd)
 brief="$ws/task-$first-brief.md"
