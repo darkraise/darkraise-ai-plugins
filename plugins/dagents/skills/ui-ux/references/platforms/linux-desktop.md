@@ -1,6 +1,6 @@
 # Linux desktop
 
-**Status:** unverified — no session has run this guide yet. The first run replaces this line with the date and what ran.
+**Status:** unverified — no session has run this guide yet. Never edit this file, which ships with the plugin; the proof report's `## Automated checks` records that the guide was unverified and which of its steps ran.
 
 - **Launch:** `Xvfb :99 -screen 0 1440x900x24 &` (note its PID), then the app
   with `DISPLAY=:99` as a background task. GTK, Qt and Tauri apps all run

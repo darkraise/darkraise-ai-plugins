@@ -193,6 +193,7 @@ You MUST complete each phase before proceeding to the next.
    - One-off test script if no framework
    - MUST have before fixing
    - Use the `dagents:test-driven-development` skill for writing proper failing tests
+   - Fix will change anything a user sees or does? Run `dagents:ui-ux` Shape at touch depth now, so the delta is written before the fix
 
 2. **Implement Single Fix**
    - Address the root cause identified
@@ -205,7 +206,7 @@ You MUST complete each phase before proceeding to the next.
    - No other tests broken?
    - Issue actually resolved?
    - Use the `dagents:verification-before-completion` skill before claiming success
-   - Fix changes anything a user sees or does? Run `dagents:ui-ux` at touch depth: its delta and proof come before you claim the bug fixed
+   - Fix changes anything a user sees or does? Finish `dagents:ui-ux` Prove before you claim the bug fixed
 
 4. **If Fix Doesn't Work**
    - STOP

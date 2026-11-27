@@ -44,7 +44,7 @@ and name `ui-proof check` as the done condition.
 | Depth | When | What it takes |
 |---|---|---|
 | touch | a bug fix, a copy or styling change, one surface | a `## Delta` of 5 to 15 items in the proof report, a proof of that surface, the judge-sonnet-high seat |
-| feature | a new or changed flow or screen | a `## UI/UX contract` section in the spec, a walkthrough of every flow it touches, the judge-opus seat |
+| feature | a new or changed flow or screen | a `## UI/UX contract` section in the spec (on brainstorming's bounded path, which writes no spec, that section goes in the proof report, whose `**Contract:**` then names the report itself), a walkthrough of every flow it touches, the judge-opus seat |
 | product | a new product or surface family | the feature depth plus the profile's design decisions, written or extended |
 
 ## The project UI profile

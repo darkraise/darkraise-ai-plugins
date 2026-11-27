@@ -87,9 +87,9 @@ row in the proof report proves it.
 
 ## The touch delta
 
-At touch depth there is no spec section. The proof report starts with a
-`## Delta` section in the same item format: the depth line, then 5 to 15
-items naming the states, viewports, themes and neighbouring surfaces the
+At touch depth there is no spec section. The proof report opens with
+`# UI proof:` like every proof report, and carries a `## Delta` section above
+`## Results`, in the same item format: the depth line, then 5 to 15 items naming the states, viewports, themes and neighbouring surfaces the
 change affects.
 
 ````markdown
@@ -109,7 +109,9 @@ change affects.
 and read before every UI task. Ask the user for what the repository cannot
 tell you. `**UI paths:**` takes bash case patterns matched against
 repository-relative paths (`*` crosses `/`); without it the platform defaults
-apply (`scripts/ui-proof paths` prints them).
+apply (`scripts/ui-proof paths` prints them). `scripts/ui-lint` recognises a
+token file by its name alone (`*token*`, `*theme*`, `*palette*`, `*variables*`,
+`*.config.*`), so raw colour and size values belong in such a file.
 
 ````markdown
 # UI profile
@@ -119,7 +121,6 @@ apply (`scripts/ui-proof paths` prints them).
 **UI test runner:** `npx playwright test`
 **UI paths:** `src/*.tsx` `src/*.css`
 **Design system:** darkraise-ui 7.x, theme in `src/theme.config.ts`
-**Token paths:** `src/theme.config.ts`
 **Viewports:** 375x812, 768x1024, 1440x900
 **Themes:** light, dark
 **Users:** photographers culling a shoot on a laptop, keyboard-heavy

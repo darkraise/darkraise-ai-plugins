@@ -1,6 +1,6 @@
 # Android
 
-**Status:** unverified — no session has run this guide yet. The first run replaces this line with the date and what ran.
+**Status:** unverified — no session has run this guide yet. Never edit this file, which ships with the plugin; the proof report's `## Automated checks` records that the guide was unverified and which of its steps ran.
 
 - **Launch:** `emulator -avd <name> -no-window -no-audio &` (note its PID),
   `adb wait-for-device`, then `adb install -r <apk>` and
