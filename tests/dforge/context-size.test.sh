@@ -105,11 +105,12 @@ posix() { if command -v cygpath >/dev/null 2>&1; then cygpath -u "$1"; else prin
 check "no usage: line" "$out" "budget: unknown of 465k — unknown — no usage entry in $(posix "$T")"
 
 # --- a postTokens that is no positive integer reads as unknown ---
+# The transcript names no model, so no window is known and the line has no "of".
 boundary "\"x[\$(touch $TMP/pwned)]\"" > "$T"
 run
 check "a string postTokens is unknown and never evaluated" \
   "$status|$out|$([ -e "$TMP/pwned" ] && echo pwned || echo clean)" \
-  "3|budget: unknown of 465k — unknown — no usage entry in $(posix "$T")|clean"
+  "3|budget: unknown — unknown — no usage entry in $(posix "$T")|clean"
 boundary 0 > "$T"; run; a=$status
 boundary 1.5 > "$T"; run
 check "a zero or fractional postTokens is unknown" "$a|$status" "3|3"
