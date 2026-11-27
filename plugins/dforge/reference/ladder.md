@@ -138,8 +138,11 @@ claude-opus-5-5 high 5400
 gemini-4-argon high 2400
 ```
 
-The Claude quota on Antigravity is small. A review that finds it out runs the Gemini row, so a
-drained quota costs a seat its preferred model, never its review.
+The Claude quota on Antigravity is small. A review that runs out of it ends
+`FAILED` with `reason=quota` and marks the Claude row off; the reviews after it
+take the Gemini row. A drained quota so costs that one review, and later seats
+their preferred model, as [external-review.md](external-review.md) §Quota and
+the Opus row says.
 
 ## API-billed ruling judges
 

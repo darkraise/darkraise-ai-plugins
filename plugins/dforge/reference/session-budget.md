@@ -96,8 +96,10 @@ names no budget: `unknown — unknown — <reason>` when the size is unknown too
 `<t>k measured — unknown — the model's window is unknown` when it is not. In
 an auto run an unknown window is never a size-based compaction or handoff: the
 line reads `unknown`, sets nothing pending, and a pending compaction settles
-to continue. `unknown` means
-apply the count rule on Codex and the phase stops everywhere.
+to continue. `unknown` is
+never a reason to stop: carry on, as dforge:executing-plans and auto-run.md
+§The budget line say. The session still ends at §Stops and, on Codex, on the
+count rule.
 
 `scripts/task-brief` and `scripts/review-package` print it as their last line,
 so checking before every task and every review costs no extra request.

@@ -81,8 +81,9 @@ agent name. One route answers on a Codex plan, printing the seat as
 `primary=native:<model>/<effort>`:
 
 - `--plan-round <r>` prints the judge floor's pair and `cap=`, from each
-  task's raw total (files+spec+coupling+risk, 0-6) under Claude's bands, never
-  from the weighted routing score.
+  task's raw total (files+spec+coupling+risk, 0-6) under the bands of
+  `review-route`'s `cap_for` (a highest total of 6 gives cap 3, 4 or 5 gives
+  2, anything lower 1), never from the weighted routing score.
 
 Sessions end on the count rule rather than on a budget verdict: hand off after
 every 3 completed tasks, or after any task that needed 3 or more fix rounds. The
