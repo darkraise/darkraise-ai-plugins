@@ -270,8 +270,10 @@ Subagent ([JUDGE]):
     the finding grammar, at your own severity and with `(from <origin>)`
     ending its one-liner; a CONFIRMED cannot-verify item is added under
     Cannot verify the same way. Either may lower a score you gave; nothing
-    in the external reviews raises a score, and nothing else you wrote
-    before reading them changes.
+    in the external reviews raises a score. A CONFIRMED Critical or
+    Important finding you add also sets `quality: changes`, and
+    `spec: fail` when it is a missing, extra or misunderstood requirement;
+    nothing else you wrote before reading them changes.
 ```
 
 **Placeholders:**
