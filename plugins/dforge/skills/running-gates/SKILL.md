@@ -44,8 +44,11 @@ sessions read it the same way.
 - **`Setup`/`Teardown`:** run `Setup`, `Command` and `Teardown` in one shell
   process, in that order, so state `Setup` creates reaches `Command` — an
   environment variable set in a separate call dies with it, and the gate then
-  runs the reduced thing it exists to catch and reports green. `Teardown` runs
-  whatever `Command` returned.
+  runs the reduced thing it exists to catch and reports green. Run them as
+  `Setup && Command`, with `Teardown` after whatever happened: a nonzero
+  `Setup` makes the gate red with the `Command` not run, and the report row
+  says `Setup failed (exit <n>)`; a nonzero `Teardown` is reported on the
+  gate's row and does not change its result.
 - **`Tier`:** `task`, `branch` or `sweep`. Absent means `branch`, so a manifest
   written before the field means what it meant before. A `task` gate is the kind
   dforge:writing-plans offers as a plan's `**Task check:**`; this skill runs

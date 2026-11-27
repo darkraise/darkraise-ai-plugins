@@ -75,6 +75,11 @@ session from memory or from a summary.
      with every task complete goes straight to its Final Review section and
      follows [final-review.md](../../reference/final-review.md).
    - Run finishing: invoke dforge:finishing-a-development-branch.
+   - Your human partner decides: …: stop and ask, record the ruling in the
+     ledger, then rerun `scripts/next-step --print PLAN_FILE`.
+   - Re-review <head>..HEAD with the fix-wave re-review …: invoke dforge:executing-plans, whose
+     recovery routes a `stale` final review to final-review.md's scoped
+     re-review.
 
 ## Auto run
 

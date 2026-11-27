@@ -6,8 +6,7 @@ per-task review in
 loop.
 
 - The pair covers the hardest task: `<m>` and `<e>` are the model and effort
-  of the assignment-table row for the highest total (`impl-haiku` counts as
-  `sonnet`/`low`), with `<e>` raised to `high` when a task has risk 3:
+  of the assignment-table row for the highest total, with `<e>` raised to `high` when a task has risk 3:
   `claude --model <m> --effort <e>`.
   `plan-lint` errors on a model or an effort below that floor.
 - Your human partner may override the line; `plan-lint` checks its grammar.
