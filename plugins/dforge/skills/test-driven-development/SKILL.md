@@ -81,7 +81,7 @@ Write one minimal test showing what should happen.
 ```typescript
 test('retries failed operations 3 times', async () => {
   let attempts = 0;
-  const operation = () => {
+  const operation = async () => {
     attempts++;
     if (attempts < 3) throw new Error('fail');
     return 'success';

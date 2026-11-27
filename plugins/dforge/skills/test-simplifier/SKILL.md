@@ -172,8 +172,9 @@ clean at that SHA until the verdict returns.
 | `LOST` | A fault or mutant the old tests caught is no longer caught | Restore or strengthen, re-commit, re-judge |
 | `VIOLATED` | A never-removed rule broke, or production code changed in the wave | Revert that part, re-commit, re-judge |
 
-A wave the judge does not return `KEPT` against its commit is reverted, not
-left in place. Commits:
+A `LOST` or `VIOLATED` wave gets at most two fix rounds (fix, re-commit,
+re-judge). A wave still not `KEPT` after the second re-judge is reverted whole,
+not left in place. Commits:
 
 ```
 test(<scope>): speed up <area> tests          # phase 2, per batch
