@@ -603,7 +603,10 @@ check "an inline plan never probes" "$(calls)" "0"
 lint p1.md --no-probe --amendments am-none.md
 check "flags parse in any order" "$status" "0"
 export PLAN_LINT_ROSTER="$TMP/unusable.sh"
-check "plan-amend never probes" "$(grep -c -- '--no-probe' "$HERE/../../plugins/dagents/scripts/plan-amend")" "2"
+# Every plan-lint call plan-amend makes passes --no-probe.
+AMEND_SRC="$HERE/../../plugins/dagents/scripts/plan-amend"
+check "plan-amend never probes" \
+  "$(grep -q 'plan-lint"' "$AMEND_SRC" && echo calls):$(grep 'plan-lint"' "$AMEND_SRC" | grep -vc -- '--no-probe')" "calls:0"
 # --- amendments ---
 cat > am.md <<'EOF'
 ## A1 — Task 2
