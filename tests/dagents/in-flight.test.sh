@@ -106,6 +106,17 @@ check "a resumed agent: exit 1" "$code" "1"
 check "a resumed agent is listed once, as first described" "$(grep -c '^- agent a21 - idle - Implement task 7$' <<<"$out"):$(grep -c 'a21' <<<"$out")" "1:1"
 fjq -nc '{type:"attachment",attachment:{type:"queued_command",prompt:"<task-notification>\n<task-id>a21</task-id>\n<tool-use-id>toolu_send</tool-use-id>\n<status>completed</status>\n</task-notification>"}}' >> "$TP"
 check "a resumed agent's notification: exit 0" "$(bash "$INFLIGHT" >/dev/null; echo $?)" "0"
+# A resume after a TaskStop runs the agent again: the stop came first.
+cp "$TP" "$TP.keep54"
+: > "$TP"
+use toolu_a40 'Review the diff'
+result toolu_a40 $'Async agent launched successfully.\nagentId: a40 (internal ID)'
+result toolu_stop40 'Successfully stopped task: a40'
+use toolu_res40 'Resume the review'
+result toolu_res40 '{"success":true,"message":"Resuming agent a40","resumedAgentId":"a40"}'
+out=$(bash "$INFLIGHT"); code=$?
+check "a stopped agent resumed later is running again" "$code:$(grep -c '^- agent a40 ' <<<"$out")" "1:1"
+mv -f "$TP.keep54" "$TP"
 
 use toolu_m7 'Watch the deploy'
 result toolu_m7 'Monitor started (task m7, expires in 30m unless the source ends first; you get one notice at expiry). You will be notified on each event.'
