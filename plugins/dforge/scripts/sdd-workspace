@@ -35,6 +35,18 @@ slug=$(basename "$plan" .md)
 [ -n "$slug" ] && [ "$slug" != "." ] && [ "$slug" != ".." ] \
   || { echo "cannot derive a workspace name from: $plan" >&2; exit 2; }
 
+# Two plans with one basename share a workspace name; the one the ledger's
+# identity line does not name is refused, as task-brief --open refuses it.
+ctx=$(_plan_ctx "$plan")
+dforge_stores_init "$ctx"
+ledger="$(dforge_ledger_dir "$slug" "$ctx")/progress.md"
+named=""
+[ ! -f "$ledger" ] || named=$(ledger_plan "$ledger")
+if [ -n "$named" ] && [ -z "$(plan_ledger "$plan")" ]; then
+  echo "sdd-workspace: $ledger belongs to $named, not $plan" >&2
+  exit 2
+fi
+
 root=$(git rev-parse --show-toplevel)
 base="$(dforge_dir state "$root")/sdd"
 dir="$base/$slug"

@@ -62,5 +62,17 @@ top=$(git -C "$TMP/wt" rev-parse --show-toplevel)
 dir=$(cd "$TMP/wt" && bash "$SCRIPTS/sdd-workspace" docs/p.md)
 check "worktree: workspace under the worktree" "${dir#"$top"}" "/.dforge/sdd/p"
 
+# Two plans with one basename share a workspace name: the one the ledger does
+# not name is refused.
+checkout "$TMP/same"
+mkdir -p "$TMP/same/other" "$TMP/same/.dforge/sdd/p"
+printf '# Other plan\n' > "$TMP/same/other/p.md"
+git -C "$TMP/same" add other/p.md
+git -C "$TMP/same" -c user.name=t -c user.email=t@example.com commit -q -m other
+printf '# SDD ledger \342\200\224 plan: docs/p.md\n' > "$TMP/same/.dforge/sdd/p/progress.md"
+(cd "$TMP/same" && bash "$SCRIPTS/sdd-workspace" other/p.md >/dev/null 2>&1); rc_other=$?
+(cd "$TMP/same" && bash "$SCRIPTS/sdd-workspace" docs/p.md >/dev/null 2>&1); rc_own=$?
+check "same-basename plan: the workspace is refused" "$rc_other|$rc_own" "2|0"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
