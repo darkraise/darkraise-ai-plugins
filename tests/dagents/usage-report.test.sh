@@ -170,5 +170,14 @@ rec "$f" 2026-01-01T00:00:01Z 5; c=$(at "$f"); rec "$f" 2026-01-01T00:00:03Z 50
 J=$(node "$REPORT" --markers "$SO/markers.tsv" --transcripts "$SO/proj" --format json 2>/dev/null)
 check "streamed_once: a message split by a close is counted once" "$(q "$J" '[(.plans[0].tasks[0] | .turns, .output), .plans[0].outside.turns]')" "[1,50,0]"
 
+# --- outside_unpriced: an unpriced model after the last close ---
+OU="$TMP/ou"; mkdir -p "$OU/proj"; f="$OU/proj/u1.jsonl"
+say "$f" u1 2026-01-01T00:00:01Z 5; c=$(at "$f"); say "$f" u2 2026-01-01T00:00:03Z 7 claude-unknown-9
+{ mark open 2026-01-01T00:00:00Z docs/plans/p.md 1 u1 0; mark close 2026-01-01T00:00:02Z docs/plans/p.md 1 u1 "$c" a..b; } > "$OU/markers.tsv"
+J=$(node "$REPORT" --markers "$OU/markers.tsv" --transcripts "$OU/proj" --format json 2>/dev/null)
+MD=$(node "$REPORT" --markers "$OU/markers.tsv" --transcripts "$OU/proj" 2>/dev/null | tr -d '\r')
+check "outside_unpriced: listed in the json and the markdown" \
+  "$(q "$J" '.plans[0].outside.unpriced')|$(grep -cF 'outside tasks: $0.00 (unpriced: claude-unknown-9)' <<<"$MD")" '["claude-unknown-9"]|1'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

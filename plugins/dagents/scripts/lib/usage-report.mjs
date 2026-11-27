@@ -753,6 +753,7 @@ export function reportPlan(plan, rows, opts, prices, foreign = new Map()) {
       for (const k of Object.keys(outside)) outside[k] += u[k];
     }
   }
+  outside.unpriced = [...outsideUnpriced].sort();
   if (before) excluded.push('before first open');
   excluded.push('finishing session');
   outside.cost = round6(outside.cost);
@@ -839,7 +840,7 @@ export function markdown(rep) {
     for (const r of p.tasks) {
       out.push(`| ${r.tasks.join(', ')} | ${r.label}${r.group ? ' (group)' : ''} | ${r.turns} | ${r.input} | ${r.cacheRead} | ${r.cacheWrite5m} | ${r.cacheWrite1h} | ${r.output} | ${usd(r.cost)}${r.unpriced.length ? ` (unpriced: ${r.unpriced.join(', ')})` : ''} |`);
     }
-    out.push('', `Completed: ${p.completed}; unclosed: ${p.unclosed}; cost per task: ${p.costPerTask === null ? '-' : usd(p.costPerTask)}; outside tasks: ${usd(p.outside.cost)}`);
+    out.push('', `Completed: ${p.completed}; unclosed: ${p.unclosed}; cost per task: ${p.costPerTask === null ? '-' : usd(p.costPerTask)}; outside tasks: ${usd(p.outside.cost)}${p.outside.unpriced?.length ? ` (unpriced: ${p.outside.unpriced.join(', ')})` : ''}`);
     for (const e of p.excluded) out.push(`Excluded: ${e}`);
     if (p.asOf) out.push(`Quality fields: as of ${p.asOf}`);
     out.push('');
