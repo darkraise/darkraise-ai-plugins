@@ -341,9 +341,10 @@ rr_render() { # rr_render TEMPLATE FINDINGS_FILE — the fenced prompt body, de-
 
 # A subshell body: every exit below leaves only the subshell, so the
 # dispatch branch passes the status on.
-# rereview_transition: cmd_rereview from its round read to its state write,
-# run under the step file's lock by dr_locked, which needs a return: its
-# lock-directory fallback releases the lock only after the command returns.
+# rereview_transition: cmd_rereview from its round read to its state write
+# and printed lines, run by dr_locked under the step file's lock. dr_locked
+# runs it in a subshell, so nothing it sets reaches cmd_rereview, which exits
+# with its status once the lock is released.
 rereview_transition() {
   round=$(jq -r '.round // 0' "$state" | tr -d '\r')
   # A repeat before the round's report is in reprints the round: a second
