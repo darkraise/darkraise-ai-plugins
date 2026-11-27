@@ -259,6 +259,14 @@ stores_home "$WT/home" "$WM" wm local darkmem >/dev/null
 missing_case "no node while darkmem stores are applied" "node not found" "$(nonode_path)"
 rm -rf "$WT/home/.dforge/config.json" "$WT/home/.dforge/stores.json" "$WT/home/.dforge/mirror/wm"
 
+# --- saved_report_reused: a report holding no plan ---
+WE="$WT/we"; git init -q "$WE"; mkdir -p "$WE/docs/dforge/plans" "$WE/.dforge/sdd"
+printf '# P\n\n### Task 1: one\n\nBody.\n' > "$WE/docs/dforge/plans/p.md"
+printf '{"plans":[{"plan":"keep"}]}\n' > "$WE/.dforge/sdd/usage-report-p.json"
+wrap "$WE" --plan docs/dforge/plans/p.md --from-archive "$TMP/no-archive" --save 2>"$TMP/eerr"; rc=$?
+check "saved_report_reused: --save of a report holding no plan keeps the saved one" \
+  "$rc:$(cat "$TMP/eerr")|$(cat "$WE/.dforge/sdd/usage-report-p.json")" '0:usage summary missing: no plan in the report|{"plans":[{"plan":"keep"}]}'
+
 # --- fixtures built here: one assistant record per line ---
 # say FILE ID TIME INPUT [MODEL] [BASH] — append a main-chain record, with a Bash call when BASH is given
 say() {
