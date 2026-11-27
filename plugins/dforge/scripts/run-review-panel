@@ -22,7 +22,8 @@
 #   second its watchdog fires.
 # Output: one `<id>-judge ...` line per family in ranked order, then
 #   `panel tier=<t> lists=<n>`, n counting OK and FALLBACK lines.
-# Env seams: PANEL_<ID>_GATE, PANEL_<ID>_RUNNER, PANEL_LADDER, and
+# Env seams: PANEL_<ID>_GATE and PANEL_<ID>_RUNNER, <ID> being the family id
+#   upper-cased with each hyphen turned into _, PANEL_LADDER, and
 #   PANEL_BOUND_SECONDS, the seconds from panel start at which the watchdog
 #   fires, in place of the computed bound, and PANEL_NO_SETSID, which runs
 #   the runners as on a host without setsid.
@@ -80,7 +81,7 @@ ids=$(bash "$HERE/executors" ranked) || die "the executor registry could not be 
 
 seam() { # seam <id> <GATE|RUNNER>; prints the override path, if any
   local var
-  var="PANEL_$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')_$2"
+  var="PANEL_$(printf '%s' "$1" | tr '[:lower:]-' '[:upper:]_')_$2"
   printf '%s' "${!var:-}"
 }
 

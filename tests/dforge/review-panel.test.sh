@@ -278,5 +278,20 @@ runrepo '{"active":true,"session":"s2","phase":"execute","decisions":[],"rulings
 CODEX_STATUS=FAILED qpanel
 check "failures_book_total: a run bound to another session books nothing" "$(jq -r '.totals.panelFailures // 0' "$QS")" "0"
 
+# --- hyphen_id_seam: a hyphenated family id reaches its seams ---
+rm -rf "$TMP/reg"; mkdir -p "$TMP/reg" "$TMP/home"
+cp "$P/reference/executors/codex.json" "$TMP/reg/"
+jq '.id = "agy-two"' < "$P/reference/executors/agy.json" > "$TMP/reg/agy-two.json"
+cat > "$TMP/agy-two-runner" <<EOF
+#!/usr/bin/env bash
+out=""; while [ \$# -gt 0 ]; do case "\$1" in --out) out="\$2"; shift 2 ;; *) shift ;; esac; done
+printf '{}' > "\$out"
+printf 'agy-two-judge claude-opus-5-5/high status=OK exit=0 out=%s evidence=none\n' "\$out"
+EOF
+chmod +x "$TMP/agy-two-runner"
+HOME="$TMP/home" DR_EXECUTORS_DIR="$TMP/reg" PANEL_AGY_TWO_GATE="$TMP/agy-gate" PANEL_AGY_TWO_RUNNER="$TMP/agy-two-runner" \
+  panel --kind task --tier heavy --prompt "$TMP/prompt.md"
+check "hyphen_id_seam" "$(grep '^agy-two-judge' <<<"$out")" "agy-two-judge claude-opus-5-5/high status=OK exit=0 out=$TMP/out/agy-two.json evidence=none"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
