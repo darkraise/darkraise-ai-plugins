@@ -311,6 +311,19 @@ test("the watchdog escalates to SIGKILL when SIGTERM does not stop the command",
   await assertGone(pidFile);
 });
 
+test("the watchdog still kills a child that outlives a leader its SIGTERM stopped", { skip: WATCHDOG_SKIP }, async () => {
+  const dir = scratch("dmh-orphan-");
+  const pidFile = path.join(dir, "child.pid");
+  const stubborn = path.join(dir, "stubborn.sh");
+  fs.writeFileSync(stubborn, 'trap "" TERM; sleep 20 & echo $! > "$1"; wait\n');
+  const started = Date.now();
+  // The leader dies on SIGTERM; its stubborn child, in the same process group, does not.
+  const result = await bash(["-c", `. "$1"; _darkmem_watchdog 1 bash -c 'bash "$1" "$0" & wait' "$2" "$3"`, "hook-test", LIB, pidFile, stubborn], { cwd: dir, env: { ...process.env, DARKMEM_KILL_GRACE: "1" } });
+  assert.ok(Date.now() - started < 10000, "the call returned after the grace period");
+  assert.notEqual(result.code, 0);
+  await assertGone(pidFile);
+});
+
 test("GNU timeout escalates to SIGKILL when SIGTERM does not stop the command", { skip: !hasGnuTimeout && "GNU timeout is not on PATH" }, async () => {
   const dir = scratch("dmh-tkill-");
   const pidFile = path.join(dir, "child.pid");

@@ -31,7 +31,11 @@ _darkmem_watchdog() {
   watchdog=$!
   wait "$pid" 2>/dev/null
   status=$?
-  kill -TERM -- "-$watchdog" 2>/dev/null
+  # A member of CMD's group that outlived it keeps the watchdog, so its
+  # SIGTERM and SIGKILL still reach the survivor at the bound.
+  if ! kill -0 -- "-$pid" 2>/dev/null; then
+    kill -TERM -- "-$watchdog" 2>/dev/null
+  fi
   wait "$watchdog" 2>/dev/null
   [ "$monitor" = 1 ] || set +m
   return "$status"
