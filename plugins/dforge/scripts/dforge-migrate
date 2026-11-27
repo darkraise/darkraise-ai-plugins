@@ -206,9 +206,11 @@ migrate_docs() {
   fi
 }
 
-# renamed_lines FILE MODE — what rewrite_names would leave in FILE.
+# renamed_lines FILE MODE — what rewrite_names would leave in FILE. An older
+# directory name starts a line or follows /, ! or whitespace: *.forge names
+# files by extension and stays.
 renamed_lines() {
-  sed -E -e 's#(^|[^A-Za-z0-9_-])\.(superpowers|forge)([/[:space:]*]|$)#\1.dforge\3#g' \
+  sed -E -e 's#(^|[/![:space:]])\.(superpowers|forge)([/[:space:]*]|$)#\1.dforge\3#g' \
          -e 's#docs/(superpowers|forge)([/[:space:]*]|$)#docs/dforge\2#g' "$1" \
     | awk -v mode="$2" '
       NR == FNR { old[FNR] = $0; have[$0] = 1; n = FNR; next }
@@ -243,7 +245,7 @@ temp_beside() {
 rewrite_names() {
   local file=$1 mode=$2 tmp
   [ -f "$file" ] && [ ! -L "$file" ] || return 1
-  grep -qE '(^|[^A-Za-z0-9_-])\.(superpowers|forge)([/[:space:]*]|$)|docs/(superpowers|forge)([/[:space:]*]|$)' "$file" || return 1
+  grep -qE '(^|[/![:space:]])\.(superpowers|forge)([/[:space:]*]|$)|docs/(superpowers|forge)([/[:space:]*]|$)' "$file" || return 1
   if [ "$dry" -eq 1 ]; then
     # Piped into cmp, a failed rewrite would read as a difference; the real
     # run refuses it, so the dry run foretells that instead of listing it.

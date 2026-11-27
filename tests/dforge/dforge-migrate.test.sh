@@ -732,5 +732,11 @@ want_mode=$(stat -c %a "$KM/docs/dforge/plans/active.md" 2>/dev/null || stat -f 
 migrate "$FM" "$KM" > /dev/null 2>&1
 check "a plan rewrite keeps the plan's mode" "$(stat -c %a "$KM/docs/dforge/plans/active.md" 2>/dev/null || stat -f %Lp "$KM/docs/dforge/plans/active.md") $(tail -n 1 "$KM/docs/dforge/plans/active.md")" "$want_mode dforge:impl-sonnet-low"
 
+# --- an extension pattern is no directory name ---
+XP="$TMP/ext-pattern"; repo "$XP"
+printf '*.forge\n.forge/\n' > "$XP/.gitignore"
+migrate "$FM" "$XP" > /dev/null 2>&1
+check "an extension pattern keeps its text" "$(cat "$XP/.gitignore")" $'*.forge\n.dforge/'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
