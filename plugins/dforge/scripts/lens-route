@@ -29,7 +29,7 @@
 # standard keeps at most 2 lenses besides test-quality and code-quality, which
 # it adds when they apply, up to lensCap in all; full keeps up to lensCap.
 # Exit: 0 routed, also when no lens applies; 2 usage error, a missing plan or
-# task, an unknown lens id, or a Host: codex plan.
+# task, an unknown lens id, a Host: codex plan, or a change set git cannot read.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -137,8 +137,10 @@ case $1 in
     [[ "$cap" =~ ^[0-9]+$ ]] || cap=5
     if [ "$cap" -eq 0 ]; then echo "lenses off"; exit 0; fi
     depth=$(depth_plan_depth "$src" "$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)")
-    changed=$(git -c core.quotepath=off diff --name-only "$base..$head")
-    added=$(git diff -U0 "$base..$head" | awk '/^\+\+\+ /{next} /^\+/{print substr($0, 2)}')
+    changed=$(git -c core.quotepath=off diff --name-only "$base..$head") \
+      || die "cannot read the change set $base..$head"
+    added=$(git diff -U0 "$base..$head" | awk '/^\+\+\+ /{next} /^\+/{print substr($0, 2)}') \
+      || die "cannot read the change set $base..$head"
     # dforge:ui-ux — the UI lens applies where the UI gate does.
     . "$HERE/lib/ui-ux.sh"
     ui_top=$(git rev-parse --show-toplevel)

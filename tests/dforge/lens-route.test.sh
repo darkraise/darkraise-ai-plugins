@@ -92,6 +92,13 @@ check "default cap 5" "$(short <<<"$out")" \
 check "default cap: parts in their fixed order" "$(parts <<<"$out")" "lang-bash.md lang-typescript.md docs-comments.md "
 out=$(DFORGE_LENS_CAP=0 bash "$ROUTE" plan.md --final "$BASE" "$HEAD2")
 check "cap 0: lenses off" "$out" "lenses off"
+# A change set git cannot read is an error, not an empty change set.
+cp -R "$TMP/repo" "$TMP/broken"
+tree=$(git rev-parse "$HEAD2^{tree}")
+rm -f "$TMP/broken/.git/objects/${tree:0:2}/${tree:2}"
+out=$(cd "$TMP/broken" && bash "$ROUTE" plan.md --final "$BASE" "$HEAD2" 2>"$TMP/broken.err"); status=$?
+check "final: an unreadable change set exits 2" "$status:$(grep -c 'lens-route: cannot read the change set' "$TMP/broken.err")" "2:1"
+rm -rf "$TMP/broken" "$TMP/broken.err"
 
 # The Minor floor: the fixture plan has three tasks.
 out=$(DFORGE_LENS_MINOR_FROM=4 bash "$ROUTE" plan.md --final "$BASE" "$HEAD1")
