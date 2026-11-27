@@ -942,6 +942,15 @@ describe('attribution guard', () => {
     expect(await ui.find({ type: 'Text', text: /✗ Bash: message file not read: commit-msg\.txt/ })).toBeDefined()
   })
 
+  test('never reads the old copy of a message file the command rewrites', async ($, on) => {
+    const files: World['files'] = { '/home/me/code/shop/web/msg.txt': { text: `fix\n\n${A6_AI}\n` } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    const rewritten = await $.tool.call({ tool: 'Bash', command: "printf 'fix\\n' > msg.txt && git commit -F msg.txt" })
+    expect(rewritten.deny).toBeUndefined()
+    const dirty = await $.tool.call({ tool: 'Bash', command: `printf 'fix\\n\\n${A6_AI}\\n' > msg.txt && git commit -F msg.txt` })
+    expect(dirty.deny).toBe(A6_DENY)
+  })
 
 
 

@@ -4966,7 +4966,13 @@ async function attributionLine($: EngineInterface, tool: string, e: object): Pro
     // of /dev/stdin or a pipe would wait on input the command has not yet given.
     let isUnseen = isWhole
     const cwd = await $.session.cwd().catch(() => null)
-    for (const { file, dirs } of gitTextSources(command)) {
+    for (const { file, dirs, isWritten } of gitTextSources(command)) {
+      // The command writes this file before git reads it: the text there now
+      // is not git's, and the whole command, which writes the new, is read.
+      if (isWritten) {
+        isUnseen = true
+        continue
+      }
       if (dirs === null && !isAbsolutePath(file)) {
         return { line: `message file not read: ${file}`, deny: `dagents: the attribution guard cannot tell which directory ${file} is read from; name the message file by an absolute path.` }
       }
