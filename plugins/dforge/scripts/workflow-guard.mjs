@@ -277,7 +277,13 @@ function main(argv, env) {
     return active.length >= 2 ? 3 : 0;
   } catch (error) {
     process.stderr.write(`workflow-guard: ${String(error?.message ?? error).split('\n')[0]}\n`);
-    if (hookMarker) rmSync(hookMarker, { force: true });
+    if (hookMarker) {
+      try {
+        rmSync(hookMarker, { force: true });
+      } catch {
+        // A marker that cannot be removed must not turn the fail-open into a crash.
+      }
+    }
     return 0;
   }
 }
