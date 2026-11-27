@@ -30,32 +30,40 @@ plan_budget_line() {
 }
 usage() { die "usage: task-step review PLAN_FILE N [--suite COMMAND] [--suite-base SHA] | rereview PLAN_FILE N | verdict PLAN_FILE N [--rereview R]"; }
 
-# dirty_list DIR [-w]: "<path>\t<hash>" for each tracked path that differs from
-# HEAD, sorted; the hash is git's content hash, or "deleted". Paths are
-# relative to the work tree's top, so they are hashed from there. Fails when
-# git cannot list or hash them: an empty list must mean a clean tree. -w also
-# writes each content to the object store, so a later restore can read it back.
+# dirty_list DIR [-w]: a JSON array of {path, hash, mode}, sorted by path, one
+# entry for each tracked path that differs from HEAD: hash is the work tree's
+# content hash, or "deleted", and mode the work-tree mode git sees
+# (core.fileMode honoured). Paths come NUL-separated from the raw diff, so a
+# name git would quote, or one holding a tab or a newline, is kept whole.
+# Fails, printing nothing, when git cannot list or hash them: an empty array
+# must mean a clean tree. -w also writes each content to the object store, so
+# a later restore can read it back.
 dirty_list() {
-  local root names p h write=${2:-}
+  local root write=${2:-} meta p h dmode raw out
   root=$(git -C "$1" rev-parse --show-toplevel 2>/dev/null | tr -d '\r')
   [ -n "$root" ] || return 1
-  names=$(git -C "$1" -c core.quotepath=off diff --name-only --no-renames HEAD) || return 1
-  [ -n "$names" ] || return 0
-  printf '%s\n' "$names" | tr -d '\r' | LC_ALL=C sort |
-    while IFS= read -r p; do
-      [ -n "$p" ] || continue
-      if [ -f "$root/$p" ]; then
-        h=$(git -C "$root" hash-object ${write:+"$write"} -- "$p" | tr -d '\r')
-        [ -n "$h" ] || exit 1
-        printf '%s\t%s\n' "$p" "$h"
-      else
-        printf '%s\tdeleted\n' "$p"
-      fi
-    done
+  raw=$(mktemp) && out=$(mktemp) || return 1
+  if ! git -C "$1" -c core.quotepath=off diff --raw -z --no-renames HEAD > "$raw"; then
+    rm -f "$raw" "$out"; return 1
+  fi
+  while IFS= read -r -d '' meta && IFS= read -r -d '' p; do
+    dmode=${meta#:* }; dmode=${dmode%% *}
+    if [ "$dmode" != 000000 ] && [ -f "$root/$p" ]; then
+      h=$(git -C "$root" hash-object ${write:+"$write"} -- "$p" | tr -d '\r')
+      [ -n "$h" ] || { rm -f "$raw" "$out"; return 1; }
+    else
+      h=deleted
+    fi
+    printf '%s\0%s\0%s\0' "$p" "$h" "$dmode" >> "$out"
+  done < "$raw"
+  jq -R -s -c '[split("\u0000") | . as $f | range(0; (length / 3 | floor)) | {path: $f[3 * .], hash: $f[3 * . + 1], mode: $f[3 * . + 2]}] | sort_by(.path)' < "$out"
+  local st=$?
+  rm -f "$raw" "$out"
+  return "$st"
 }
 
 # tracked_snapshot DIR: what a later verdict compares, as one JSON object
-# {cwd, head, dirty: [{path, hash}]}. Fails, printing nothing, when DIR is not
+# {cwd, head, dirty: [{path, hash, mode}]}. Fails, printing nothing, when DIR is not
 # inside a git work tree or its tracked files cannot be listed.
 tracked_snapshot() {
   local head dirty
@@ -63,8 +71,8 @@ tracked_snapshot() {
   head=$(git -C "$1" rev-parse HEAD 2>/dev/null | tr -d '\r')
   [ -n "$head" ] || return 1
   dirty=$(dirty_list "$1" -w) || return 1
-  printf '%s' "$dirty" | jq -R -s -c --arg cwd "$1" --arg head "$head" \
-    '{cwd: $cwd, head: $head, dirty: [split("\n")[] | select(. != "") | split("\t") | {path: .[0], hash: .[1]}]}'
+  jq -n -c --arg cwd "$1" --arg head "$head" --argjson dirty "$dirty" \
+    '{cwd: $cwd, head: $head, dirty: $dirty}'
 }
 
 # suite_key COMMAND: the key suite-run records for `suite-run -- bash -c COMMAND`
@@ -797,7 +805,8 @@ parse_report() {
     }'
 }
 
-# restore_hints DIR RECORDED: for each changed path on stdin, its name and
+# restore_hints DIR RECORDED NOW: for each changed path on stdin (one JSON
+# string per line; RECORDED and NOW are dirty_list arrays), its name and
 # then "  restore: <command>", the command that puts back what the snapshot
 # recorded. A path dirty at review time held uncommitted edits, so it comes
 # back from its recorded content, never from HEAD. A snapshot taken before
@@ -805,12 +814,21 @@ parse_report() {
 # task's state file, so a path outside the work tree or a hash that is no
 # object id gets no command: the session runs these lines as printed.
 restore_hints() {
-  local root p h
+  local root p h line rmode nmode nh
   root=$(git -C "$1" rev-parse --show-toplevel | tr -d '\r')
-  while IFS= read -r p; do
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    p=$(jq -r . <<<"$line" | tr -d '\r')
     [ -n "$p" ] || continue
-    h=$(awk -F'\t' -v p="$p" '$1 == p { print $2; exit }' "$2")
+    h=$(jq -r --arg p "$p" 'map(select(.path == $p))[0].hash // empty' "$2" | tr -d '\r')
+    rmode=$(jq -r --arg p "$p" 'map(select(.path == $p))[0].mode // empty' "$2" | tr -d '\r')
+    nh=$(jq -r --arg p "$p" 'map(select(.path == $p))[0].hash // empty' "$3" | tr -d '\r')
+    nmode=$(jq -r --arg p "$p" 'map(select(.path == $p))[0].mode // empty' "$3" | tr -d '\r')
     printf '%s\n' "$p"
+    if [ -n "$h" ] && [ "$h" = "$nh" ] && [ -n "$rmode" ] && [ -n "$nmode" ] && [ "$rmode" != "$nmode" ]; then
+      printf '  restore: none: only its mode changed (%s -> %s); restore it with chmod by hand\n' "$rmode" "$nmode"
+      continue
+    fi
     case /$p/ in
       //* | */../*)
         printf '  restore: none: the recorded path is outside the work tree; restore it by hand\n'
@@ -852,17 +870,20 @@ check_tracked() {
     } >&2
     exit 6
   fi
-  jq -r '.dirty[] | "\(.path)\t\(.hash)"' <<<"$snap" | tr -d '\r' > "$TMP/recorded"
+  jq -c '.dirty' <<<"$snap" > "$TMP/recorded" || die "cannot read $vstate"
   dirty_list "$dir" > "$TMP/now" || die "cannot list the tracked changes in $dir"
-  changed=$(awk -F'\t' '
-    FNR == NR { rec[$1] = $2; next }
-    !($1 in rec) || rec[$1] != $2 { print $1 }
-    { delete rec[$1] }
-    END { for (p in rec) print p }' "$TMP/recorded" "$TMP/now" | LC_ALL=C sort -u)
+  # An entry an older step file recorded without a mode compares on its hash.
+  changed=$(jq -r -n --slurpfile r "$TMP/recorded" --slurpfile n "$TMP/now" '
+    ($r[0] | map({key: .path, value: .}) | from_entries) as $R
+    | ($n[0] | map({key: .path, value: .}) | from_entries) as $N
+    | ([$R, $N | keys[]] | unique)[] as $p
+    | select($R[$p] == null or $N[$p] == null or $R[$p].hash != $N[$p].hash
+             or ($R[$p].mode != null and $R[$p].mode != $N[$p].mode))
+    | $p | tojson') || die "cannot compare the tracked changes in $dir"
   if [ -n "$changed" ]; then
     {
       printf 'task-step: tracked files changed during the review in %s; restore each to its recorded state with the command under it:\n' "$dir"
-      restore_hints "$dir" "$TMP/recorded" <<<"$changed"
+      restore_hints "$dir" "$TMP/recorded" "$TMP/now" <<<"$changed"
     } >&2
     exit 6
   fi
