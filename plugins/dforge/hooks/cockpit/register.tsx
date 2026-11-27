@@ -2916,6 +2916,8 @@ const S = {
   // Each handoff read for the offer, by path: the modification time it was
   // read at, its text and its age (its marker's at, else the file's time).
   offerTexts: new Map<string, { mtime: number; text: string; at: number; subject: string | null }>(),
+  // The handoff directories' mtimes at the last scan; null forces the next one.
+  offerDirStamp: null as string | null,
   // The cache key of the last offer run started (handoff list, then next-step
   // --print --handoff per candidate), and whether one is in flight: one at a
   // time, never awaited.
@@ -3334,7 +3336,11 @@ async function syncAutoRun($: EngineInterface) {
   if (JSON.stringify(now) !== JSON.stringify(stored)) await update($, autoRun, () => now)
   if (JSON.stringify(now) === JSON.stringify(before)) return
   // The run moved the ledger the offer's cache key leaves out: recompute once it ends.
-  if (before?.active === true && now?.active !== true) S.offerRanKey = null
+  if (before?.active === true && now?.active !== true) {
+    S.offerRanKey = null
+    S.offerDirStamp = null
+    S.launch = null
+  }
   if (before?.active === true && now !== null && !now.active && now.stopped !== null) {
     await notify($, { kind: 'blocked', title: '⛔ Auto run stopped', detail: now.stopped, isPlain: true })
   }
@@ -3996,7 +4002,19 @@ async function readResumeOffer(
   docs: CockpitRoots['docs'] | null,
   places: readonly { root: string; docsDir: string }[],
   primary: string,
+  isFull: boolean,
 ) {
+  // A tool call scans only when a handoff directory changed; the session start
+  // and the poll's slow tick scan in full, so an edit in place still shows.
+  const stamps: string[] = []
+  for (const dir of dirs) {
+    const info = await $.fs.stat(dir).catch(() => null)
+    if (info === null) break
+    stamps.push(`${dir}=${info.mtimeMs}`)
+  }
+  const stamp = stamps.length === dirs.length ? stamps.join('\t') : null
+  if (!isFull && stamp !== null && stamp === S.offerDirStamp) return
+  S.offerDirStamp = stamp
   const now = await $.clock.now()
   const fresh = (await offerHandoffs($, dirs)).filter(one => now - one.at < RESUME_WITHIN).sort((a, b) => b.at - a.at)
   if (fresh.length === 0) {
@@ -4185,7 +4203,7 @@ async function resume($: EngineInterface, offer: CockpitResumeOffer) {
 // roots put them (store options spec §7.3): while progress is local, the
 // ledgers and the handoff under the session worktree's .dforge/, as
 // sdd-workspace and next-step write them; the darkmem mirror while it is not.
-async function readRun($: EngineInterface) {
+async function readRun($: EngineInterface, options?: { isOfferFull?: boolean }) {
   // A poll tick's read and a tool call's can overlap: only the latest writes.
   const reading = ++S.runReads
   const session = S.where.checkout ?? (await read($, place))?.root ?? null
@@ -4200,7 +4218,7 @@ async function readRun($: EngineInterface) {
   const checkouts = [...new Set([session, root].filter((dir): dir is string => dir !== null))]
   const places = checkouts.map(dir => ({ root: dir, docsDir: `${dir}/docs/dforge` }))
   try {
-    await readResumeOffer($, here, handoffDirs, roots?.docs ?? null, places, root)
+    await readResumeOffer($, here, handoffDirs, roots?.docs ?? null, places, root, options?.isOfferFull === true)
     const local = `${session ?? root}/.dforge/sdd`
     const base = roots?.progress.ledgerRoot ?? local
     const bound = await read($, boundPlan)
@@ -4901,6 +4919,7 @@ async function readSession($: EngineInterface, isStart: boolean) {
   S.roots = { key: '', value: null }
   S.offerTexts.clear()
   S.offerRanKey = null
+  S.offerDirStamp = null
   // Each read fills its own section: one that throws leaves only that section
   // unread, and a slow poll tick reads that one again, not the whole session,
   // whose caches the reset above would otherwise clear on every retry.
@@ -4937,7 +4956,7 @@ async function readSession($: EngineInterface, isStart: boolean) {
   await step(() => syncBinding($))
   // The run first: the resume offer is not recomputed while one is active.
   await step(() => trackAutoRun($))
-  await step(() => readRun($))
+  await step(() => readRun($, { isOfferFull: true }))
   await step(() => beat($))
   await step(() => readRemote($))
   S.sessionUnread = unread
@@ -4985,10 +5004,10 @@ async function pollTick($: EngineInterface) {
     if (!isShown) {
       // The resume band draws without the pane, so its offer is read again on
       // the slow ticks: a claim taken or released elsewhere reaches it.
-      if (isSlowTick) await readRun($)
+      if (isSlowTick) await readRun($, { isOfferFull: true })
       return
     }
-    await readRun($)
+    await readRun($, { isOfferFull: isSlowTick })
     if (isSlowTick) {
       await refreshDetail($)
       await trackAutoRun($)

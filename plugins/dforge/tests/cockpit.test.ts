@@ -5915,6 +5915,25 @@ describe('resume offer', () => {
     return prompts
   }
 
+  test('a tool call leaves an unchanged handoff directory unlisted', async ($, on) => {
+    const DIR = '/home/me/code/shop/.dforge/handoff'
+    let lists = 0
+    on('fs.list', { path: DIR } as never, ((_$: unknown, e: unknown, next: (e: unknown) => unknown) => {
+      lists += 1
+      return next(e)
+    }) as never)
+    const files: NonNullable<World['files']> = { [HANDOFF]: { text: RESUMABLE, mtimeMs: 900_000 }, [DIR]: { text: '', kind: 'dir', mtimeMs: 500_000 } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.session.start(START)
+    const atStart = lists
+    for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(lists).toBe(atStart)
+    files[DIR]!.mtimeMs = 600_000
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(lists).toBe(atStart + 1)
+  })
+
   test('reads the next action and the first prompt of a handoff', () => {
     expect(resumeOfferOf(RESUMABLE)).toEqual({ next: 'Task 4 — wire the band into the pane.', prompt: 'Execute docs/dforge/plans/2026-10-14-band.md.' })
   })
