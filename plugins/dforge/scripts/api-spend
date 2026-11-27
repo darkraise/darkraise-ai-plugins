@@ -3,8 +3,10 @@
 #
 # Usage: api-spend status
 #        api-spend add ID USD
-# Exit: 0 done, 1 the spend file's lock could not be had (or the file could
-#       not be read or written), 2 usage or an unknown budget id
+# Exit: 0 done; 1 add could not take the spend file's lock, or could not
+#       read or write the file; 2 usage or an unknown budget id. status
+#       exits 0 whatever the budgets' state, and reports a spend file it
+#       cannot read as reason=unreadable.
 set -uo pipefail
 export MSYS_NO_PATHCONV=1
 
