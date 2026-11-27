@@ -435,7 +435,10 @@ async function sendCheckpoint({ cfg, client, roots, state, persist, report }, na
   const hash = sha256(buffer);
   const body = decodeUtf8(buffer);
   const key = body ? handoffKey(name) : null;
-  if (key !== null && state.checkpoints[key] === hash) return;
+  // A synced note named onto a workstream is filed there unless that
+  // workstream already holds it, whenever it was filed.
+  const resent = key !== null && state.checkpoints[key] === hash;
+  if (resent && named === undefined) return;
   if (!body) {
     report.failures.push(`${rel}: empty or not UTF-8 text, not pushed`);
     return;
@@ -465,8 +468,9 @@ async function sendCheckpoint({ cfg, client, roots, state, persist, report }, na
   // checkpoint or this mirror's push to another workstream) is recorded, not
   // filed twice. The entry recorded at that time is already acknowledged, so
   // only a newer one can be a lost answer.
-  const filed = await checkpointFiledSince(client, state, workstream, await client.resume(cfg.project, workstream), hash);
+  const filed = await checkpointFiledSince(client, resent ? { checkpointAt: null } : state, workstream, await client.resume(cfg.project, workstream), hash);
   if (filed) {
+    if (resent) return;
     synced();
     recordCheckpointAt(state, workstream, filed.created_at);
     persist();

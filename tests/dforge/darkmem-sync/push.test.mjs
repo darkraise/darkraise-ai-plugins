@@ -897,3 +897,20 @@ test("a named pipe where a ledger belongs fails that ledger and never blocks the
   assert.match(result.stdout, /^failed: sdd\/p1\/progress\.md: could not be read \(EFTYPE\); not pushed$/m);
 });
 
+test("--handoff with --workstream files an already-synced note on the named workstream", async t => {
+  const s = await setup(t);
+  const file = path.join(s.workRoot, "handoff", "stored.md");
+  const note = "# Handoff\n\n## State\n- Plan: `docs/dforge/plans/p1.md`; ledger: `x`\n";
+  write(file, note);
+  assert.equal((await s.push()).code, 0);
+  const result = await s.push("--handoff", file, "--workstream", "other");
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, / 1 checkpoints;/);
+  const other = () => s.stub.db.workstreams.find(w => w.key === "other").entries.filter(e => e.kind === "checkpoint");
+  assert.deepEqual(other().map(e => e.body), [note]);
+  const again = await s.push("--handoff", file, "--workstream", "other");
+  assert.equal(again.code, 0, again.stdout + again.stderr);
+  assert.match(again.stdout, / 0 checkpoints;/);
+  assert.equal(other().length, 1, "a note the named workstream already holds is not filed again");
+});
+
