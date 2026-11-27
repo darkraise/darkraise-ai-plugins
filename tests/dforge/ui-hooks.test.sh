@@ -60,6 +60,13 @@ FAST="$TMP/fast.jsonl"
 jq -nc '{type:"assistant",message:{content:[{type:"text",text:"Process: fast — a one-line tweak"}]}}' > "$FAST"
 check "edit: fast mode prints neither findings nor the reminder" "$(edit e-4 "$REPO/src/Bad.tsx" "$FAST")" ""
 check "edit: fast mode leaves the session's reminder for later" "$(ctx "$(edit e-4 "$REPO/src/Bad.tsx")" | grep -c 'Load dforge:ui-ux')" "1"
+JQN="$TMP/jq-no-output"; mkdir -p "$JQN"
+printf '#!/usr/bin/env bash\n[ "${1:-}" = -n ] && exit 1\nexec "%s" "$@"\n' "$(command -v jq)" > "$JQN/jq"
+chmod +x "$JQN/jq"
+first=$(jq -n --arg cwd "$REPO" --arg f "$REPO/src/App.tsx" \
+  '{hook_event_name:"PostToolUse",session_id:"e-7",cwd:$cwd,transcript_path:"",tool_name:"Edit",tool_input:{file_path:$f}}' | PATH="$JQN:$PATH" bash "$EDIT")
+check "edit: a hook that dies before its output keeps the reminder for the next edit" \
+  "$first|$(ctx "$(edit e-7 "$REPO/src/App.tsx")" | grep -c 'Load dforge:ui-ux')" "|1"
 rm src/Bad.tsx
 
 # --- hooks.json wiring ---
