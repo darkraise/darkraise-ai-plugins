@@ -54,11 +54,16 @@ if command -v jq >/dev/null 2>&1 && [ -n "$stdin_json" ] \
     # Two sessions in one checkout share the cwd record, last writer wins, so
     # each session also gets a record of its own under by-id/, which
     # scripts/lib/context.sh prefers. The cwd record stays as the fallback.
+    # A record is replaced whole, so a reader never sees half of one.
+    put_record() { # FILE
+      local tmp
+      tmp=$(mktemp "$1.XXXXXX" 2>/dev/null) || return 0
+      { printf '%s\n' "$record" > "$tmp" && mv -f "$tmp" "$1"; } 2>/dev/null || rm -f "$tmp"
+    }
     if [ -n "$record" ] && mkdir -p "$sessions_dir" 2>/dev/null; then
-      printf '%s\n' "$record" > "${sessions_dir}/${key}.json" 2>/dev/null || true
+      put_record "${sessions_dir}/${key}.json"
       if [ -n "$session_id" ] && mkdir -p "$sessions_dir/by-id" 2>/dev/null; then
-        printf '%s\n' "$record" \
-          > "$sessions_dir/by-id/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-').json" 2>/dev/null || true
+        put_record "$sessions_dir/by-id/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-').json"
       fi
       # Every session start rewrites its own records, so one untouched for a
       # month belongs to a session or a checkout that is gone.
