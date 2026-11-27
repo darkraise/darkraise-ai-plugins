@@ -66,9 +66,13 @@ if [ -z "$report" ]; then
 else
   # The entry runs from its heading through the line that closes the fence
   # after its "### New"; fences are tracked so a heading inside one is text.
-  tr -d '\r' < "$report" | awk -v k="${id#A}" -v out="$TMP/block" "$_PLAN_AWK"'
+  # awk reads a file, not a pipe: its exit at the New fence would leave a
+  # writer on a closed pipe, and pipefail would report that as a failure.
+  tr -d '\r' < "$report" > "$TMP/report"
+  awk -v k="${id#A}" -v out="$TMP/block" "$_PLAN_AWK"'
     BEGIN { head = "^## A" k " (—|-) (Task [0-9]+|Header)[ \t]*$" }
     !found {
+      if (in_fence($0)) next
       if ($0 ~ head) { found = 1; sub(/^## A[0-9]+ /, "## A? "); print > out }
       next
     }
@@ -82,7 +86,7 @@ else
     /^### Old[ \t]*$/ { sect = "old"; next }
     /^### New[ \t]*$/ { sect = "new"; next }
     sect != "" && match($0, /^(````+|~~~~+)/) { open = substr($0, RSTART, RLENGTH); mode = sect; sect = "" }
-    END { if (!found) exit 3; if (!done) exit 4 }'
+    END { if (!found) exit 3; if (!done) exit 4 }' "$TMP/report"
   case $? in
     0) ;;
     3) reject "no entry $id in $report" ;;
@@ -139,8 +143,15 @@ publish() {
   plan_apply_amendments "$plan" "$TMP/after" > /dev/null 2>&1 \
     || reject "Old text does not match exactly once in $target"
 
-  bash "$HERE/plan-lint" "$plan" --amendments "$TMP/before" | grep '^ERROR' | sort > "$TMP/lint-before"
-  bash "$HERE/plan-lint" "$plan" --amendments "$TMP/after" | grep '^ERROR' | sort > "$TMP/lint-after"
+  # plan-lint exits 1 when it found errors; any other failure means it could
+  # not check the plan, which is no clean lint.
+  local which st
+  for which in before after; do
+    bash "$HERE/plan-lint" "$plan" --amendments "$TMP/$which" > "$TMP/lint-$which.out" 2>/dev/null
+    st=$?
+    [ "$st" -le 1 ] || reject "plan-lint could not check the plan (exit $st)"
+    { grep '^ERROR' "$TMP/lint-$which.out" || :; } | sort > "$TMP/lint-$which"
+  done
   new_errors=$(comm -13 "$TMP/lint-before" "$TMP/lint-after")
   [ -z "$new_errors" ] || { echo "rejected: the amendment introduces lint errors:"; printf '%s\n' "$new_errors"; exit 1; }
 
