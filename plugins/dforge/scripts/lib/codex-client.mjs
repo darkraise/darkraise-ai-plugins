@@ -241,28 +241,46 @@ async function main() {
   // the one least likely to answer. An unanswered RPC here would leave the race
   // unsettled and this process hanging with no result for bash to read.
   const INTERRUPT_GRACE_MS = 5000;
+  const interruptTurn = async () => {
+    let grace = null;
+    try {
+      const outcome = await Promise.race([
+        plugin.interruptAppServerTurn(req.cwd, {
+          threadId: seen.threadId,
+          turnId: seen.turnId
+        }),
+        new Promise((settle) => {
+          grace = setTimeout(() => settle(null), INTERRUPT_GRACE_MS);
+        })
+      ]);
+      return outcome?.interrupted === true;
+    } catch {
+      // An interrupt that fails leaves the reaper as the remaining recourse.
+      return false;
+    } finally {
+      clearTimeout(grace);
+    }
+  };
   const expiry = new Promise((resolve) => {
     timer = setTimeout(async () => {
       timedOut = true;
-      let grace = null;
-      try {
-        const outcome = await Promise.race([
-          plugin.interruptAppServerTurn(req.cwd, {
-            threadId: seen.threadId,
-            turnId: seen.turnId
-          }),
-          new Promise((settle) => {
-            grace = setTimeout(() => settle(null), INTERRUPT_GRACE_MS);
-          })
-        ]);
-        interrupted = outcome?.interrupted === true;
-      } catch {
-        // An interrupt that fails leaves the reaper as the remaining recourse.
-      }
-      clearTimeout(grace);
+      interrupted = await interruptTurn();
       resolve(null);
     }, deadlineMs);
   });
+  // A stopped runner stops its turn too: interrupt it, then report, which
+  // reaps the broker this run started.
+  const onSignal = async (signal) => {
+    clearTimeout(timer);
+    const stopped = turnSent ? await interruptTurn() : false;
+    await emit({
+      reason: "signal", interrupted: stopped,
+      threadId: seen.threadId, turnId: seen.turnId,
+      stderr: `stopped by ${signal}`
+    });
+  };
+  process.once("SIGTERM", () => onSignal("SIGTERM"));
+  process.once("SIGINT", () => onSignal("SIGINT"));
 
   let result;
   try {
