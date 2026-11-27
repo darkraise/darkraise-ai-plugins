@@ -111,8 +111,9 @@ ledger_blocked() {
   ' | sort -un
 }
 
-# plan_header_line FILE LABEL — the first line outside fences that begins
-# "**LABEL:**", or nothing.
+# plan_header_line FILE LABEL — the first header line outside fences that
+# begins "**LABEL:**", or nothing: the search stops at the first task heading,
+# as plan_header does.
 # awk stops at a flag rather than exit: exiting leaves tr writing into a closed
 # pipe, and under pipefail that SIGPIPE becomes the caller's exit status on any
 # plan larger than the pipe buffer.
@@ -120,6 +121,7 @@ plan_header_line() {
   tr -d '\r' < "$1" | awk -v p="**$2:**" "$_PLAN_AWK"'
     stop { next }
     in_fence($0) { next }
+    is_task($0) >= 0 { stop = 1; next }
     index($0, p) == 1 { print; stop = 1 }
   '
 }
