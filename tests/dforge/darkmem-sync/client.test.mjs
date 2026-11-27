@@ -182,3 +182,13 @@ test("a GET whose connection fails is retried once; a POST or a timeout is not",
     await stub.close();
   }
 });
+
+test("a list answer without an items array is a TransportError naming the route", async () => {
+  for (const answer of ["null", '{"next_after":null}']) {
+    const client = createClient({ url: "http://127.0.0.1:9", apiKey: STUB_KEY, runKey: "run-1", fetchImpl: async () => new Response(answer, { status: 200 }) });
+    const shape = /^GET \/api\/v1\/\S+: the answer holds no items list; is the url a darkmem instance\?$/;
+    for (const call of [() => client.manifest("p", "dforge"), () => client.workstreams("p", "open"), () => client.entries("w", "ledger")]) {
+      await assert.rejects(call(), error => error instanceof TransportError && shape.test(error.message));
+    }
+  }
+});

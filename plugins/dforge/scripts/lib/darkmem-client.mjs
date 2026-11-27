@@ -79,12 +79,20 @@ export function createClient({ url, apiKey, runKey, timeoutMs = 10000, fetchImpl
     return data;
   }
 
+  // A list route's answer must hold an items array: anything else is not a
+  // darkmem answer, and reading on would crash with a TypeError.
+  async function listPage(route, query) {
+    const answer = await call("GET", route, { query });
+    if (!Array.isArray(answer?.items)) throw new TransportError(`GET ${route}: the answer holds no items list; is the url a darkmem instance?`);
+    return answer;
+  }
+
   return {
     async manifest(project, uriPrefix) {
       const items = [];
       let after;
       do {
-        const page = await call("GET", "/api/v1/documents/manifest", { query: { project, uri_prefix: uriPrefix, after, limit: 1000 } });
+        const page = await listPage("/api/v1/documents/manifest", { project, uri_prefix: uriPrefix, after, limit: 1000 });
         items.push(...page.items);
         after = page.next_after;
       } while (after);
@@ -126,7 +134,7 @@ export function createClient({ url, apiKey, runKey, timeoutMs = 10000, fetchImpl
       const items = [];
       let before;
       do {
-        const page = await call("GET", "/api/v1/worklog/workstreams", { query: { project, state, before, limit: 200 } });
+        const page = await listPage("/api/v1/worklog/workstreams", { project, state, before, limit: 200 });
         items.push(...page.items);
         before = page.next_before;
       } while (before);
@@ -136,7 +144,7 @@ export function createClient({ url, apiKey, runKey, timeoutMs = 10000, fetchImpl
       const items = [];
       let after;
       do {
-        const page = await call("GET", `/api/v1/worklog/workstreams/${encodeURIComponent(workstreamId)}/entries`, { query: { kind, after, limit: 500 } });
+        const page = await listPage(`/api/v1/worklog/workstreams/${encodeURIComponent(workstreamId)}/entries`, { kind, after, limit: 500 });
         items.push(...page.items);
         after = page.next_after;
       } while (after !== null && after !== undefined);
