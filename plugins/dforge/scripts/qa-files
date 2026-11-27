@@ -5,31 +5,60 @@
 # commits, `clean` undoes only those paths, and only where they turned dirty
 # after `begin`: an edit the person made meanwhile, or a path that was dirty
 # before QA started, is never touched, and neither is a path the auto run
-# carried in (scripts/auto-run carried).
+# carried in (scripts/auto-run carried). After each write, create or delete,
+# QA marks the path with `mark`, recording its state then; `clean` undoes a
+# marked path only while it is still in its last marked state, so an edit the
+# person made after QA's is kept.
 #
 # Usage: qa-files begin WORKSPACE   snapshot `git status` and the empty
 #                                   directories, and empty the manifest
+#        qa-files mark WORKSPACE PATH...
+#                                   record each PATH's state (its blob hash,
+#                                   dir, or absent) in <workspace>/qa-marks.txt
 #        qa-files clean WORKSPACE   restore or delete QA's listed paths
 # clean prints "qa-files: removed <path>" for each path it restored or
 # deleted, and "qa-files: left <path>" for every other path that turned dirty
-# since begin, carried ones included, and for each listed path that was
-# already dirty at begin.
+# since begin, carried ones included, for each listed path that was already
+# dirty at begin, and for each listed path changed since its last mark.
 # Exit: 0 done; 2 usage, no git checkout, or no snapshot from begin.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-usage() { echo "usage: qa-files begin|clean WORKSPACE" >&2; exit 2; }
-[ $# -eq 2 ] && [ -n "$2" ] || usage
+usage() { echo "usage: qa-files begin|clean WORKSPACE | qa-files mark WORKSPACE PATH..." >&2; exit 2; }
+[ $# -ge 2 ] && [ -n "$2" ] || usage
 cmd=$1 ws=$2
-case $cmd in begin | clean) ;; *) usage ;; esac
+case $cmd in
+  begin | clean) [ $# -eq 2 ] || usage ;;
+  mark) [ $# -ge 3 ] || usage ;;
+  *) usage ;;
+esac
+shift 2
 [ -d "$ws" ] || { echo "qa-files: no workspace directory $ws" >&2; exit 2; }
 ws=$(cd "$ws" && pwd)
 before="$ws/qa-status-before.txt" touched="$ws/qa-touched.txt" empty_before="$ws/qa-empty-dirs-before.txt"
+marks="$ws/qa-marks.txt"
 
 top=$(git rev-parse --show-toplevel 2>/dev/null | tr -d '\r') && [ -n "$top" ] \
   || { echo "qa-files: not inside a git checkout" >&2; exit 2; }
 cd "$top" || exit 2
+
+# path_state PATH — the blob hash of a file, "dir" for a directory, "absent".
+path_state() {
+  local p=${1%/}
+  if [ -d "$p" ] && [ ! -L "$p" ]; then echo dir
+  elif [ -e "$p" ] || [ -L "$p" ]; then git hash-object --no-filters -- "$p" | tr -d '\r'
+  else echo absent; fi
+}
+
+if [ "$cmd" = mark ]; then
+  for p in "$@"; do
+    p=${p#./}
+    st=$(path_state "$p") && [ -n "$st" ] || { echo "qa-files: could not read $p" >&2; exit 2; }
+    printf '%s\t%s\n' "$st" "$p" >> "$marks" || exit 2
+  done
+  exit 0
+fi
 
 # Porcelain paths are relative to the top level and never quoted under -z.
 status() { git status --porcelain=v1 -z --untracked-files=all; }
@@ -41,6 +70,7 @@ if [ "$cmd" = begin ]; then
   # directory only shortens the list, so find's status is not checked.
   find . -name .git -prune -o -type d -empty -print0 > "$empty_before" 2>/dev/null
   : > "$touched" || exit 2
+  : > "$marks" || exit 2
   exit 0
 fi
 
@@ -116,6 +146,23 @@ remove_empty_parents() {
   done
 }
 
+mark_paths=() mark_states=()
+if [ -f "$marks" ]; then
+  while IFS=$'\t' read -r st line || [ -n "$st" ]; do
+    line=${line%$'\r'}
+    [ -n "$line" ] && { mark_paths+=("$line"); mark_states+=("$st"); }
+  done < "$marks"
+fi
+# last_mark PATH — the state of PATH's last mark; status 1 when it has none.
+last_mark() {
+  local i=${#mark_paths[@]}
+  while [ "$i" -gt 0 ]; do
+    i=$((i - 1))
+    [ "${mark_paths[$i]}" = "$1" ] && { printf '%s\n' "${mark_states[$i]}"; return 0; }
+  done
+  return 1
+}
+
 kept_dirs=()
 if [ -f "$empty_before" ]; then
   while IFS= read -r -d '' line; do kept_dirs+=("${line#./}"); done < "$empty_before"
@@ -134,6 +181,11 @@ for i in "${!PATHS[@]}"; do
   fi
   if [ "$blocked" -eq 1 ] || has "$path" "${carried[@]+"${carried[@]}"}" \
     || ! has "$path" "${listed[@]+"${listed[@]}"}"; then
+    printf 'qa-files: left %s\n' "$path"
+    continue
+  fi
+  # Changed since QA's last mark: someone else wrote it after QA did.
+  if mark=$(last_mark "$path") && [ "$mark" != "$(path_state "$path")" ]; then
     printf 'qa-files: left %s\n' "$path"
     continue
   fi

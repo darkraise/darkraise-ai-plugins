@@ -89,6 +89,26 @@ out=$(bash "$QA" clean "$WS")
 check "clean: a directory empty before QA stays" "$([ -e mine/empty/c.sh ] && echo kept || echo gone):$([ -d mine/empty ] && echo kept || echo gone)" "gone:kept"
 rm -rf mine
 
+# A path QA marked after its write is undone only while it is as QA left it.
+printf 'one\n' > qa-mark.txt; printf 'one\n' > qa-same.txt
+git add qa-mark.txt qa-same.txt && git commit -qm marks
+bash "$QA" begin "$WS"
+printf 'qa-mark.txt\nqa-new.txt\nqa-same.txt\n' >> "$WS/qa-touched.txt"
+printf 'qa\n' >> qa-mark.txt; printf 'qa\n' > qa-new.txt; printf 'qa\n' >> qa-same.txt
+bash "$QA" mark "$WS" qa-mark.txt qa-new.txt; rc=$?
+bash "$QA" mark "$WS" qa-same.txt
+printf 'person\n' >> qa-mark.txt; printf 'person\n' >> qa-new.txt
+out=$(bash "$QA" clean "$WS")
+check "clean: a marked path the person edited after the mark is left" \
+  "$rc:$(cat qa-mark.txt | tr '\n' ' '):$(grep -c '^qa-files: left qa-mark.txt$' <<<"$out"):$(grep -c '^qa-files: removed qa-mark.txt$' <<<"$out")" "0:one qa person :1:0"
+check "clean: a marked new file the person edited is kept" \
+  "$(cat qa-new.txt | tr '\n' ' '):$(grep -c '^qa-files: left qa-new.txt$' <<<"$out")" "qa person :1"
+check "clean: a marked path unchanged since its mark is undone" \
+  "$(cat qa-same.txt):$(grep -c '^qa-files: removed qa-same.txt$' <<<"$out")" "one:1"
+git checkout -q -- qa-mark.txt; rm -f qa-new.txt
+bash "$QA" mark "$WS" >/dev/null 2>&1; rc=$?
+check "mark: no path is a usage error" "$rc" "2"
+
 bash "$QA" begin "$WS"
 check "a re-dispatch) starts with an empty manifest" "$(wc -c < "$WS/qa-touched.txt" | tr -d ' ')" "0"
 rm -f "$WS/qa-touched.txt"; printf 'z\n' > z.txt
