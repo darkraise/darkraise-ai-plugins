@@ -139,7 +139,9 @@ case $cmd in
       for id in $want; do
         grep -q "^$id"$'\037' <<<"$rows" || failed coverage "$id has no row in ## Results"
       done
-      accepted=$(tr -d '\r' < "$report" | awk "$_PLAN_AWK"'in_fence($0) { next } index($0, "**Accepted by:**") == 1 { print }')
+      # An acceptance counts only with words after its label.
+      accepted=$(tr -d '\r' < "$report" | awk "$_PLAN_AWK"'in_fence($0) { next } index($0, "**Accepted by:**") == 1 {
+        v = substr($0, 17); gsub(/^[ \t]+|[ \t]+$/, "", v); if (v != "") print v }')
       unv=$(awk -F"$(printf '\037')" '$2 == "unverifiable" { n++ } END { print n + 0 }' <<<"$rows")
       while IFS=$'\037' read -r id verdict ev note; do
         [ -n "$id" ] || continue
@@ -164,7 +166,8 @@ case $cmd in
             # a report with a single unverifiable row, never several.
             if [ -z "$accepted" ]; then
               failed verdicts "$id is unverifiable and the report has no **Accepted by:** line quoting the user"
-            elif ! grep -qE "(^|[^A-Za-z0-9-])$id([^A-Za-z0-9-]|$)" <<<"$accepted" && [ "$unv" -gt 1 ]; then
+            elif ! grep -qE "(^|[^A-Za-z0-9-])$id([^A-Za-z0-9-]|$)" <<<"$accepted" \
+                 && { [ "$unv" -gt 1 ] || ! grep -vqE "(^|[^A-Za-z0-9-])(UI|UX|OP)-[0-9A-Za-z]+" <<<"$accepted"; }; then
               failed verdicts "$id is unverifiable and no **Accepted by:** line names it; with several unverifiable rows each needs its own, for example **Accepted by:** $id: \"<the user's words>\""
             fi ;;
           *) failed verdicts "$id has the unknown verdict \"$verdict\" (pass, deviation, fail or unverifiable)" ;;

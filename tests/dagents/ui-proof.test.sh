@@ -222,6 +222,8 @@ check "verdicts: a missing screenshot fails" "$(try '| UX-1 | pass | .dagents/ui
 check "verdicts: a test name is evidence" "$(try '| UX-1 | pass | A12: escape closes the dialog | |')" "0"
 check "verdicts: unverifiable without acceptance fails" "$(try '| UX-1 | unverifiable | - | no emulator here |')" "1"
 check "verdicts: unverifiable with the user's acceptance passes" "$(try '| UX-1 | unverifiable | - | no emulator here |' '**Accepted by:** "ship it without the Android run"')" "0"
+check "accepted: an empty acceptance does not cover an unverifiable row" "$(try '| UX-1 | unverifiable | - | no emulator here |' '**Accepted by:**')" "1"
+check "accepted: an acceptance naming another ID does not cover the row" "$(try '| UX-1 | unverifiable | - | no emulator here |' '**Accepted by:** UX-2: "fine without the emulator"')" "1"
 check "verdicts: an unknown verdict fails" "$(try '| UX-1 | ok | .dagents/ui-ux/t/a.png | |')" "1"
 check "coverage: a delta item with no row fails" "$(try '| UX-2 | pass | .dagents/ui-ux/t/a.png | |')" "1"
 check "judge: a fix verdict fails" "$(try "$PASSROW" '' fix)" "1"
