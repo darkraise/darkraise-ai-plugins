@@ -101,7 +101,7 @@ Its exit code is the verdict.
 dforge:handoff steps 0-3 (`State` names the failing tests), then
 
 ```bash
-scripts/next-step --adhoc --phase build --next "Fix the tests failing in State, then re-run dforge:finishing-a-development-branch."
+scripts/next-step --notes <the notes file step 3 wrote> --adhoc --phase build --next "Fix the tests failing in State, then re-run dforge:finishing-a-development-branch."
 ```
 
 never `next-step PLAN_FILE`, which leads straight back here. End with this,
@@ -292,10 +292,6 @@ never add a second line for it.
 | Option 3, keep as-is | Never | — |
 | Confirmed discard | Never | — |
 
-The SHA on an Option 1 line is the base branch head after the merge, not the
-merge commit's own hash — a commit cannot contain its own hash, and the merge
-fast-forwards when it can, leaving no merge commit at all.
-
 Two branches each appending a last line conflict on integration. Adopting
 projects add `<docs>/plans/completed.md merge=union` to
 `.gitattributes` so those appends resolve without one; say so once if the file
@@ -321,11 +317,12 @@ prose note is not written. In the same commit as the index line:
   or one whose `Assigned` cell is this plan's path — with
   `scripts/register set <register> <id> done`, or `verify --note <what is owed>`
   when the row's acceptance names a check only your human partner can perform;
-  a row cited only by a task whose complete line reads
-  `(deferred by the auto run)` is set with
+  a row any task cites whose complete line reads
+  `(deferred by the auto run)`, even when a completed task also cites it, is set with
   `scripts/register set <register> <id> deferred --note "deferred by the auto run: <the line's Ruling>[; unmerged task ref <ref>]"`
   instead, with the line's `unmerged task ref <ref>` clause when it has one,
-  whichever finish action runs this step, never `done` or `verify`;
+  whichever finish action runs this step, never `done` or `verify`; a row
+  already `done` or `n/a` is left as it is;
 - add a row for every `minor (deferred)` line, every `parked` line, every
   complete line's `discovered:` field that is not `none`, and every final-review
   finding you left for your human partner, with
