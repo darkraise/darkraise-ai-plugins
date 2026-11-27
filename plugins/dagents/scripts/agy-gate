@@ -121,7 +121,7 @@ if [ "$source" = probe ]; then
         export MSYS_NO_PATHCONV=1
         cwd=$(dr_native_path "$PWD")
         answer=$(jq -cn --arg cwd "$cwd" '{op:"auth",cwd:$cwd}' \
-          | "$DAGENTS_TIMEOUT" 45 node "$(dr_native_path "$HERE/lib/agy-probe.mjs")" "$(dr_native_path "$root")" 2>/dev/null \
+          | "$DAGENTS_TIMEOUT" -k 5 45 node "$(dr_native_path "$HERE/lib/agy-probe.mjs")" "$(dr_native_path "$root")" 2>/dev/null \
           | tail -1 | tr -d '\r')
         case "$(jq -r '.authed | tostring' <<<"$answer" 2>/dev/null | tr -d '\r')" in
           true) usable=true reason=ok ;;

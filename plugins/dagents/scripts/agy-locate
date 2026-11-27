@@ -29,8 +29,9 @@ agy=$(command -v agy 2>/dev/null) || off plugin-not-installed
 [ -n "$agy" ] || off plugin-not-installed
 
 dagents_timeout || off no-timeout-command
-out=$("$DAGENTS_TIMEOUT" 20 "$agy" --version 2>/dev/null); status=$?
-[ "$status" -ne 124 ] || off version-timeout
+out=$("$DAGENTS_TIMEOUT" -k 5 20 "$agy" --version 2>/dev/null); status=$?
+# 137: agy ignored the TERM and was killed.
+case "$status" in 124 | 137) off version-timeout ;; esac
 version=$(head -n 1 <<<"$out" | tr -d '\r')
 [ -n "$version" ] || off plugin-not-installed
 
