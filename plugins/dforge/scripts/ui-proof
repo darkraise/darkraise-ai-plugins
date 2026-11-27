@@ -57,6 +57,7 @@ case $cmd in
     fp=$(uiux_fingerprint "$root") || die "cannot fingerprint the UI files"
     has=0
     if [ -n "$(uiux_field "$report" Fingerprint)" ]; then has=1; fi
+    command -v dr_replace >/dev/null 2>&1 || . "$HERE/lib/lock.sh"
     tmp=$(mktemp) || die "mktemp failed"
     # A judge line for another fingerprint judged other code: drop it, so an
     # edit after the verdict needs a new verdict.
@@ -69,7 +70,7 @@ case $cmd in
       }
       { print }
       !has && !put && index($0, "**Contract:**") == 1 { print "**Fingerprint:** " fp; put = 1 }
-    ' > "$tmp" && cat "$tmp" > "$report"
+    ' > "$tmp" && dr_replace "$report" "$tmp" || { rm -f "$tmp"; die "cannot write $report"; }
     rm -f "$tmp"
     printf 'ui-proof: stamped %s in %s\n' "$fp" "$report" ;;
   check)
