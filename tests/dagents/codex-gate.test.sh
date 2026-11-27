@@ -339,6 +339,14 @@ check "no session id opens no surface, even trusted" "$out" \
   "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
 cp "$TMP/policy.bak" "$POLICY"
 
+# --- unwritten_session_reads_off: a gate that cannot save its answer says off ---
+jq '.trust = {"calibration":"pass","smoke":"pass"}' "$TMP/policy.bak" > "$POLICY"
+printf 'not a directory\n' > "$TMP/sess-file"
+fresh; keep=$SESS; SESS="$TMP/sess-file"; gate usable; SESS=$keep
+check "unwritten_session_reads_off" "$(grep -o 'usable=[a-z]* reason=[a-z]* review=[a-z]* lane=[a-z]*' <<<"$out")" "usable=true reason=ok review=false lane=false"
+check "unwritten_session_reads_off: the gate says so" "$(grep -c 'codex-gate: the session file was not written' "$TMP/err")" "1"
+cp "$TMP/policy.bak" "$POLICY"
+
 fresh; enable false; gate usable
 check "a disabled plugin never starts a client" "$out" \
   "codex-gate usable=false reason=plugin-not-enabled review=false lane=false resets_at=- source=probe"

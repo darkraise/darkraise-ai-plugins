@@ -115,7 +115,7 @@ quota_off() {
     epoch=$(jq -r '.resets_at_epoch // empty' "$(executor_session_file codex)" 2>/dev/null | tr -d '\r')
     [[ $epoch =~ ^[0-9]{1,18}$ ]] || epoch=''
   else
-    executor_session_mark_off codex quota
+    executor_session_mark_off codex quota || printf 'run-codex-review: the quota mark was not written\n' >&2
   fi
   quota_skip "$epoch"
 }

@@ -335,6 +335,12 @@ if [ "$SPAWNABLE" = yes ]; then
   chmod +x "$TMP/natbin/cygpath" "$TMP/natbin/node"
   fresh; : > "$TMP/node-args"; GATE_PATH="$TMP/natbin:$STUBDIR:$SEAL" gate
   check "probe_module_native_path" "$(grep -cxF "$TMP/native$P/scripts/lib/agy-probe.mjs" "$TMP/node-args")" "1"
+
+  # --- unwritten_session_reads_off: a gate that cannot save its answer says off ---
+  printf 'not a directory\n' > "$TMP/sess-file"
+  fresh; keep=$SESS; SESS="$TMP/sess-file"; gate; SESS=$keep
+  check "unwritten_session_reads_off" "$(grep -o 'usable=[a-z]* reason=[a-z]* review=[a-z]* lane=[a-z]*' <<<"$out")" "usable=true reason=ok review=false lane=false"
+  check "unwritten_session_reads_off: the gate says so" "$(grep -c 'agy-gate: the session file was not written' "$TMP/err")" "1"
 else
   skip "the gate cases that need a usable probe: Node cannot run the bash-script stub on this platform"
 fi
