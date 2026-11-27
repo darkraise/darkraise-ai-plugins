@@ -568,11 +568,12 @@ has "A14: another failure is labelled stored, not recomputed" "$SEC" "not recomp
 has "A14: another failure prints the stored Status" "$SEC" "- **Status:** Plan stored status."
 has "A14: another failure prints the stored Next" "$SEC" "- **Next:** Resume at Task 1 (One)."
 lacks "A14: another failure is not labelled recomputed" "$SEC" "recomputed from the repository"
-# A recompute that never returns: next-step is replaced by a stub that sleeps past the bound.
+# A recompute that never returns: next-step is replaced by a stub that sleeps past
+# the bound, lowered to 20 s so the check does not wait out the default 60.
 rm -rf "$TMP/auditscripts" && cp -R "$SCRIPTS" "$TMP/auditscripts"
 printf '#!/usr/bin/env bash\nsleep 40\n' > "$TMP/auditscripts/next-step"
 hstored "<!-- next-step: kind=plan done=0 closed=0 subject=docs/dforge/plans/2026-11-01-p.md at=1 -->"
-SEC=$(section "$TMP/auditscripts/repo-audit")
+SEC=$(export DFORGE_AUDIT_RECOMPUTE_SECONDS=20; section "$TMP/auditscripts/repo-audit")
 has "A14: a timeout is labelled not recomputed" "$SEC" "not recomputed"
 has "A14: a timeout prints the stored Next" "$SEC" "- **Next:** Resume at Task 1 (One)."
 

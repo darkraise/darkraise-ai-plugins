@@ -9,6 +9,8 @@
 #
 # Usage: repo-audit
 # Exit: 0 ok; 2 usage or not inside a git repository.
+# Environment: DFORGE_AUDIT_RECOMPUTE_SECONDS bounds each handoff's recompute
+#   (default 60).
 set -uo pipefail
 
 [ $# -eq 0 ] || { echo "usage: repo-audit" >&2; exit 2; }
@@ -192,7 +194,7 @@ show_handoff() {
   before=$(digest_of "$f")
   if co=$(handoff_checkout "$f"); then
     # 60 s: a 1,000-row register fixture takes 24-27 s on Windows CI.
-    out=$(cd "$co" && bash "$here/with-timeout" 60 bash "$here/next-step" --print --handoff "$f" 2>&1 </dev/null) || rc=$?
+    out=$(cd "$co" && bash "$here/with-timeout" "${DFORGE_AUDIT_RECOMPUTE_SECONDS:-60}" bash "$here/next-step" --print --handoff "$f" 2>&1 </dev/null) || rc=$?
   else
     out="repo-audit: $f is in no checkout" rc=1
   fi
