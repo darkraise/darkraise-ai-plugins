@@ -865,6 +865,18 @@ describe('attribution guard', () => {
     expect(clean).toEqual([undefined, undefined])
   })
 
+  test('A6: reads an attached or abbreviated message option', () => {
+    const cases: [string, boolean][] = [
+      [`git commit -am"fix\n\n${A6_AI}"`, true],
+      [`gh pr create -b"x\n\n${A6_GENERATED}"`, true],
+      [`gh pr create -b="x\n\n${A6_AI}"`, true],
+      [`git commit --mess="fix\n\n${A6_AI}"`, true],
+      [`git commit -m x --trai "${A6_AI}"`, true],
+      ['git commit -amfix', false],
+      ['git commit --mess=fix', false],
+    ]
+    expect(cases.filter(([command, want]) => A6_FOUND(command) !== want).map(([command]) => command)).toEqual([])
+  })
 
 
 
