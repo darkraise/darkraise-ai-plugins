@@ -1227,6 +1227,9 @@ parse_report() {
     }
     /^## / {
       sect = substr($0, 4); sub(/[ \t]+$/, "", sect); nsect++
+      # A near miss would leave its findings unread under an unknown section.
+      if (tolower(sect) ~ /^(finding|cannot verif)/ && sect != "Findings" && sect != "Cannot verify" && sect != "Finding verdicts")
+        err("line " NR ": ## " sect " is not ## Findings or ## Cannot verify")
       if (sect == "Codex findings") codex_at = nsect
       next
     }
@@ -1632,6 +1635,12 @@ do_verdict() {
     vstate=$state
     [ -f "$vstate" ] && [ -n "$(jq -r '.reviewHead // empty' "$vstate" | tr -d '\r')" ] \
       || die "run task-step review for task $first first" 6
+    r=$(jq -r '.round // 0' "$vstate" | tr -d '\r')
+    if [ -z "$rereview_arg" ]; then
+      [ "${r:-0}" -lt 1 ] || die "Task $first is at re-review round $r: run verdict with --rereview $r" 6
+    elif [ "$rereview_arg" != "${r:-0}" ]; then
+      die "Task $first's step file is at round ${r:-0}, not $rereview_arg" 6
+    fi
     rpath=$ws/task-$first-review-report.md
     [ -z "$rereview_arg" ] || rpath=$ws/task-$first-rereview-$rereview_arg-report.md
   fi
