@@ -512,7 +512,7 @@ function quality(opts, rowsOut, closeRows, planText) {
       } catch { /* a range whose commits are gone excludes nothing */ }
     }
     try {
-      const log = execFileSync('git', ['-C', repo, 'log', baseBranch(repo), '--format=%x00%H %s', '--name-only',
+      const log = execFileSync('git', ['-c', 'core.quotePath=false', '-C', repo, 'log', baseBranch(repo), '--format=%x00%H %s', '--name-only',
         `--since=@${Math.floor(finish / 1000)}`, `--until=@${Math.floor(finish / 1000) + 7 * 86400}`], { encoding: 'utf8' });
       for (const chunk of log.split('\0').slice(1)) {
         const [head, ...paths] = chunk.split('\n').filter(Boolean);

@@ -402,6 +402,19 @@ printf '# Register\n' > "$FD/reg/milestone-1.md"
 J=$(node "$REPORT" --markers "$FD/markers.tsv" --transcripts "$FD/proj" --plan "$FD/plans/p.md" --register "$FD/reg/milestone-1.md" --format json 2>/dev/null)
 check "quality_pairing: a register name inside a longer one is not its follow-up" "$(q "$J" '.plans[0].quality.followUpTasks')" "0"
 
+# --- quality_pairing: a fix commit to a non-ASCII path ---
+NR="$TMP/nrepo"; git init -q "$NR"; mkdir -p "$TMP/nplan"
+nc() { # nc DATE SUBJECT
+  printf '%s\n' "$2" >> "$NR/é.sh"
+  git -C "$NR" add -A
+  GIT_AUTHOR_DATE=$1 GIT_COMMITTER_DATE=$1 git -C "$NR" -c user.name=t -c user.email=t@example.invalid commit -q -m "$2"
+}
+nc 2025-12-31T00:00:00Z "feat: base"
+nc 2026-01-02T00:00:00Z "fix: é"
+printf '# P\n\n### Task 1: one\n\n**Files:**\n- Modify: `é.sh`\n' > "$TMP/nplan/p.md"
+J=$(node "$REPORT" --markers "$FD/markers.tsv" --transcripts "$FD/proj" --plan "$TMP/nplan/p.md" --repo "$NR" --format json 2>/dev/null)
+check "quality_pairing: a fix commit to a non-ASCII path counts" "$(q "$J" '.plans[0].quality.fixCommits')" "1"
+
 # --- prices_unreadable ---
 mkdir -p "$TMP/noprices/lib"
 cp "$REPORT" "$TMP/noprices/lib/"
