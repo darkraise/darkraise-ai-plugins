@@ -38,7 +38,8 @@ dr_resolve() {
 
 dr_snapshot() {
   local root output="$2" index files temp indexfile filesfile filemode
-  root="$(dr_canonical "$1")" || return 2
+  # The whole worktree, whichever directory of it was given.
+  root="$(git -C "$1" rev-parse --show-toplevel)" && root="$(dr_canonical "$root")" || return 2
   temp="$(mktemp "${output}.XXXXXX")" || return 2
   index="$(git -C "$root" ls-files --stage -z | base64 | tr -d '\r\n')" || { rm -f "$temp"; return 2; }
   filemode=$(git -C "$root" config --bool core.filemode) || filemode=false
