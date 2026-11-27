@@ -186,6 +186,28 @@ side --session s-5 setup-branch auto/side-run
 side --session s-5 phase execute; status=$?
 check "a run started in a linked worktree: phase execute on its own branch passes" "$status:$(field phase)" "0:execute"
 git -C "$TMP/side" switch -q side
+# setup-branch looks for a recorded branch again under the lock: the wrapper
+# records one while the call waits for it.
+if command -v flock >/dev/null 2>&1; then
+  beat s-5
+  (cd "$TMP/side" && bash "$AR" --session s-5 start --spec "$SPEC" --register docs/r.md --isolation in-place --force >/dev/null)
+  git -C "$TMP/side" switch -q auto/side-run
+  cat > "$TMP/branch-flock" <<EOF
+#!/usr/bin/env bash
+if [ ! -e "$TMP/branch-flock.done" ]; then
+  touch "$TMP/branch-flock.done"
+  jq '.branch = "auto/first"' "$STATE" > "$STATE.w" && mv -f "$STATE.w" "$STATE"
+fi
+exec flock "\$@"
+EOF
+  chmod +x "$TMP/branch-flock"
+  err=$(cd "$TMP/side" && DAGENTS_FLOCK="$TMP/branch-flock" bash "$AR" --session s-5 setup-branch auto/side-run 2>&1 >/dev/null); status=$?
+  check "setup-branch: a branch recorded while it waited for the lock is kept" \
+    "$status:$(grep -cxF "auto-run: the run's branch is already recorded: auto/first" <<<"$err"):$(field branch)" "4:1:auto/first"
+  git -C "$TMP/side" switch -q side
+else
+  printf 'skip - setup-branch race: no flock on this host\n'
+fi
 git -C "$REPO" worktree add -q --detach "$TMP/loose"
 beat s-6
 (cd "$TMP/loose" && bash "$AR" --session s-6 start --spec "$SPEC" --register docs/r.md --force >/dev/null)
