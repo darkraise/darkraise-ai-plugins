@@ -51,7 +51,9 @@ case $cmd in
     [ $# -eq 1 ] || usage
     report=$1
     [ -f "$report" ] || die "no such report: $report"
-    grep -q '^\*\*Contract:\*\*' "$report" || die "the report has no **Contract:** line to stamp beside"
+    # Counted as the stamping awk below reads it: a line inside a fence is example text.
+    tr -d '\r' < "$report" | awk "$_PLAN_AWK"'in_fence($0) { next } index($0, "**Contract:**") == 1 { f = 1 } END { exit !f }' \
+      || die "the report has no **Contract:** line to stamp beside"
     fp=$(uiux_fingerprint "$root") || die "cannot fingerprint the UI files"
     has=0
     if [ -n "$(uiux_field "$report" Fingerprint)" ]; then has=1; fi

@@ -172,6 +172,10 @@ report 2026-10-24-t touch "$PASSROW"
 out=$(up stamp "$PROOFS/2026-10-24-t.md")
 check "stamp: reports the fingerprint" "$(grep -c "^ui-proof: stamped $(up fingerprint)" <<<"$out")" "1"
 check "stamp: writes one fingerprint line under Contract" "$(grep -A1 '^\*\*Contract:\*\*' "$PROOFS/2026-10-24-t.md" | grep -c '^\*\*Fingerprint:\*\*')" "1"
+printf '# UI proof: f\n\n```\n**Contract:** touch\n```\n' > "$PROOFS/fenced.md"
+out=$(up stamp "$PROOFS/fenced.md" 2>&1 >/dev/null); st=$?
+check "stamp: a Contract line only inside a fence is refused" "$st|$out" "2|ui-proof: the report has no **Contract:** line to stamp beside"
+rm -f "$PROOFS/fenced.md"
 judge 2026-10-24-t ship
 out=$(up check --base "$BASE"); st=$?
 check "check: a stamped, judged touch report passes" "$st" "0"
