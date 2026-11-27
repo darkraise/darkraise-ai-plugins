@@ -214,7 +214,7 @@ every open finding is parked at the breaker, merge it before writing its
 complete line:
 
 ```bash
-bash scripts/wave merge PLAN_FILE <N> <task base>
+bash <plugin-root>/scripts/wave merge PLAN_FILE <N> <task base>
 ```
 
 - **Exit 0, `merged Task <N>: <sha7>`.** Write the complete line with
@@ -255,7 +255,7 @@ rebase or rewrite a task ref: the review saw those commits.
 When every task of the wave has a complete line:
 
 1. For a wave of more than one task,
-   `bash scripts/wave clean PLAN_FILE <k> <wave base>` removes the worktrees
+   `bash <plugin-root>/scripts/wave clean PLAN_FILE <k> <wave base>` removes the worktrees
    the wave's tasks entered and committed in, and deletes their merged refs.
    It never forces: a `kept` line is a worktree with uncommitted changes or a
    lock, left for your human partner; log each as a `Ruling:` line.
@@ -326,7 +326,7 @@ A `Wave <k>: started` line with no later `Wave <k>: integrated` or `Wave <k>: me
 is a wave in flight (a serialized wave included); a wave whose tasks are all
 complete and has no closing line continues at §5. After compaction:
 
-1. Run `bash scripts/wave status PLAN_FILE <k> <wave base>`: each task's ref,
+1. Run `bash <plugin-root>/scripts/wave status PLAN_FILE <k> <wave base>`: each task's ref,
    its commits since the base, whether it is merged, and the worktrees holding
    it.
 2. For each task of the wave, apply the Recovery table of
