@@ -261,10 +261,16 @@ ar_update() {
 # ar_write PATH FILTER [jq options…] — with AR_RUN_SEEN set, the run must
 # still be the one of that id; a state written before run ids skips that.
 ar_write() {
+  ar_write_ok "$1" || return
+  ar_put "$@"
+}
+
+# ar_write_ok PATH — ar_write's binding check, for a locked write that reads
+# the state before it writes.
+ar_write_ok() {
   ar_jq -e --arg s "${AR_SESSION:-}" --arg r "${AR_RUN_SEEN:-}" \
     '.active == true and .session == $s and ($r == "" or .runId == null or .runId == $r)' < "$1" >/dev/null 2>&1 \
     || { echo "auto-run: no auto run is bound to this session" >&2; return 3; }
-  ar_put "$@"
 }
 
 ar_put() { # ar_put PATH FILTER [jq options…] — ar_write without the binding check
@@ -632,8 +638,24 @@ ar_setup_branch() {
     return 4
   fi
   carried=$( { [ ${#paths[@]} -eq 0 ] || printf '%s\0' "${paths[@]}"; } | ar_jq -Rsc 'split("\u0000") | map(select(. != ""))') || return 1
-  ar_update '.branch = $b | .branchBase = $h | .carried = $c' \
-    --arg b "$name" --arg h "$head" --argjson c "$carried"
+  local state seen
+  state=$(ar_path) || return 1
+  seen=$(ar_jq -r '.runId // empty' < "$state" 2>/dev/null)
+  AR_RUN_SEEN=$seen dr_locked "$state" _ar_setup_branch_write "$state" "$name" "$head" "$carried"
+}
+
+# _ar_setup_branch_write PATH NAME HEAD CARRIED — ar_setup_branch's write,
+# under the state's lock: a second call that passed the first look while this
+# one waited finds the branch recorded.
+_ar_setup_branch_write() {
+  local recorded
+  ar_write_ok "$1" || return
+  recorded=$(ar_jq -r '.branch // empty' < "$1" 2>/dev/null)
+  if [ -n "$recorded" ]; then
+    echo "auto-run: the run's branch is already recorded: $recorded" >&2
+    return 4
+  fi
+  ar_put "$1" '.branch = $b | .branchBase = $h | .carried = $c' --arg b "$2" --arg h "$3" --argjson c "$4"
 }
 
 ar_carried() { ar_state | ar_jq -r '(.carried // [])[]'; }
