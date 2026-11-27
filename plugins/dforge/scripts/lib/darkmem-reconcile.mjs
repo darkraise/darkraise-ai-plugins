@@ -405,8 +405,9 @@ async function documentsToDarkmem(context) {
   if (stranded.found.length) {
     return { moved: false, reason: "a linked worktree holds documents the primary checkout does not; merge or remove them first", details: stranded.found };
   }
-  // Import puts without a hash precondition, so this check is what keeps
-  // darkmem's copies; the window between it and the puts is accepted.
+  // The puts carry no hash precondition, since these documents are new to
+  // darkmem: this check keeps darkmem's copies, and a put that answers
+  // `updated` names a copy another client filed between it and the put.
   const remote = new Map((await client.manifest(cfg.project, DOC_PREFIX)).map(item => [item.uri, item.content_hash]));
   const differing = [];
   for (const doc of documents) {
@@ -416,9 +417,15 @@ async function documentsToDarkmem(context) {
     if (twins.length) differing.push(`${doc.uri}: darkmem holds ${twins.join(", ")}, which differ only in case`);
   }
   if (differing.length) return { moved: false, reason: "darkmem holds a different version of some documents; nothing was sent", details: differing };
+  const replaced = [];
   for (const doc of documents) {
-    if (!remote.has(doc.uri)) await client.putDocument({ project: cfg.project, uri: doc.uri, content: doc.content });
+    if (remote.has(doc.uri)) continue;
+    const answer = await client.putDocument({ project: cfg.project, uri: doc.uri, content: doc.content });
+    if (answer?.outcome === "updated") {
+      replaced.push(`${doc.uri}: another client filed it during the move, and this move replaced its content; darkmem's revisions keep the other version`);
+    }
   }
+  if (replaced.length) return { moved: false, reason: "another client filed documents on darkmem during the move; the repository copy stays", details: replaced };
   const mirror = mirrorRoots(cfg, "documents");
   const pulled = pullReport();
   await pullDocuments({ ...context, roots: mirror, report: pulled });

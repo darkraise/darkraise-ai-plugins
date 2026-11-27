@@ -1287,3 +1287,17 @@ test("documents stay local when git worktree list fails, rather than reading onl
   assert.equal(s.stores().documents, "local");
 });
 
+test("a document another client files during the documents move refuses it and is named", async t => {
+  const s = await docsRepo(t);
+  s.stub.db.onRequest = (method, route) => {
+    if (method !== "POST" || route !== "/api/v1/documents") return;
+    s.stub.db.onRequest = null;
+    s.stub.db.documents.set("proj\u0000dforge/specs/a.md", storedDocument("proj", "dforge/specs/a.md", "# A from another client\n"));
+  };
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: documents stay local (configured darkmem): another client filed documents on darkmem during the move; the repository copy stays\n"), result.stdout);
+  assert.ok(result.stdout.includes("  dforge/specs/a.md: another client filed it during the move, and this move replaced its content; darkmem's revisions keep the other version\n"), result.stdout);
+  assert.equal(git(s.repo, "diff", "--cached", "--name-only"), "");
+  assert.equal(s.stores().documents, "local");
+});
