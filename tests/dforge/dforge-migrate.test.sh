@@ -808,6 +808,12 @@ HOME="$TMP/rh-home" migrate "$FM" "$R" > /dev/null 2>&1
 NEW="$RT/.dforge/handoff/adhoc-legacy-1700001500.md"
 check "an interrupted handoff rename: a rerun leaves it naming itself" "$(exists "$R/.dforge/handoff/latest.md") $(grep -c 'latest\.md' "$NEW" 2>&1)" "no 0"
 
+# --- a dry run names a mirror handoff an older home still holds ---
+OH="$TMP/oh-home"; mkdir -p "$OH/.dr-forge/mirror/p/work/handoff"
+marked plan docs/dforge/plans/p5.md 1700001600 > "$OH/.dr-forge/mirror/p/work/handoff/latest.md"
+OR="$TMP/ohrepo"; repo "$OR"
+out=$(HOME="$OH" migrate "$FM" --dry-run "$OR")
+check "dry: a mirror handoff in an older home is named" "$(grep -cxF "dforge-migrate: $OH/.dr-forge/mirror/p/work/handoff/latest.md is a darkmem mirror's latest.md in an older home; once the homes have moved, a run in its repository renames it to its key" <<<"$out")" "1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

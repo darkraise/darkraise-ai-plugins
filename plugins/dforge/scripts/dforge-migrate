@@ -624,6 +624,14 @@ if [ "$dry" -eq 1 ]; then
       if [ -f "$note" ] && would_move "$note"; then migrate_latest "$note" "$wt/.dforge/handoff/latest.md"; break; fi
     done
   done
+  # legacy_handoffs finds a mirror from ~/.dforge only, which the home move
+  # has not yet made.
+  if [ -n "${HOME:-}" ]; then
+    for note in "$HOME"/.dr-forge/mirror/*/work/handoff/latest.md "$HOME"/.dr-superpowers/mirror/*/work/handoff/latest.md; do
+      [ -f "$note" ] || continue
+      printf "dforge-migrate: %s is a darkmem mirror's latest.md in an older home; once the homes have moved, a run in its repository renames it to its key\n" "$note"
+    done
+  fi
 fi
 
 [ "$dry" -eq 1 ] || for note in "${commit_notes[@]+"${commit_notes[@]}"}"; do printf 'commit: %s\n' "$note"; done
