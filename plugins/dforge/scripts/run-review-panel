@@ -11,8 +11,7 @@
 # until= epoch, else 5 hours) and skipped as reason=quota-skip while that
 # lasts. An agy quota on a claude-* row is not recorded: agy-gate then routes
 # the family to its Gemini row, which has its own quota. In such a run each
-# FAILED or TIMEOUT line, or a reason=denied one, adds to the run's
-# panelFailures total.
+# FAILED or TIMEOUT line adds to the run's panelFailures total.
 #
 # Usage: run-review-panel --kind task|plan|final [--tier heavy] --cwd DIR
 #          --out-dir DIR (--prompt FILE | --base SHA)
@@ -268,7 +267,7 @@ for id in $ids; do
     line=${entry#*|}
     printf '%s\n' "$line"
     case "$line" in *" status=OK "*|*" status=FALLBACK "*) lists=$((lists + 1)) ;; esac
-    case "$line" in *" status=FAILED "*|*" status=TIMEOUT "*|*" reason=denied"*) failures=$((failures + 1)) ;; esac
+    case "$line" in *" status=FAILED "*|*" status=TIMEOUT "*) failures=$((failures + 1)) ;; esac
   done
 done
 if [ "$failures" -gt 0 ] && (cd "$cwd" && bash "$HERE/auto-run" pending) >/dev/null 2>&1; then

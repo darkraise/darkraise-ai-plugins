@@ -42,8 +42,10 @@ bash "<plugin-root>/scripts/run-review-panel" --kind task|plan|final \
   with its stderr in `<out-dir>/<id>.stderr` and its list in
   `<out-dir>/<id>.json` (`<id>.md` for `--kind final`).
 - It prints each runner's own status line,
-  `<id>-judge <model>/<effort> status=OK|FALLBACK|TIMEOUT|FAILED exit=<n> out=<path> evidence=<e>`,
-  with ` reason=<token>` on every line that is not `OK`, then
+  `<id>-judge <model>/<effort> status=OK|FALLBACK|SKIPPED|TIMEOUT|FAILED exit=<n> out=<path> evidence=<e>`,
+  with ` reason=<token>` on every line that is not `OK`, and
+  ` until=<epoch>` after `reason=quota` when agy named the quota's reset,
+  then
   `panel tier=heavy lists=<n>`, where `<n>` counts the `OK` and `FALLBACK`
   lines.
 - Its bound is the slowest family's first row plus that family's grace
@@ -54,14 +56,18 @@ bash "<plugin-root>/scripts/run-review-panel" --kind task|plan|final \
   error.
 
 Read the status lines and nothing else. `OK` and `FALLBACK` are a reviewer
-that returned a list; on `FALLBACK`, say the substitution aloud with the
-reason the runner printed. `SKIPPED`, `TIMEOUT` and `FAILED` are a reviewer
+that returned a list; `FALLBACK` means the preferred row refused the run
+(`reason=refused`) and the fallback row answered: say the substitution aloud
+with that reason. `SKIPPED`, `TIMEOUT` and `FAILED` are a reviewer
 that returned none. Never run a reviewer again: each runner has already
 applied its own one-shot fallback. `lists=0` means the Claude seat reviews
 alone: say so aloud, with each reviewer's reason.
 
-The non-`OK` reason tokens are `gate`, `refused`, `quota`, `quota-stderr`,
-`timeout`, `wrote`, `schema`, `unread` and `error`. An `unread` review is
+The reason tokens a run prints are `gate`, `git`, `refused`, `quota`,
+`quota-stderr`, `timeout`, `wrote`, `schema`, `unread` and `error`. A
+`SKIPPED` line, for a family the panel did not start, carries `quota-skip`,
+`untrusted`, `no-session-id`, `gate`, or the gate's own `reason=` value (for
+example `setting`, `no-timeout` or `logged-out`). An `unread` review is
 schema-valid but scores every criterion 1 with no finding: the reviewer read
 nothing, so it is no list. A `wrote` run changed the worktree,
 `HEAD`, the stash list, the git config or a hook: it never counts as a list,
@@ -105,7 +111,7 @@ its last section, which `task-step verdict` reads.
 
 The ledger's seat clause names each reviewer that returned a list and the
 judge, joined with `+`: `seat codex gpt-6.1-sol/xhigh+agy
-gemini-4-argon/high+judge-sonnet-high`. A reviewer that ran and returned no
+gemini-4-argon/high+judge-opus`. A reviewer that ran and returned no
 list adds ` (<id> <STATUS> — <reason>)`; no open surface adds
 ` (reviewers off — <answers>)`.
 
@@ -125,12 +131,15 @@ every seat that returned a list.
 At depth full only, the final review runs the panel once:
 
 ```bash
-git worktree remove -f -f <workspace>/final-review-panel-tree 2>/dev/null; rm -rf <workspace>/final-review-panel-tree; git worktree prune
-git worktree add --detach <workspace>/final-review-panel-tree <sha>
+git worktree remove -f -f "<workspace>/final-review-panel-tree" 2>/dev/null; rm -rf "<workspace>/final-review-panel-tree"; git worktree prune
+git worktree add --detach "<workspace>/final-review-panel-tree" <sha>
 bash "<plugin-root>/scripts/run-review-panel" --kind final --tier heavy \
-  --cwd <workspace>/final-review-panel-tree \
-  --out-dir <workspace>/final-review-panel --base <base-branch>
+  --cwd "<workspace>/final-review-panel-tree" \
+  --out-dir "<workspace>/final-review-panel" --base <base-branch>
 ```
+
+Keep the quotes: the workspace sits under the repository root, whose path may
+hold a space.
 
 `<sha>` is the review's HEAD ([final-review.md](final-review.md) says which
 SHA that is), and `<base-branch>` is the branch this one forked from.
