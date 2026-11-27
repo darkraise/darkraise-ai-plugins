@@ -4403,11 +4403,14 @@ async function engineSettings($: EngineInterface): Promise<string> {
  * into, whose values the host keeps apart and no session.start announces, and
  * leaves the pane as the person left it.
  */
-// The counts that hold within one session: the reconcile prompts and the
-// background-work deferral.
+// The counts that hold within one session: the reconcile prompts, the
+// background-work deferral, the budget alert and the permission mode the
+// last hook reported.
 function resetSessionGuards() {
   S.reconcileSeen = { key: '', count: 0 }
   S.autoDeferredSince = null
+  S.isBudgetSent = false
+  S.permissionMode = null
 }
 
 async function readSession($: EngineInterface, isStart: boolean) {
