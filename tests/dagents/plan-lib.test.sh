@@ -451,5 +451,9 @@ out=$(plan_primary_root "$TMP/sup/sub"); status=$?
 check "plan_primary_root: a submodule is its own primary" \
   "$status:$out" "0:$(git -C "$TMP/sup/sub" rev-parse --show-toplevel)"
 
+# --- plan_task_paths ---
+check "plan_task_paths: a comma line range is dropped" \
+  "$(printf '%s\n' '- Modify: `src/view.tsx:10-20,30-40`' | plan_task_paths)" "src/view.tsx"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -304,13 +304,14 @@ plan_waves() {
 
 # plan_task_paths — the repository paths the task text on stdin names in its
 # `- Create:`, `- Modify:`, `- Test:` and `- Delete:` lines outside fences, in
-# every part, one per line, unique. A `:123-145` line range is dropped.
+# every part, one per line, unique. A `:123-145` or `:12,30-40` line
+# range is dropped.
 plan_task_paths() {
   awk "$_PLAN_AWK"'
     in_fence($0) { next }
     /^[ \t]*- (Create|Modify|Test|Delete):[ \t]*`[^`]+`/ {
       p = $0; sub(/^[^`]*`/, "", p); sub(/`.*$/, "", p)
-      sub(/:[0-9]+(-[0-9]+)?$/, "", p)
+      sub(/:[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*$/, "", p)
       sub(/^\.\//, "", p)
       if (p != "" && !seen[p]++) print p
     }
