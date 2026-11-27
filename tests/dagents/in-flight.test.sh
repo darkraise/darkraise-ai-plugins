@@ -106,6 +106,8 @@ check "a resumed agent: exit 1" "$code" "1"
 check "a resumed agent is listed once, as first described" "$(grep -c '^- agent a21 - idle - Implement task 7$' <<<"$out"):$(grep -c 'a21' <<<"$out")" "1:1"
 fjq -nc '{type:"attachment",attachment:{type:"queued_command",prompt:"<task-notification>\n<task-id>a21</task-id>\n<tool-use-id>toolu_send</tool-use-id>\n<status>completed</status>\n</task-notification>"}}' >> "$TP"
 check "a resumed agent's notification: exit 0" "$(bash "$INFLIGHT" >/dev/null; echo $?)" "0"
+check "scan: a transcript that is gone is a scan failure" \
+  "$( . "$HERE/../../plugins/dagents/scripts/lib/in-flight.sh"; inflight_scan "$TMP/no-such.jsonl" >/dev/null 2>&1; a=$?; inflight_scan "" >/dev/null 2>&1; echo "$a:$?")" "1:0"
 # A resume after a TaskStop runs the agent again: the stop came first.
 cp "$TP" "$TP.keep54"
 : > "$TP"
