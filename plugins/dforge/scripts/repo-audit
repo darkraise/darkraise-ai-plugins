@@ -2,8 +2,10 @@
 # Print an orientation snapshot for a session that picks up work, so it costs
 # one command instead of the five to eight a fresh session otherwise spends on
 # git status, logs, worktrees, ledgers and the handoff files. It deletes the
-# handoffs whose recompute finds nothing left to resume (see ## Handoff) and
-# writes nothing else.
+# handoffs whose recompute finds nothing left to resume (see ## Handoff),
+# under the claims lock (creating the self-ignored claims directory when it is
+# missing), and context-size appends its reading to the budget log under the
+# self-ignored sdd/; it writes nothing else.
 #
 # Usage: repo-audit
 # Exit: 0 ok; 2 usage or not inside a git repository.
