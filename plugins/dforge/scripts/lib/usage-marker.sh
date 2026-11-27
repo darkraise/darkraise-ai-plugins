@@ -21,7 +21,8 @@ _um_plan_rel() {
     && dir=$(cd "$(dirname "$f")" 2>/dev/null && pwd -P) || { printf '%s' "$f"; return 0; }
   case "$dir/" in
     "$top"/*) f="$dir/$(basename "$f")"; printf '%s' "${f#"$top"/}" ;;
-    *) printf '%s' "$f" ;;
+    *) if declare -F dforge_name >/dev/null 2>&1; then printf '%s' "$(dforge_name "$f" "$top")"
+       else printf '%s' "$f"; fi ;;
   esac
 }
 

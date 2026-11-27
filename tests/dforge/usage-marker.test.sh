@@ -103,6 +103,19 @@ transcript s1 120000 >/dev/null
 run_pair transcript s1
 run_pair "no transcript" s-none
 
+# --- a plan in the darkmem documents mirror is marked by its docs name ---
+. "$HERE/fixtures/darkmem-stores.sh"
+DR="$TMP/dm"
+fixture "$DR"
+DM=$(stores_home "$HOME" "$DR" proj darkmem local)
+mkdir -p "$DM/dforge/plans"
+cp "$DR/docs/plans/p.md" "$DM/dforge/plans/p.md"
+transcript s9 120000 >/dev/null
+(cd "$DR" && CLAUDE_CODE_SESSION_ID=s9 bash "$BRIEF" --open docs/dforge/plans/p.md 1 >/dev/null 2>&1)
+check "darkmem documents: a mirror plan is marked by its docs name" \
+  "$(awk -F'\t' '$8 == "s9" { print $6 }' "$DR/.dforge/sdd/usage-markers.tsv" 2>/dev/null)" "docs/dforge/plans/p.md"
+rm -f "$HOME/.dforge/config.json" "$HOME/.dforge/stores.json"
+
 # --- close_row_before_task_complete / task_complete_sweeps ---
 # An auto run bound to s1, with an auto-run wrapper that copies the marker
 # file at task-complete: the close row must already be there.
