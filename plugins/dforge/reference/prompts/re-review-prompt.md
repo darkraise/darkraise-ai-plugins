@@ -67,7 +67,9 @@ Subagent (dforge:judge-sonnet-high; dforge:judge-opus for a subtle concurrency f
     and verify the claims against the diff. Do not re-run the suite to
     confirm their report. Run a test only when reading the code raises a
     specific doubt that no existing run answers — and then a focused test,
-    never a package-wide suite.
+    never a package-wide suite. The judge agents carry no shell: when you
+    have none, such a doubt is a finding naming the focused test you would
+    run and what it would settle.
 
     When the fix diff adds or touches a test whose name starts with `A<n>:` or
     `a<n>_`, or which the QA report identifies as an acceptance test (an
