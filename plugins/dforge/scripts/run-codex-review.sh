@@ -251,6 +251,22 @@ write_out() { # write_out <result-json>
   jq -j '.finalMessage // ""' <<<"$1" > "$out"
 }
 
+# After a quota error the gate probes the account again, which records the
+# reset the account names; a probe that finds Codex usable leaves it on. Any
+# other answer marks Codex off with no reset. Echoes the status line's reason.
+quota_off() {
+  local line epoch
+  line=$(bash "$GATE" --refresh 2>/dev/null | tail -1 | tr -d '\r')
+  if [[ " $line " == *" usable=true "* ]]; then echo quota; return 0; fi
+  if [[ " $line " == *" usable=false "* && " $line " == *" reason=quota "* ]]; then
+    epoch=$(jq -r '.resets_at_epoch // empty' "$(executor_session_file codex)" 2>/dev/null | tr -d '\r')
+    if [[ $epoch =~ ^[0-9]{1,18}$ ]]; then echo "quota until=$epoch"; else echo quota; fi
+    return 0
+  fi
+  executor_session_mark_off codex quota
+  echo quota
+}
+
 status() { # status <model> <effort> <state> <exit> [reason]
   printf 'codex-judge %s/%s status=%s exit=%s out=%s evidence=%s%s\n' \
     "$1" "$2" "$3" "$4" "$out" "$evidence" "${5:+ reason=$5}"
@@ -295,8 +311,7 @@ if [ "$rc" -eq 0 ] && valid_output && ! unread_output; then
 fi
 
 if [ "$(jq -r '.quota' <<<"$result")" = true ]; then
-  executor_session_mark_off codex quota
-  status "$model" "$effort" FAILED "$rc" quota; exit 1
+  status "$model" "$effort" FAILED "$rc" "$(quota_off)"; exit 1
 fi
 
 # The fallback is attempted at most once, and never when the row that just ran
@@ -320,8 +335,9 @@ if [ "$(jq -r '.refusal' <<<"$result")" = true ] \
   if [ "$rc" -eq 0 ] && valid_output && ! unread_output; then
     status "$back_model" "$back_effort" FALLBACK "$rc"; exit 0
   fi
-  [ "$(jq -r '.quota' <<<"$result")" = true ] && executor_session_mark_off codex quota
-  status "$back_model" "$back_effort" FAILED "$rc" "$(fail_reason "$result" "$rc")"; exit 1
+  reason=$(fail_reason "$result" "$rc")
+  [ "$reason" != quota ] || reason=$(quota_off)
+  status "$back_model" "$back_effort" FAILED "$rc" "$reason"; exit 1
 fi
 
 status "$model" "$effort" FAILED "$rc" "$(fail_reason "$result" "$rc")"; exit 1

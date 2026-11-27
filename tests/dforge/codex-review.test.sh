@@ -72,8 +72,22 @@ done
 
 # A stub session gate. Every case sees a usable Codex unless it sets
 # GATE_STUB_LINE or GATE_STUB_EXIT.
+# A --refresh call is the probe after a quota error: GATE_STUB_REFRESH_EPOCH has
+# it record that reset, GATE_STUB_REFRESH_LINE prints that line, and with
+# neither it prints nothing and fails. Each call's arguments go to gate.args.
 cat > "$TMP/gate-stub" <<STUB
 #!$BASH_BIN
+printf '%s\n' "\$*" >> "$TMP/gate.args"
+if [ "\${1:-}" = --refresh ]; then
+  if [ -n "\${GATE_STUB_REFRESH_EPOCH:-}" ]; then
+    printf '{"session_id":"codex-review-test","usable":false,"review":false,"reason":"quota","resets_at":"2100-01-01T00:00:00Z","resets_at_epoch":%s}\n' "\$GATE_STUB_REFRESH_EPOCH" > "$DR_CODEX_SESSION_DIR/\$CLAUDE_CODE_SESSION_ID.json"
+    printf 'codex-gate usable=false reason=quota review=false resets_at=2100-01-01T00:00:00Z source=probe\n'
+    exit 0
+  fi
+  [ -n "\${GATE_STUB_REFRESH_LINE:-}" ] || exit 1
+  printf '%s\n' "\$GATE_STUB_REFRESH_LINE"
+  exit 0
+fi
 printf '%s\n' "\${GATE_STUB_LINE:-codex-gate usable=true reason=ok review=true resets_at=- source=cache}"
 exit "\${GATE_STUB_EXIT:-0}"
 STUB
@@ -81,6 +95,7 @@ STUB
 run() { # run <args...>; STUB_* variables in the environment script the stub
   printf '0' > "$TMP/calls"
   : > "$TMP/events.log"
+  : > "$TMP/gate.args"
   PATH="$TMP/bin:$PATH" \
     CODEX_REVIEW_GATE="$TMP/gate-stub" CODEX_REVIEW_LADDER="$CODEX_REVIEW_LADDER" \
     CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR" CLAUDE_PROJECT_DIR= \
@@ -349,6 +364,20 @@ out=$(STUB_REFUSE_ONCE=1 STUB_SECOND_MODE=quota seat final --out "$TMP/o.md" --b
 present "a quota error on the fallback run is FAILED" "$out" "codex-judge gpt-6.1-sol/high status=FAILED exit=1"
 check "the quota fallback ran exactly one extra seat" "$(calls)" "2"
 check "a quota error on the fallback run turns Codex off" "$(jq -r '.usable | tostring' "$SFILE" | tr -d '\r')" "false"
+
+# --- quota_records_reset: the gate's probe records the reset, the line names it ---
+open_session
+out=$(GATE_STUB_REFRESH_EPOCH=4102444800 STUB_MODE=quota seat task --out "$TMP/o.json" --prompt "$TMP/p.txt")
+check "quota_records_reset" "$(grep -c ' reason=quota until=4102444800$' <<<"$out")" "1"
+check "quota_records_reset: the session file holds the reset" "$(jq -r '.resets_at_epoch' "$SFILE" | tr -d '\r')" "4102444800"
+check "quota_records_reset: the gate is probed once" "$(grep -c '^--refresh$' "$TMP/gate.args")" "1"
+
+# --- quota_probe_says_usable: a probe that finds Codex usable leaves it on ---
+open_session
+out=$(GATE_STUB_REFRESH_LINE='codex-gate usable=true reason=ok review=true resets_at=- source=probe' \
+  STUB_MODE=quota seat task --out "$TMP/o.json" --prompt "$TMP/p.txt")
+check "quota_probe_says_usable" "$(jq -r '.usable | tostring' "$SFILE" | tr -d '\r')" "true"
+check "quota_probe_says_usable: the line ends reason=quota" "$(grep -c ' reason=quota$' <<<"$out")" "1"
 
 open_session
 STUB_TURN_STATUS=1 STUB_FINAL_MESSAGE='the diff mentions an unsupported model'   seat final --out "$TMP/o.md" --base main >/dev/null
