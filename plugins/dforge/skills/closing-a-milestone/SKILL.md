@@ -15,9 +15,11 @@ milestone closes on its own rows: work folded into a later milestone
 (hardening into the release, say) moves its rows explicitly, with a note.
 
 <HARD-GATE>
-Never tell your human partner a phase or milestone is done, complete or
-finished unless `scripts/roadmap status` shows it `closed`. Say what
-`scripts/roadmap open` lists instead.
+When `<docs>/roadmap.md` exists, never tell your human partner a phase or
+milestone is done, complete or finished unless `scripts/roadmap status` shows it `closed`. Say what
+`scripts/roadmap open` lists instead. With no roadmap there are no milestones
+or phases to close (`scripts/roadmap status` exits 2): report what
+`scripts/next-step --print --project` says instead of calling a phase done.
 </HARD-GATE>
 
 ## Steps
@@ -40,7 +42,8 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
    each register covering an epic's spec, with its Acceptance cell. Rows
    `deferred` or `n/a` carry their notes and are audited as decisions, not as
    work.
-5. **Commit, then dispatch the judge.** The tree must be clean. Dispatch
+5. **Commit, then dispatch the judge.** Run `git status --porcelain`;
+   dispatch only when it prints nothing (commit first otherwise). Dispatch
    dforge:judge-opus with [milestone-judge.md](references/milestone-judge.md),
    the commit SHA, the milestone's exit criteria, the product spec path, the
    rows, and the gate outputs, and the report file
@@ -91,7 +94,8 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
    This is the expected answer until two plans have merged under this version.
    Otherwise it prints
    `Suite cost: <state>/suites.tsv of <checkout top level>: <d0>s at <sha7> to <d1>s at <sha7> (<change>%).`
-   The audit names that checkout in the report. It recommends the cleanup when
+   The session, not the judge, computes this after `roadmap close` and prints
+   the `Suite cost:` line in its own closing message, naming that checkout. It recommends the cleanup when
    the full suite grew by 20% or more (`<d1> * 100 >= <d0> * 120` and
    `<d1> > <d0>`) or passes a declared `Budget:`. The budget is the
    `Budget: <seconds>s` line of the gate in `<docs>/gates.md` whose `Command`
@@ -102,7 +106,7 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
    directories of the files outside `<docs>` in
    `git diff --name-only <previous close sha7>..<milestone head>`, from the root
    commit when there is no previous milestone. It recommends only and removes
-   nothing. When it recommends the cleanup, the report also lists the
+   nothing. When it recommends the cleanup, the message also lists the
    `Test ratio:` line of each `<docs>/reviews/*.md` file that
    `git diff --name-only --diff-filter=A <previous close sha7>..<milestone head> -- <docs>/reviews`
    names, or, while documents live in the darkmem mirror, of each whose
