@@ -459,13 +459,15 @@ plan_amendments_file() {
 # $(…): it exits the caller. Amendments used to live in the workspace, which
 # is not where darkmem keeps the ledger, so a session on another host lost
 # them. When the ledger directory has no amendments file and the workspace
-# has one, it is moved there (copied to a temporary name, renamed, then
-# removed from the workspace) and the move is logged in the ledger, once.
+# has one, it is moved there (copied to a temporary name, hard-linked into
+# place, then removed from the workspace) and the move is logged in the
+# ledger, once. A file another reader published there meanwhile wins: the copy
+# is dropped and nothing is logged.
 # Then a ledger line citing `Ruling: amendment A<k>` whose `## A<k> ` heading
 # the file lacks exits 2, naming it: the task text would be read without an
 # amendment the run already applied.
 plan_amendments_ready() {
-  local me ctx slug ldir ws file old ledger tmp k seen=" " bad=0
+  local me ctx slug ldir ws file old ledger tmp published k seen=" " bad=0
   local moved='Ruling: amendments moved beside the ledger — none'
   # Parameter expansion, not basename: plan-lint runs this with only the tools
   # its own checks need on PATH.
@@ -478,16 +480,27 @@ plan_amendments_ready() {
   ws=$(dforge_workspace "$slug" "$ctx")
   file="$ldir/amendments.md" old="$ws/amendments.md" ledger="$ldir/progress.md"
   if [ ! -s "$file" ] && [ -s "$old" ] && [ "$ldir" != "$ws" ] && ! [ "$ldir" -ef "$ws" ]; then
-    tmp="$file.tmp.$$"
-    if ! { mkdir -p "$ldir" && cp -- "$old" "$tmp" && mv -f -- "$tmp" "$file"; }; then
-      rm -f -- "$tmp"
+    tmp="$file.tmp.$$" published=0
+    if { mkdir -p "$ldir" && cp -- "$old" "$tmp"; }; then
+      # ln fails when the file exists, so a copy another reader moved, or
+      # plan-amend wrote, meanwhile is never replaced. mv only where the
+      # filesystem has no hard links.
+      if ln -- "$tmp" "$file" 2>/dev/null; then published=1
+      elif [ -s "$file" ]; then published=2
+      elif mv -f -- "$tmp" "$file"; then published=1
+      fi
+    fi
+    rm -f -- "$tmp"
+    if [ "$published" -eq 0 ]; then
       printf '%s: could not move %s beside the ledger, to %s\n' "$me" "$old" "$file" >&2
       exit 2
     fi
-    rm -f -- "$old" \
-      || printf '%s: moved %s beside the ledger but could not remove it\n' "$me" "$old" >&2
-    if [ -f "$ledger" ] && ! grep -qxF -- "$moved" "$ledger"; then
-      printf '%s\n' "$moved" >> "$ledger"
+    if [ "$published" -eq 1 ]; then
+      rm -f -- "$old" \
+        || printf '%s: moved %s beside the ledger but could not remove it\n' "$me" "$old" >&2
+      if [ -f "$ledger" ] && ! grep -qxF -- "$moved" "$ledger"; then
+        printf '%s\n' "$moved" >> "$ledger"
+      fi
     fi
   fi
   [ -f "$ledger" ] || return 0

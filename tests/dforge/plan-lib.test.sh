@@ -277,6 +277,18 @@ check "ready: the message names it" "$(grep -c 'cites amendment A2, which .*amen
 { printf '## A1 — Task 1\n\n## A2 — Task 1\n'; for ((i = 0; i < 4000; i++)); do printf 'filler %04d that takes the amendments past one pipe buffer\n' "$i"; done; } > "$LD/amendments.md"
 (cd "$SR" && HOME=$SH plan_amendments_ready docs/am.md); rc=$?
 check "ready: finds a cited amendment in a file past 64 KiB" "$rc" "0"
+# Another reader moves the file and plan-amend publishes A2 while this one
+# copies: the cp stand-in writes that state the moment its copy is made.
+printf '# P\n\n### Task 1: One\n' > "$SR/docs/am2.md"
+mkdir -p "$SR/.dforge/sdd/am2" "$TMP/cpshim"
+printf '## A1 — Task 1\n' > "$SR/.dforge/sdd/am2/amendments.md"
+export REAL_CP RACE_FILE="$M/work/sdd/am2/amendments.md"
+REAL_CP=$(command -v cp)
+printf '#!/usr/bin/env bash\n"$REAL_CP" "$@" || exit\nprintf '"'"'## A1 — Task 1\\n\\n## A2 — Task 1\\n'"'"' > "$RACE_FILE"\n' > "$TMP/cpshim/cp"
+chmod +x "$TMP/cpshim/cp"
+(cd "$SR" && HOME=$SH PATH="$TMP/cpshim:$PATH" plan_amendments_ready docs/am2.md); rc=$?
+check "ready: a migration never replaces amendments published meanwhile" \
+  "$rc:$(grep -c '^## A2 ' "$RACE_FILE" 2>/dev/null)" "0:1"
 mkdir -p "$M/dforge/plans" "$M/work/sdd/mp"
 printf '# MP\n' > "$M/dforge/plans/mp.md"
 printf '# SDD ledger — plan: docs/dforge/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
