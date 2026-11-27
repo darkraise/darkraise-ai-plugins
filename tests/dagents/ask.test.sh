@@ -66,6 +66,12 @@ ask docs/dagents/plans/absent.md 2 'q?' >/dev/null 2>&1; check "a plan with no l
 SID='' ask 'q?' >/dev/null 2>&1; check "no plan and no session id: exit 2" "$?" "2"
 check "the refusals wrote no ledger line" "$(cat "$LEDGER")" "$before"
 check "the refusals wrote no marker" "$([ -e "$TURNS/s-ask.asked" ] && echo yes || echo no)" "no"
+cp "$LEDGER" "$TMP/ledger.keep"
+printf '# SDD ledger — plan: docs/other/2026-11-19-x.md\nTask 2: implementer inline (assigned; base abc1234)\n' > "$LEDGER"
+other=$(cksum < "$LEDGER")
+err=$(ask "$PLAN" 2 'q?' 2>&1 >/dev/null); st=$?
+check "ask: a ledger naming another plan is refused" "$st:$err:$(cksum < "$LEDGER")" "2:ask: no ledger names $PLAN:$other"
+mv -f "$TMP/ledger.keep" "$LEDGER"; rm -f "$TURNS/s-ask.asked"
 out=$(SID='' ask "$PLAN" 3 'Codex host?' 2>"$TMP/err"); st=$?
 check "no session id with a plan: exit 0" "$st" "0"
 check "no session id with a plan: the ledger line" "$(tail -n 1 "$LEDGER")" "Task 3: waiting — Codex host?"
