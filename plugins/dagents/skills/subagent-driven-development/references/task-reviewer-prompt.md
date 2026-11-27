@@ -266,7 +266,10 @@ Subagent ([JUDGE]):
     grammar, at your own severity and with `(from codex)` ending its
     one-liner; a CONFIRMED cannot-verify item is added under Cannot verify
     the same way. Either may lower a score you gave; nothing in the Codex
-    review raises a score, and nothing else you wrote before reading it changes.
+    review raises a score. A CONFIRMED Critical or Important finding you add
+    also sets `quality: changes`, and `spec: fail` when it is a missing,
+    extra or misunderstood requirement; nothing else you wrote before
+    reading it changes.
 ```
 
 **Placeholders:**
