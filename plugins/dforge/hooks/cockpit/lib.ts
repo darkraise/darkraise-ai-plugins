@@ -470,14 +470,13 @@ export function gitMessageTexts(command: string): { texts: string[]; isWhole: bo
   return { texts, isWhole }
 }
 
-/** The files a commit or pull request command takes its text from (`git commit -F`, `gh pr create --body-file`); stdin's `-` is the command's own text. */
+/** The files a commit or pull request command takes its text from (`git commit -F`, `gh pr create --body-file`); stdin's names are the command's own text. */
 export function gitTextFiles(command: string): string[] {
   const files: string[] = []
-  for (const part of command.split(/[;&|\n]+/)) {
-    if (!writesGitText(part)) continue
-    for (const match of part.matchAll(/(?:^|\s)(?:-[a-z]*F[ \t]*|--(?:body-)?file(?:=|[ \t]+))("[^"]*"|'[^']*'|[^\s"';&|]+)/g)) {
-      const file = (match[1] ?? '').replace(/^(["'])(.*)\1$/, '$2')
-      if (file !== '' && file !== '-') files.push(file)
+  for (const one of shellCommands(command)) {
+    if (!isGitWriteCommand(one.words)) continue
+    for (const { kind, value } of messageOptions(one.words)) {
+      if (kind === 'file' && value !== '' && !STDIN_PATH.test(value)) files.push(value)
     }
   }
   return files
