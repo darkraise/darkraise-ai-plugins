@@ -40,8 +40,12 @@ export function migrateMirror(mirror, state) {
   }
   const documents = Object.create(null);
   for (const [uri, hash] of Object.entries(state.documents)) {
+    if (oldPrefixOf(uri)) {
+      changed = true;
+      // The uri already under dforge/ is the one later syncs recorded.
+      if (Object.hasOwn(state.documents, renamed(uri))) continue;
+    }
     documents[renamed(uri)] = hash;
-    if (oldPrefixOf(uri)) changed = true;
   }
   state.documents = documents;
   const links = state.pendingLinks.map(renamed);

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { createClient } from "../../../plugins/dforge/scripts/lib/darkmem-client.mjs";
-import { migrateHome } from "../../../plugins/dforge/scripts/lib/dforge-home-migrate.mjs";
+import { migrateHome, migrateMirror } from "../../../plugins/dforge/scripts/lib/dforge-home-migrate.mjs";
 import { STUB_KEY, sha, startStub } from "./stub-server.mjs";
 import { makeHome, makeRepo, read, run, scratch, write } from "./helpers.mjs";
 
@@ -513,5 +513,11 @@ test("migrateHome refuses what it cannot move from ~/.dr-superpowers", () => {
     assert.ok(lines.includes(`refused: ${path.join(old, "mirror", ".DS_Store")} is not a directory, so it was not moved; move or delete it by hand, then run dforge-migrate again`), lines.join("\n"));
     assert.ok(lines.includes(`refused: ${path.join(old, "config.json")} holds a darkmem value that is not an object; fix or delete it, then run dforge-migrate again`), lines.join("\n"));
   }
+});
+
+test("migrateMirror keeps the new uri's hash when an old one renames onto it", () => {
+  const state = { documents: { "dforge/a.md": "h2", "forge/a.md": "h1" }, pendingLinks: [] };
+  assert.equal(migrateMirror(scratch("dms-mirror-"), state), true);
+  assert.deepEqual({ ...state.documents }, { "dforge/a.md": "h2" });
 });
 
