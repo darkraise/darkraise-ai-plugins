@@ -90,6 +90,15 @@ run() { # run <args...>; STUB_* variables in the environment script the stub
 
 check "script exists" "$([ -f "$SCRIPT" ] && echo yes || echo no)" "yes"
 
+# --- native_request_paths: cwd and schemaPath in the form cygpath -m gives ---
+mkdir -p "$TMP/cyg"
+printf '#!/usr/bin/env bash\n[ "$1" = -m ] && shift\nprintf "C:/stub%%s\\n" "$1"\n' > "$TMP/cyg/cygpath"
+chmod +x "$TMP/cyg/cygpath"
+printf 'review this\n' > "$TMP/np.txt"
+r=$(PATH="$TMP/cyg:$PATH"; run --kind task --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/np.txt" --dry-run | sed -n 2p)
+check "native_request_paths" "$(jq -r '.cwd' <<<"$r" | tr -d '\r')|$(jq -r '.schemaPath | startswith("C:/stub")' <<<"$r" | tr -d '\r')" \
+  "C:/stub$(cd "$TMP/work" && pwd)|true"
+
 # --- selection ---------------------------------------------------------------
 out=$(run --kind final --cwd "$TMP/work" --out "$TMP/o.md" --base main --dry-run)
 req_of() { sed -n '2p' <<<"$1"; } # req_of <dry-run output>; echoes the request JSON
