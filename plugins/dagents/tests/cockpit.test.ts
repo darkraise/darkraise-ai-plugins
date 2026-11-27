@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { TestBody } from 'claude-code/testing'
-import type { CommandRunInput, On, RenderElement, SessionMeasureInput, SessionMessage } from 'claude-code'
+import type { CommandRunInput, On, RenderElement, RenderSurface, SessionMeasureInput, SessionMessage } from 'claude-code'
 
 import {
   accountColor,
@@ -298,6 +298,8 @@ type World = {
   version?: string
   /** The /config row "Enable Remote Control for all sessions"; absent unless said. */
   remoteControl?: string
+  /** What `$.session.surfaces()` answers; the terminal alone unless said. */
+  surfaces?: RenderSurface[]
   /** Tools that answer in their own way, by name. */
   tools?: Record<string, () => Promise<{ result: unknown; text: string }> | { result: unknown; text: string }>
   /** ~/.dagents/config.json's values; set, HOME is /home/me and world answers reads of the file. */
@@ -470,7 +472,7 @@ function world(on: On, w: World) {
   })
   on('session.attach', (_$, e) => ({ clientId: e.clientId }))
   on('session.detach', (_$, e) => ({ clientId: e.clientId }))
-  on('session.surfaces', () => ({ value: ['terminal'] }))
+  on('session.surfaces', () => ({ value: w.surfaces ?? ['terminal'] }))
   on('config.list', () => ({
     value:
       w.remoteControl === undefined
@@ -4491,6 +4493,19 @@ describe('shells and remote', () => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /Bearer \[token\]/ })).toBeDefined()
     expect(JSON.stringify(await ui.drawn())).not.toContain('abcdefghijkl')
+  })
+
+  test('a real attach replaces the client seeded at start', async ($, on) => {
+    world(on, { ...SIGNED_IN, surfaces: ['terminal', 'desktop'] })
+    signedIn(on)
+    await $.session.start(START)
+    await $.session.attach({ surface: 'desktop', clientId: 'desk-1' } as never)
+    let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Remote ● connected · desktop app$/ })).toBeDefined()
+    await ui.unmount()
+    await $.session.detach({ surface: 'desktop', clientId: 'desk-1' } as never)
+    ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Remote ○ not connected/ })).toBeDefined()
   })
 
   test('show Remote Control in the account card and on the band', async ($, on) => {

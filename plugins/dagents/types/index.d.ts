@@ -89,8 +89,8 @@ export type CockpitShell = {
 
 /** Remote Control as the cockpit sees it. */
 export type CockpitRemote = {
-  /** The remote clients attached now (a phone, the desktop app). */
-  clients: { id: string; surface: string }[]
+  /** The remote clients attached now (a phone, the desktop app); a client seeded from the surfaces at the start, before its attach names it, is `isSeeded`. */
+  clients: { id: string; surface: string; isSeeded?: boolean }[]
   /** The `/config` row "Enable Remote Control for all sessions": `true`, `false` or `default`. */
   setting: string | null
 }
