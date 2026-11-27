@@ -641,16 +641,18 @@ a11() {
   commit_file a.txt a "feat: add a"
   ts review docs/plan.md 1
   check "A11: the first review exits 0" "$rc" "0"
+  # Each round's fix is committed before its rereview, which refuses an
+  # empty range.
+  commit_file b.txt b "fix: round one"
   printf '%s\n\nFixed.\n' '- app.txt: a finding' > "$WS/task-1-fix-1.md"
   ts rereview docs/plan.md 1
   check "A11: fix round 1 runs" "$rc" "0"
   has "A11: and reports round 1" "$out" "re-review round 1"
-  commit_file b.txt b "fix: round one"
+  commit_file c.txt c "fix: round two"
   printf '%s\n\nFixed.\n' '- app.txt: a finding' > "$WS/task-1-fix-2.md"
   ts rereview docs/plan.md 1
   check "A11: fix round 2 runs" "$rc" "0"
   has "A11: and reports round 2" "$out" "re-review round 2"
-  commit_file c.txt c "fix: round two"
   printf '%s\n\nFixed.\n' '- app.txt: a finding' > "$WS/task-1-fix-3.md"
   ts rereview docs/plan.md 1
   check "A11: a third round is refused with exit 7" "$rc" "7"
