@@ -69,9 +69,10 @@ The reason tokens a run prints are `gate`, `git`, `refused`, `quota`,
 `untrusted`, `no-session-id`, `gate`, or the gate's own `reason=` value (for
 example `setting`, `no-timeout` or `logged-out`). An `unread` review is
 schema-valid but scores every criterion 1 with no finding: the reviewer read
-nothing, so it is no list. A `wrote` run changed the worktree,
+nothing, so it is no list. A `wrote` run changed the worktree, the index,
 `HEAD`, the stash list, the git config or a hook: it never counts as a list,
-and what changed is named in `<out>.wrote`. Before any commit the session
+and what changed is named in `<out>.wrote`. Writes inside `.dforge/` and
+deletions of ignored files are outside that proof. Before any commit the session
 undoes a changed path or `HEAD` in the panel's `--cwd`; a final round's
 `--cwd` is a throwaway worktree, so it is removed instead, and nothing
 Acceptance QA committed or wrote in the checkout is ever restored. A `hook`

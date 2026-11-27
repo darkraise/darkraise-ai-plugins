@@ -221,5 +221,20 @@ else
   printf 'skip - linked_hooks_dir_watched: this host copies on ln -s\n'
 fi
 
+# --- ignored_write_is_wrote: a write to an ignored path is still a write ---
+reset_work
+printf 'build/\n' > "$TMP/work/.gitignore"; git -C "$TMP/work" add .gitignore; git -C "$TMP/work" commit -qm ignore
+mkdir -p "$TMP/work/build"; printf 'keep\n' > "$TMP/work/build/keep"
+STUB_AGY_SIDE=write STUB_AGY_WRITE=build/x.txt STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
+has "ignored_write_is_wrote" "$out" "evidence=wrote reason=wrote"
+check "ignored_write_is_wrote: the file is named" "$(grep -cx 'build/x.txt' "$TMP/out.json.wrote" 2>/dev/null)" "1"
+
+# --- staged_change_is_wrote: an index change that leaves every file as it was ---
+reset_work
+STUB_AGY_SIDE=unstage STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
+has "staged_change_is_wrote" "$out" "evidence=wrote reason=wrote"
+check "staged_change_is_wrote: the index is named" "$(grep -cx index "$TMP/out.json.wrote" 2>/dev/null)" "1"
+git -C "$TMP/work" reset -q
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

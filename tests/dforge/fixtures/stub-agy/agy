@@ -62,6 +62,7 @@ side() {
     hook-target) printf 'changed\n' >> "$STUB_AGY_HOOK_TARGET" ;;
     hook-exec) chmod +x "$(git rev-parse --git-path hooks)/pre-commit" ;;
     reorder) git config --unset-all dforge.order && git config --add dforge.order 2 && git config --add dforge.order 1 ;;
+    unstage) git rm -q --cached tracked.txt ;;
   esac
 }
 review_json() { printf '{"spec":%s,"scope":18,"verification":18,"quality":18,"spec_verdict":"%s","task_quality":"approved","findings":[%s],"cannot_verify":[]}' "${STUB_AGY_SCORE:-18}" "${STUB_AGY_VERDICT:-compliant}" "${STUB_AGY_FINDING:-}"; }

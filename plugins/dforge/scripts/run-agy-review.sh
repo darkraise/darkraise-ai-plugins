@@ -77,6 +77,8 @@ esac
 # back from here.
 out="$(cd "$(dirname "$out")" && pwd)/$(basename "$out")"
 cwd="$(cd "$cwd" && pwd)"
+# The snapshot's root is canonical, so --out is matched against it in that form.
+out_real="$(dr_canonical "$(dirname "$out")")/$(basename "$out")"
 if [ -n "$prompt" ]; then
   [ -r "$prompt" ] || die "--prompt is not readable: $prompt"
   prompt="$(cd "$(dirname "$prompt")" && pwd)/$(basename "$prompt")"
@@ -241,7 +243,9 @@ take_state() { # take_state <name>
   git -C "$cwd" stash list --format='%H' 2>/dev/null | tr -d '\r' > "$snapdir/$1.stash"
   git_state > "$snapdir/$1.git"
 }
-if ! take_state before; then
+# Ignored files are outside the snapshot, so a write to one is found by its
+# time instead: wrote_check lists every file newer than this marker.
+if ! : > "$snapdir/since" || ! take_state before; then
   status "$model" "$effort" FAILED 0 error
   printf 'run-agy-review: cannot snapshot %s, so a write could not be detected\n' "$cwd" >&2
   exit 1
@@ -273,13 +277,36 @@ run_row() { # run_row <model> <effort> <seconds> <log-prefix>; sets agy_rc
   agy_pid=''
 }
 
+# own_path TOP: --out relative to TOP, or nothing when it lies outside TOP.
+own_path() { case "$out_real" in "$1"/*) printf '%s' "${out_real#"$1"/}" ;; esac; }
+
+# newer_files TOP: the files under TOP changed since the marker, relative to
+# TOP. .git has its own checks, the dforge state directory is where a parallel
+# Claude seat writes its report, and the runner's own out files are its own.
+newer_files() {
+  local own p
+  own=$(own_path "$1")
+  (cd "$1" && find . \( -path ./.git -o -path ./.dforge \) -prune -o ! -type d -newer "$snapdir/since" -print 2>/dev/null) |
+    tr -d '\r' | while IFS= read -r p; do
+      p=${p#./}
+      if [ -n "$own" ]; then case "$p" in "$own" | "$own".*) continue ;; esac; fi
+      printf '%s\n' "$p"
+    done
+}
+
 wrote_check() { # wrote_check; succeeds when the run changed nothing
+  local top
   take_state after || { printf 'snapshot\n' > "$out.wrote"; return 1; }
+  top=$(jq -r .root < "$snapdir/before.json" | tr -d '\r')
   {
-    jq -rn --slurpfile b "$snapdir/before.json" --slurpfile a "$snapdir/after.json" '
-      def idx: reduce .files[] as $f ({}; .[$f.path] = $f);
-      ($b[0] | idx) as $x | ($a[0] | idx) as $y |
-      (($x | keys) + ($y | keys) | unique)[] | select($x[.] != $y[.])' | tr -d '\r'
+    {
+      jq -rn --slurpfile b "$snapdir/before.json" --slurpfile a "$snapdir/after.json" '
+        def idx: reduce .files[] as $f ({}; .[$f.path] = $f);
+        ($b[0] | idx) as $x | ($a[0] | idx) as $y |
+        (($x | keys) + ($y | keys) | unique)[] | select($x[.] != $y[.])' | tr -d '\r'
+      newer_files "$top"
+    } | LC_ALL=C sort -u
+    [ "$(jq -r .index < "$snapdir/before.json")" = "$(jq -r .index < "$snapdir/after.json")" ] || echo index
     [ "$(jq -r .head < "$snapdir/before.json")" = "$(jq -r .head < "$snapdir/after.json")" ] || echo HEAD
     cmp -s "$snapdir/before.stash" "$snapdir/after.stash" || echo stash
     awk -F '\t' 'function name(l,  f, kv) {
