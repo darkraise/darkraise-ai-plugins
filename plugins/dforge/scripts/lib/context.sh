@@ -327,15 +327,21 @@ ctx_final_budget() {
 # environment is read here, not through the setting, so a machine without Node
 # keeps its override.
 ctx_pinned_budget() {
-  local pinned
-  case ${DFORGE_BUDGET:-} in
-    ''|*[!0-9]*) pinned="" ;;
-    *) pinned=$DFORGE_BUDGET; [ "$pinned" -gt 0 ] || pinned="" ;;
+  local pinned value=${DFORGE_BUDGET:-}
+  case $value in
+    ''|*[!0-9]*) ;;
+    *)
+      value=${value#"${value%%[!0]*}"}
+      # 0 is the rule, as the cockpit and dforge-config read it; above the
+      # handoffTokens maximum (config/schema.mjs) the override is invalid.
+      [ -n "$value" ] || return 0
+      if [ "${#value}" -le 7 ] && [ "$value" -le 2000000 ]; then
+        printf '%s' "$value"
+        return 0
+      fi ;;
   esac
-  if [ -z "$pinned" ]; then
-    pinned=$(dforge_setting handoffTokens 0)
-    case $pinned in ''|*[!0-9]*|0) pinned="" ;; esac
-  fi
+  pinned=$(dforge_setting handoffTokens 0)
+  case $pinned in ''|*[!0-9]*|0) pinned="" ;; esac
   printf '%s' "$pinned"
 }
 

@@ -103,6 +103,7 @@ import {
   resolveSettings,
   rowOf,
   rowsOf,
+  settingFromText,
   settingProblems,
   settingWritten,
   shownValue,
@@ -792,6 +793,13 @@ test('only a dforge name marks a workflow session', () => {
 })
 
 describe('budget rule', () => {
+  test('reads a number from the environment as digits only', () => {
+    const spec = SCHEMA.handoffTokens!
+    for (const text of ['1e6', '0xF4240', ' 500000 ', '3000000']) expect(settingFromText(spec, text)).toBeUndefined()
+    expect(settingFromText(spec, '500000')).toBe(500_000)
+    expect(settingFromText(spec, '0')).toBe(0)
+  })
+
   test('follows the setting, which DFORGE_BUDGET overrides, then dforge', () => {
     expect(budgetFor(200_000, 650_000)).toBe(200_000)
     expect(budgetFor(0, 650_000)).toBe(464_500)

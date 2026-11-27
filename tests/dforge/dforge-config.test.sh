@@ -72,6 +72,7 @@ check "DFORGE_BUDGET wins" "$(DFORGE_BUDGET=400000 fc get handoffTokens)" "40000
 check "the pre-2.0 DR_SUPERPOWERS_BUDGET is not read" "$(DR_SUPERPOWERS_BUDGET=450000 fc get handoffTokens)" "300000"
 check "an invalid override is ignored" "$(DFORGE_BUDGET=junk fc get handoffTokens)" "300000"
 check "and warned about" "$(grep -c 'DFORGE_BUDGET' "$TMP/stderr")" "1"
+check "an exponent override is ignored" "$(DFORGE_BUDGET=1e6 fc get handoffTokens)" "300000"
 
 # --- a file that is not JSON is refused, not overwritten ---
 printf 'not json' > "$FILE"

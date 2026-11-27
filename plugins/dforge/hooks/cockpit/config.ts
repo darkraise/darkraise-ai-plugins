@@ -45,6 +45,7 @@ export function isValidSetting(spec: SettingSpec, value: unknown): value is Sett
 
 /** A value as an environment variable spells it; undefined when it does not fit. */
 export function settingFromText(spec: SettingSpec, text: string): SettingValue | undefined {
+  // A number is digits only: Number() also takes '1e6', '0x10' and spaces, which the scripts refuse.
   const value =
     spec.type === 'boolean'
       ? text === 'true'
@@ -53,9 +54,9 @@ export function settingFromText(spec: SettingSpec, text: string): SettingValue |
           ? false
           : undefined
       : spec.type === 'number'
-        ? text.trim() === ''
-          ? undefined
-          : Number(text)
+        ? /^[0-9]+$/.test(text)
+          ? Number(text)
+          : undefined
         : text
   return value !== undefined && isValidSetting(spec, value) ? value : undefined
 }
