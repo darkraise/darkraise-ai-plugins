@@ -3844,6 +3844,10 @@ describe('forecasts', () => {
     expect(turnsToBudget([200_000, 200_000, 200_000], 465_000)).toBeNull()
   })
 
+  test('counts turns with no growth in the average', () => {
+    expect(turnsToBudget([100_000, 100_000, 100_000, 100_000, 400_000], 700_000)).toBe(4)
+  })
+
   test('say whether a limit lasts to its reset at the pace so far', () => {
     const hour = 3_600_000
     // Two hours into five, at 60%: 100% comes in 1h20m, before the reset.
