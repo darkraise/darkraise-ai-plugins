@@ -766,6 +766,17 @@ write_ledger 'Task 1: complete (commits a..b, review clean)'
 out=$(PATH="$CRJQ:$PATH" stop s-cr 'Task 1 is done.')
 check "a jq that ends lines with CR: a mid-plan summary is still held" "$(decision "$(tr -d '\r' <<<"$out")")" "block"
 
+# --- a plan whose task another session opened holds only that session ---
+um_row() { # um_row <session> — the primary's usage markers: one open row for the example plan
+  printf '2026-11-27T00:00:00Z\topen\tdforge\t5.2.0\t/x\tdocs/superpowers/plans/2026-10-08-example.md\t1\t%s\t\t\t\t\t\t\n' "$1" > "$REPO/.dforge/sdd/usage-markers.tsv"
+}
+sleep 1; prompt s-a
+write_ledger 'Task 1: complete (commits a..b, review clean)'
+um_row s-b
+check "another session's plan: its ledger does not hold this session" "$(stop s-a 'Done.')" ""
+um_row s-a
+check "this session's plan: its ledger still holds" "$(decision "$(stop s-a 'Done.')")" "block"
+rm -f "$REPO/.dforge/sdd/usage-markers.tsv"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

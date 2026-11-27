@@ -166,8 +166,21 @@ wrote_block() { ending_released_any "$last" "$stamp" "$session_id" "$root"; }
 ledger="" clean=0
 [ -d "$sdd" ] || sdd=""
 ws="$(dforge_dir state "$root")/sdd"
+# A plan whose last task open (the primary's usage markers) names another
+# session is that session's work, however recent its ledger.
+um_primary=$(stamp_root 2>/dev/null) && [ -n "$um_primary" ] || um_primary=$root
+markers="$(dforge_dir state "$um_primary")/sdd/usage-markers.tsv"
+opened_elsewhere() { # LEDGER
+  local owner
+  [ -f "$markers" ] || return 1
+  owner=$(tr -d '\r' < "$markers" | NAME=$(basename "$(dirname "$1")") awk -F'\t' '
+    $2 == "open" { p = $6; sub(/.*\//, "", p); sub(/\.md$/, "", p); if (p == ENVIRON["NAME"]) o = $8 }
+    END { print o }')
+  [ -n "$owner" ] && [ "$owner" != "$session_id" ]
+}
 while IFS= read -r candidate; do
   [ -n "$candidate" ] || continue
+  ! opened_elsewhere "$candidate" || continue
   # While progress is darkmem every worktree shares the mirror's work/sdd, and a
   # plan's workspace is always local: a ledger without one here is another
   # session's.
