@@ -946,5 +946,17 @@ done
 out=$(HOME="$TMP/rh-home" PATH="$CS:$PATH" migrate "$FM" "$CR" 2>&1); code=$?
 check "refuses collision: a key written after the check is not overwritten" "$code $(cat "$CR/.dagents/handoff/p1.md") $(exists "$CR/.dagents/handoff/latest.md")" "1 other session yes"
 
+# --- a rename killed during its rewrite is finished by a rerun ---
+R="$TMP/irepo"; repo "$R"; RT=$(git -C "$R" rev-parse --show-toplevel)
+mkdir -p "$R/.dagents/handoff"
+old_block 'session=- done=0 closed=0 subject=- at=1700001500' > "$R/.dagents/handoff/latest.md"
+IS="$TMP/interrupt-stubs"; mkdir -p "$IS"
+printf '#!/bin/sh\nif [ -n "${OLD+x}" ]; then kill -KILL $PPID; exit 137; fi\nexec "%s" "$@"\n' "$(command -v awk)" > "$IS/awk"
+chmod +x "$IS/awk"
+HOME="$TMP/rh-home" PATH="$IS:$PATH" migrate "$FM" "$R" > /dev/null 2>&1
+HOME="$TMP/rh-home" migrate "$FM" "$R" > /dev/null 2>&1
+NEW="$RT/.dagents/handoff/adhoc-legacy-1700001500.md"
+check "an interrupted handoff rename: a rerun leaves it naming itself" "$(exists "$R/.dagents/handoff/latest.md") $(grep -c 'latest\.md' "$NEW" 2>&1)" "no 0"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
