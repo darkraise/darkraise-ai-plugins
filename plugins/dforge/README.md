@@ -1235,9 +1235,8 @@ dforge 4.0 is dr-forge renamed, internals included, and it reads none of the
    `codex plugin remove dr-forge@darkraise`.
 
    From dr-superpowers or dr-cockpit, skip dr-forge and install dforge
-   directly. Start one dforge session before you uninstall the old plugins:
-   it once imported dr-cockpit's options and its Discord webhook and mention;
-   that import is gone, so set them again in `/dforge:cockpit settings`.
+   directly. dforge does not import dr-cockpit's options, webhook or mention,
+   so set them again in `/dforge:cockpit settings`.
    Migrating from dr-superpowers and dr-cockpit below names
    `dr-forge@darkraise`, the plugin of its day; install `dforge@darkraise`
    in its place.
@@ -1315,8 +1314,10 @@ refused.
 
 No other file is edited: plans, specs and ledgers that cite
 `docs/superpowers/<rest>` keep that spelling, and dr-forge still reads it as
-`docs/forge/<rest>`. A plan whose `**Implementer:**` lines name agents under an
-older plugin prefix fails `scripts/plan-lint` until they name `dr-forge:`.
+`docs/forge/<rest>`. dr-forge 3.0's `plan-lint` failed a plan whose
+`**Implementer:**` lines named agents under an older plugin prefix until they
+named `dr-forge:`; dforge's `scripts/plan-lint` ignores the `**Implementer:**`
+line.
 Rename any `DR_SUPERPOWERS_*` variable you set to its `DR_FORGE_*` name.
 `DR_FORGE_DOCUMENT_STORE` and `DR_FORGE_PROGRESS_SOURCE`, which 2.x read, are
 no longer read at all: set `documentStore` and `progressSource` instead.
@@ -1389,7 +1390,7 @@ differences:
    carrying a checkpoint (done, verified, remaining, discovered
    issues, assumptions), which crash recovery and the final review read.
 6. **Cross-family final review, on request.** With `codexReview` on, the final
-   whole-branch review adds a Codex round, and a judge verifies the union of
+   whole-branch review at depth full adds a Codex round, and a judge verifies the union of
    both reviewers' findings.
 7. **Rulings, not stops.** Problems with a seat - an unavailable model, an
    obsolete Executor line - are logged rulings, never silent fallbacks and
