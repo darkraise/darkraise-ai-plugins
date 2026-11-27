@@ -254,5 +254,25 @@ probe 0 "$TMP/out-tap-pass"
 check "a failed git status is not clean" "$(field 2)" "dirty"
 mv "$REPO/.git/index.bak" "$REPO/.git/index"
 
+# --- a HEAD switch during the clean check reuses nothing ---
+# HEAD2 holds a clean pass; HEAD3 has the same tree and was never run. The shim
+# checks HEAD3 out on the first git status, after suite-run has read HEAD.
+git -C "$REPO" checkout -q --detach "$HEAD2"
+HEAD3=$(git -C "$REPO" commit-tree -p "$HEAD2" -m three "$HEAD2^{tree}")
+mkdir -p "$TMP/shim"
+cat > "$TMP/shim/git" <<SHIM
+#!/usr/bin/env bash
+if [ "\${1:-}" = status ] && [ ! -e "$TMP/shim/switched" ]; then
+  : > "$TMP/shim/switched"
+  "$(command -v git)" -C "$REPO" checkout -q "$HEAD3"
+fi
+exec "$(command -v git)" "\$@"
+SHIM
+chmod +x "$TMP/shim/git"
+before=$(runs)
+out=$(cd "$REPO" && PATH="$TMP/shim:$PATH" bash "$SUITE" -- bash "$TMP/probe.sh" 0 "$TMP/out-tap-pass" 2>&1); rc=$?
+check "a HEAD switch during the clean check runs the command" "$(runs)" "$((before + 1))"
+lacks "a HEAD switch during the clean check: no reuse" "$out" "suite: reused pass"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
