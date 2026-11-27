@@ -869,6 +869,7 @@ check "stop --stale: refused while the owner lives" "$status:$(field active)" "3
 beat s-1 100000
 ar --session s-2 stop --stale >/dev/null 2>&1; status=$?
 check "stop --stale: a dead owner's run stops" "$status:$(field active)" "0:false"
+check "stop --stale: records when it stopped" "$(jq -r '"\(.stoppedAt | type):\(.stoppedKind)"' "$STATE")" "string:null"
 # A run started with --force between the check and the locked write is left
 # alone: the fake flock swaps it in just before the lock is taken.
 if command -v flock >/dev/null 2>&1; then
