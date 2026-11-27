@@ -149,5 +149,32 @@ rm -f .dagents/sdd/finish.json
 FINISH_CHOICE_NOW=$T0 fc answer keep >/dev/null 2>&1; rc=$?
 check "answer: no record still succeeds" "$rc:$(jq -r .answer .dagents/sdd/finish.json)" "0:keep"
 
+# --- every write replaces the record, under its lock ---
+ino() { stat -c %i "$1" 2>/dev/null || ls -i "$1" | awk '{ print $1 }'; }
+before=$(ino "$file")
+fc set keep --plan docs/plans/p.md >/dev/null
+check "set: the record is replaced, never truncated" \
+  "$([ "$(ino "$file")" != "$before" ] && echo replaced || echo truncated):$(jq -r .action "$file")" "replaced:keep"
+printf '# Plan\n' > docs/plans/e.md; mkdir -p .dagents/sdd/e; : > .dagents/sdd/e/finish.json
+before=$(ino .dagents/sdd/e/finish.json)
+printf '{"finishAction":"pr"}\n' > "$HOME/.dagents/config.json"
+fc get --plan docs/plans/e.md >/dev/null
+check "setting: an empty record is replaced, never truncated" \
+  "$([ "$(ino .dagents/sdd/e/finish.json)" != "$before" ] && echo replaced || echo truncated):$(jq -r .action .dagents/sdd/e/finish.json)" "replaced:pr"
+if command -v flock >/dev/null 2>&1; then
+  printf '#!/usr/bin/env bash\nprintf "x\\n" >> "%s"\nexec flock "$@"\n' "$TMP/flock-calls" > "$TMP/flock-count"
+  chmod +x "$TMP/flock-count"
+  DAGENTS_FLOCK="$TMP/flock-count" fc set keep --plan docs/plans/p.md >/dev/null
+  check "set: runs under the record's lock" "$(cat "$TMP/flock-calls" 2>/dev/null | wc -l | tr -d ' ')" "1"
+else
+  printf "skip - set: runs under the record's lock: no flock\n"
+fi
+fc clear unexpected --plan docs/plans/p.md >/dev/null 2>&1; clear_rc=$?
+rm -f .dagents/sdd/finish.json
+fc get unexpected >/dev/null 2>&1; get_rc=$?
+check "clear: an extra argument is a usage error" \
+  "$clear_rc:$([ -e "$file" ] && echo kept || echo deleted):$get_rc:$([ -e .dagents/sdd/finish.json ] && echo created || echo none)" "2:kept:2:none"
+rm -f "$HOME/.dagents/config.json"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

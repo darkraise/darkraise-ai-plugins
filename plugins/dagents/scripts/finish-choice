@@ -27,6 +27,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/dagents-dir.sh"
 . "$HERE/lib/dagents-env.sh"
 . "$HERE/lib/plan.sh"
+. "$HERE/lib/lock.sh"
 
 usage() { sed -n '/^# Usage:/,/^# FINISH_CHOICE_NOW/p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 command -v jq >/dev/null 2>&1 || { echo "finish-choice needs jq" >&2; exit 2; }
@@ -57,24 +58,31 @@ now=${FINISH_CHOICE_NOW:-$(date +%s)}
 valid_action() {
   case $1 in merge|pr|keep|wait) return 0 ;; *) return 1 ;; esac
 }
-write() { # write <jq filter> [jq args...]: rewrite the file through the filter
-  local filter=$1; shift
-  local current='{}'
+# write <jq filter> [jq args...]: replace the file with the filter's output
+# over the current record ({} when it is empty). A temporary file and a rename,
+# so a reader such as the cockpit never sees it truncated or half-written.
+write() {
+  local filter=$1 current='{}' tmp
+  shift
   [ -s "$file" ] && current=$(cat "$file")
-  jq "$@" "$filter" <<<"$current" > "$file.tmp" && mv "$file.tmp" "$file"
+  tmp=$(mktemp "$file.XXXXXX") || return 1
+  if jq "$@" "$filter" <<<"$current" > "$tmp" && mv -f "$tmp" "$file"; then return 0; fi
+  rm -f "$tmp"
+  return 1
 }
 need_file() { [ -s "$file" ] || { echo "no finish action chosen" >&2; exit 3; }; }
 # With nothing chosen, the finishAction setting stands in for the answer
 # (anything but ask). It is recorded like an answer, so the run keeps one
 # choice even if the setting changes while it runs; the base branch is left
-# for finishing to determine.
+# for finishing to determine. It runs under the record's lock, so the empty
+# test and the write see the same record.
 from_setting() {
   [ ! -s "$file" ] || return 0
   local action
   action=$(dagents_setting finishAction ask)
   valid_action "$action" || return 0
-  jq -n --arg action "$action" --argjson now "$now" \
-    '{action: $action, base: null, chosenAt: $now, source: "setting"}' > "$file"
+  write '{action: $action, base: null, chosenAt: $now, source: "setting"}' \
+    -n --arg action "$action" --argjson now "$now"
 }
 
 # The spec review records its answer as a `Finish: <merge|pr|keep>` line in the
@@ -108,10 +116,32 @@ from_spec() {
   [ -f "$spec" ] || return 0
   action=$(spec_finish "$spec")
   [ -n "$action" ] || return 0
-  jq -n --arg action "$action" --argjson now "$now" \
-    '{action: $action, base: null, chosenAt: $now, source: "spec"}' > "$file"
+  write '{action: $action, base: null, chosenAt: $now, source: "spec"}' \
+    -n --arg action "$action" --argjson now "$now"
 }
 
+choose() { # choose ACTION BASE
+  write '{action: $action, base: (if $base == "" then null else $base end), chosenAt: $now}' \
+    -n --arg action "$1" --arg base "$2" --argjson now "$now" || return 1
+  cat "$file"
+}
+show() {
+  from_spec || return
+  from_setting || return
+  need_file
+  cat "$file"
+}
+record_answer() { # record_answer ACTION
+  if [ -s "$file" ]; then
+    write '.answer = $answer | .answeredAt = $now' --arg answer "$1" --argjson now "$now"
+  else
+    write '{action: $answer, base: null, chosenAt: $now, source: "answer", answer: $answer, answeredAt: $now}' \
+      -n --arg answer "$1" --argjson now "$now"
+  fi
+}
+
+# The arguments are checked first; then the command runs under the record's
+# lock, so two sessions on one record never interleave a read and a write.
 case $cmd in
   set)
     [ $# -ge 1 ] && valid_action "$1" || { echo "set takes one of: merge pr keep wait" >&2; exit 2; }
@@ -119,28 +149,24 @@ case $cmd in
     base=""
     if [ $# -ge 2 ] && [ "$1" = "--base" ]; then base=$2; shift 2; fi
     [ $# -eq 0 ] || usage
-    jq -n --arg action "$action" --arg base "$base" --argjson now "$now" \
-      '{action: $action, base: (if $base == "" then null else $base end), chosenAt: $now}' > "$file"
-    cat "$file"
+    body=(choose "$action" "$base")
     ;;
   get)
-    from_spec
-    from_setting
-    need_file
-    cat "$file"
+    [ $# -eq 0 ] || usage
+    body=(show)
     ;;
   answer)
     [ $# -eq 1 ] || usage
     case $1 in merge|pr|keep|discard) ;; *) echo "answer takes one of: merge pr keep discard" >&2; exit 2 ;; esac
-    if [ -s "$file" ]; then
-      write '.answer = $answer | .answeredAt = $now' --arg answer "$1" --argjson now "$now"
-    else
-      jq -n --arg answer "$1" --argjson now "$now" \
-        '{action: $answer, base: null, chosenAt: $now, source: "answer", answer: $answer, answeredAt: $now}' > "$file"
-    fi
+    body=(record_answer "$1")
     ;;
   clear)
-    rm -f "$file"
+    [ $# -eq 0 ] || usage
+    body=(rm -f "$file")
     ;;
   *) usage ;;
 esac
+lock=$(dr_lock_base "$file") || { echo "finish-choice: cannot name the lock for $file" >&2; exit 1; }
+status=0
+dr_locked "$lock" "${body[@]}" || status=$?
+exit "$status"
