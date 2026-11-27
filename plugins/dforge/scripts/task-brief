@@ -135,6 +135,7 @@ else
     write_header "$header_file"
     printf '\n## Plan header\n\nGlobal Constraints and Contracts: %s (read at setup; read it again after a compaction).\n' "$header_file" >> "$out"
   else
+    write_header "$(dirname "$out")/plan-header.md"
     excerpt=$(plan_header "$src" | awk "$_PLAN_AWK"'in_fence($0) { if (on) print; next } /^## / { h = $0; sub(/[ \t]+$/, "", h); on = (h == "## Global Constraints" || h == "## Contracts") } on { print }')
     if [ -n "$excerpt" ]; then
       printf '\n## Plan header excerpt\n\n%s\n' "$excerpt" >> "$out"
