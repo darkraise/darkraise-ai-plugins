@@ -474,7 +474,7 @@ ar_resume() {
 }
 
 _ar_resume_locked() {
-  local path=$1 stopped kind phase setup hit rc branch plan found
+  local path=$1 stopped kind phase setup hit rc branch plan found top
   ar_jq -e '.active == true' < "$path" >/dev/null 2>&1 \
     && { echo "auto-run: the run is active, not stopped" >&2; return 4; }
   stopped=$(ar_get stopped)
@@ -516,9 +516,13 @@ _ar_resume_locked() {
     else
       plan=$(ar_get plan)
       found=""
-      [ -z "$plan" ] || found=$(plan_ledger_any "$(git rev-parse --show-toplevel)" "$plan")
-      [ -n "$found" ] && [ -d "${found#*$'\t'}" ] \
-        || { echo "auto-run: the plan's worktree is gone (plan ${plan:-none})" >&2; return 4; }
+      top=$(git rev-parse --show-toplevel)
+      [ -z "$plan" ] || found=$(plan_ledger_any "$top" "$plan")
+      # Until Setup writes the ledger, the worktree is the checkout holding
+      # the plan; ar_guard has already refused the primary.
+      if [ -n "$found" ]; then [ -d "${found#*$'\t'}" ]
+      else [ -n "$plan" ] && [ -f "$(dforge_resolve "$plan" "$top")" ]
+      fi || { echo "auto-run: the plan's worktree is gone (plan ${plan:-none})" >&2; return 4; }
     fi
   fi
   ar_put "$path" '.active = true | .session = $s | .rebind = false
