@@ -327,6 +327,10 @@ bash "$P/scripts/task-brief" docs/ui-split.md 1 "$TMP/ui-split.md" >/dev/null 2>
 check "task-brief: a split task's brief carries Part B's item" \
   "$(grep -c '^- \*\*UX-2\*\* — The dialog traps focus\.$' "$TMP/ui-split.md")" "1"
 
+# --- the task number is digits ---
+bash "$P/scripts/task-brief" docs/plan.md 1x >/dev/null 2>&1; status=$?
+check "task-brief: a non-numeric task number exits 2" "$status" "2"
+
 # --- the package pins its revisions to commits ---
 out=$(bash "$P/scripts/review-package" docs/plan.md "$BASE" HEAD 2>/dev/null)
 pkg_file=$(sed -n 's/^wrote \(.*\): [0-9]* commit(s).*/\1/p' <<<"$out")

@@ -11,7 +11,8 @@
 # Default OUTFILE: <repo-root>/.dagents/sdd/<plan-basename>/task-<N>-brief.md
 # or .../plan-header.md (per plan and per worktree; concurrent runs of the SAME
 # plan in the same working tree share it).
-# Exit: 0 ok; 2 usage; 3 no such task; 4 an amendment does not apply.
+# Exit: 0 ok; 2 usage, or a TASK_NUMBER that is not digits (01 reads as 1);
+# 3 no such task; 4 an amendment does not apply.
 # Last output line: the session budget line from scripts/context-size.
 set -euo pipefail
 
@@ -30,6 +31,10 @@ plan=$(plan_locate "$1")
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
 dagents_stores_init "$(_plan_ctx "$plan")"
 if [ "$header" -eq 1 ]; then n="" given=${2:-}; else n=$2 given=${3:-}; fi
+if [ "$header" -eq 0 ]; then
+  [[ "$n" =~ ^[0-9]+$ ]] || { echo "task-brief: TASK_NUMBER must be a task number: $n" >&2; exit 2; }
+  n=$((10#$n))
+fi
 
 if [ -n "$given" ]; then
   out=$given
