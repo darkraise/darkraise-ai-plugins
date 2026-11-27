@@ -65,19 +65,27 @@ plan_task_text "$src" "$n" >/dev/null || die "no Task $n in $plan" 3
 
 [ -f "$ledger" ] || die "no ledger for $plan; run task-brief --open first" 3
 
+# A complete line that is still the ledger's last is a close cut short after
+# its append: the retry runs the steps after it (the auto-run record above
+# all) and writes no second line.
+last=$(tr -d '\r' < "$ledger" | awk 'NF { l = $0 } END { print l }')
+if [[ $last == "Task $n: complete "* ]]; then
+  echo "task $n: already complete; finishing the close steps"
+  read -r base head < <(sed -n 's/^Task [0-9]*: complete (commits \([0-9a-f]*\)\.\.\([0-9a-f]*\),.*/\1 \2/p' <<<"$last")
 # grep -c reads the whole ledger: grep -q would close the pipe early and,
 # under pipefail, a SIGPIPE'd tr would read as "not there yet".
-if [ "$(tr -d '\r' < "$ledger" | grep -c "^Task $n: complete")" -gt 0 ]; then
+elif [ "$(tr -d '\r' < "$ledger" | grep -c "^Task $n: complete")" -gt 0 ]; then
   echo "task $n: already complete"
   exit 0
-fi
-base=$(tr -d '\r' < "$ledger" | sed -n "s/^Task $n: implementer inline (assigned; base \\([0-9a-f]*\\)).*/\\1/p" | tail -n 1)
-[ -n "$base" ] || die "Task $n has no open line in $ledger; run task-brief --open first" 3
-head=$(git rev-parse --short HEAD) || die "not inside a git checkout"
+else
+  base=$(tr -d '\r' < "$ledger" | sed -n "s/^Task $n: implementer inline (assigned; base \\([0-9a-f]*\\)).*/\\1/p" | tail -n 1)
+  [ -n "$base" ] || die "Task $n has no open line in $ledger; run task-brief --open first" 3
+  head=$(git rev-parse --short HEAD) || die "not inside a git checkout"
 
-line="Task $n: complete (commits $base..$head, $review) — $checkpoint"
-printf '%s\n' "$line" >> "$ledger"
-echo "wrote: $line"
+  line="Task $n: complete (commits $base..$head, $review) — $checkpoint"
+  printf '%s\n' "$line" >> "$ledger"
+  echo "wrote: $line"
+fi
 
 # A failed push is not a failed close: the ledger line is already written.
 # A home that never used darkmem has nothing to push, so no node starts.

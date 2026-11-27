@@ -175,6 +175,9 @@ run bash "$BRIEF" --open docs/plan.md 2
 run bash "$CLOSE" docs/plan.md 2 "$CP" --review "review clean; scores spec 17 / scope 18 / verification 15 / quality 16, seat dforge:judge-opus"
 check "close: --review replaces unreviewed" "$(tail -n 1 "$LEDGER" | grep -c '^Task 2: complete (commits [0-9a-f]*\.\.[0-9a-f]*, review clean; scores ')" "1"
 has "close: an Early CI naming the task is flagged" "$out" "early CI: due after this task"
+run bash "$CLOSE" docs/plan.md 2 "$CP"
+check "close retry: a complete line left last finishes the close" \
+  "$rc|$(grep -c 'early CI: due after this task' <<<"$out")|$(grep -c '^Task 2: complete' "$LEDGER")" "0|1|1"
 
 run bash "$CLOSE" docs/none.md 1 "$CP"
 check "close: a task never opened exits 3" "$rc" "3"
