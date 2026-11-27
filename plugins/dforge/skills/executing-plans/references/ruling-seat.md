@@ -55,10 +55,16 @@ seat is the native judge named in Select the host first.
 **In an auto run on Claude Code,** a ruling the route gives to
 `dforge:judge-opus` goes to an API-billed judge first, as
 [auto-run.md](../../../reference/auto-run.md) §Rulings rung 2 says: write
-the seat's prompt to a file, start `scripts/run-api-judge` with it and the
-seat's report path as a background call, end the turn, and change nothing
-in the worktree until it ends. Exit 0: the report is the seat's verdict.
-Exit 3: dispatch the seat as below. A `preflight` ruling, the fresh
+the seat's prompt to a file and run, as a background Bash call with
+`timeout` 2520000,
+
+    scripts/run-api-judge --prompt <file> --report <the report file> --cwd <the worktree> [--add-dir <dir>]...
+
+with one `--add-dir` for each directory outside the worktree the prompt
+points at. End the turn, and change nothing in the worktree until it ends.
+Exit 0: the report is the seat's verdict. Exit 3, or any other exit:
+dispatch the seat as below. When `scripts/auto-run status` prints
+`api rungs: off`, dispatch the seat at once. A `preflight` ruling, the fresh
 dispatch after `plan-amend` rejects an AMEND, and a Header amendment's
 confirmation skip it and go to the seat directly.
 
