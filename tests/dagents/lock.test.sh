@@ -90,7 +90,8 @@ rm -rf -- "$LOCK"
 # A background child of the locked command must not inherit the flock
 # descriptor, or the lock is held until that child exits.
 if command -v flock >/dev/null 2>&1; then
-  dr_locked "$TMP/b" bash -c 'sleep 30 >/dev/null 2>&1 & echo $! > "$0"' "$TMP/bg.pid"
+  dr_locked "$TMP/b" bash -c 'sleep 30 >/dev/null 2>&1 & echo $! > "$0"' "$TMP/bg.pid"; first=$?
+  check "a background child of the locked command: the first call ran" "$first:$([ -s "$TMP/bg.pid" ] && echo pid)" "0:pid"
   out=$(DAGENTS_LOCK_TENTHS=10 dr_locked "$TMP/b" true 2>&1); status=$?
   check "a background child of the locked command does not keep the lock" "$status:$out" "0:"
   bg=$(cat "$TMP/bg.pid" 2>/dev/null)

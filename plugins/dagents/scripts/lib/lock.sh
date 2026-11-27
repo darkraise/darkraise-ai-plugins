@@ -178,7 +178,8 @@ dr_locked() {
         75) echo "dagents: $base is locked by another process" >&2; exit 1 ;;
         *) echo "dagents: cannot lock $base (flock exited $status)" >&2; exit 1 ;;
       esac
-      # Closed for the command, so a child it leaves running holds no lock.
+      # Closed for the command, so a program it starts and leaves running
+      # holds no lock (a forked subshell that never execs still does).
       "$@" 9>&-
     ) 9>>"$base.lock"
     return
