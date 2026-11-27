@@ -80,7 +80,7 @@ if [ "$source" = probe ]; then
         # The review runner refuses to start without it, so Codex is unusable.
         usable=false reason=no-timeout
       else
-        answer=$("$DFORGE_TIMEOUT" $((ms / 1000 + 15)) node "$HERE/lib/codex-gate.mjs" "$root" "$(dr_native_path "$PWD")" "$ms" 2>/dev/null | tail -1)
+        answer=$("$DFORGE_TIMEOUT" -k 5 $((ms / 1000 + 15)) node "$HERE/lib/codex-gate.mjs" "$root" "$(dr_native_path "$PWD")" "$ms" 2>/dev/null | tail -1)
         usable=$(jq -r '.usable | tostring' <<<"$answer" 2>/dev/null | tr -d '\r')
         reason=$(jq -r '.reason // empty' <<<"$answer" 2>/dev/null | tr -d '\r')
         epoch=$(jq -r '.resets_at_epoch // empty' <<<"$answer" 2>/dev/null | tr -d '\r')
