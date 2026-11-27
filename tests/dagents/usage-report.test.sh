@@ -92,5 +92,16 @@ B=$(cd "$HERE/../../plugins/dagents/scripts/lib" && node --input-type=module -e 
     "bash \"/p/scripts/task-close\" docs/p.md 1 x", "bash \x27/p/scripts/task-step\x27 start docs/p.md 2"])).map((b) => [b.task, b.start, b.end])));' 2>&1)
 check "inferred_bounds: a quoted script path" "$B" '[[1,0,3],[2,3,4]]'
 
+# --- plan_files: the paths a task names ---
+B=$(cd "$HERE/../../plugins/dagents/scripts/lib" && node --input-type=module -e '
+  import { planFiles } from "./usage-report.mjs";
+  const t = ["### Task 1: one", "", "**Files:**", "- Modify: `src/a.sh:10-20`", "- Test: `tests/a.test.sh`", "",
+    "**Interfaces:** none", "", "**Files:**", "- Create: `src/b.sh`", "",
+    "### Task 2: two", "", "**Files:**", "- Modify: `src/My View.tsx`", ""].join("\n");
+  console.log(JSON.stringify(planFiles(t, 1)));
+  console.log(JSON.stringify(planFiles(t, 2)));' 2>&1)
+check "plan_files: every part's paths, without line ranges" "$(sed -n 1p <<<"$B")" '["src/a.sh","tests/a.test.sh","src/b.sh"]'
+check "plan_files: a backticked path with a space is kept whole" "$(sed -n 2p <<<"$B")" '["src/My View.tsx"]'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
