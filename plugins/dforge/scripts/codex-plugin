@@ -47,9 +47,12 @@ if [ "$enabled" != true ]; then
 fi
 
 # Registry format 2 holds an array of installs per plugin; the user-scope
-# install is the one a profile-wide enablement refers to.
-entry=$(jq -c --arg id "$id" \
-  '.plugins[$id] | if type == "array" then ((map(select(.scope == "user")) + .) | .[0]) else . end // empty' \
+# install is the one a profile-wide enablement refers to, and a project-scope
+# install serves only the project Claude Code names.
+entry=$(jq -c --arg id "$id" --arg proj "${CLAUDE_PROJECT_DIR:-}" \
+  '.plugins[$id] | if type == "array" then
+     (map(select(.scope == "user")) + map(select($proj != "" and .projectPath == $proj))) | .[0]
+   else . end // empty' \
   "$config/plugins/installed_plugins.json" 2>/dev/null | tr -d '\r')
 [ -n "$entry" ] && [ "$entry" != null ] || off plugin-not-installed
 
