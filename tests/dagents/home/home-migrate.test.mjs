@@ -219,3 +219,27 @@ test("migrateHome refuses a ~/.dr-forge config.json that is not a JSON object on
   assert.equal(read(path.join(forge, "config.json")), "[1]");
   assert.equal(read(path.join(home, ".dagents", "notes.txt")), "n\n");
 });
+
+test("migrateHome keeps the mode of a config.json it merges into", t => {
+  const home = scratch("dagents-migrate-home-");
+  const config = path.join(home, ".dagents", "config.json");
+  write(config, JSON.stringify({ layout: "auto" }));
+  fs.chmodSync(config, 0o640);
+  const mode = fs.statSync(config).mode & 0o777;
+  write(path.join(home, ".dr-forge", "config.json"), JSON.stringify({ handoffTokens: 325000 }));
+  const { lines, refused } = migrateHome({ HOME: home });
+  assert.equal(refused, 0, lines.join("\n"));
+  assert.equal(json(config).handoffTokens, 325000);
+  assert.equal(fs.statSync(config).mode & 0o777, mode);
+  const failing = scratch("dagents-migrate-home-");
+  write(path.join(failing, ".dagents", "config.json"), JSON.stringify({ layout: "auto" }));
+  write(path.join(failing, ".dr-forge", "config.json"), JSON.stringify({ handoffTokens: 325000 }));
+  const rename = fs.renameSync;
+  t.mock.method(fs, "renameSync", (from, to) => {
+    if (/^\.config\.json\..*\.tmp$/.test(path.basename(String(from)))) throw Object.assign(new Error("EIO: rename refused by the test"), { code: "EIO" });
+    return rename(from, to);
+  });
+  assert.throws(() => migrateHome({ HOME: failing }), /EIO: rename refused by the test/);
+  assert.deepEqual(fs.readdirSync(path.join(failing, ".dagents")).filter(name => /^\.config\.json\..*\.tmp$/.test(name)), []);
+});
+
