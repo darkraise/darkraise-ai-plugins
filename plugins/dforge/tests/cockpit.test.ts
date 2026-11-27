@@ -8250,6 +8250,19 @@ describe('auto run', () => {
     expect(w.prompts).toHaveLength(1)
   })
 
+  test('stops the run when a pane compaction cannot be booked', async ($, on) => {
+    const files = autoFiles({ pending: 'compact' })
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO], autoRunExits: { compacted: 1 } }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-compact' })
+    await settle(clock)
+    expect(w.autoRuns).toContain('--session sess-1 stop --reason the cockpit compacted from the pane but could not book it (exit 1)')
+    expect(w.prompts).toContain('The auto run stopped: the cockpit compacted from the pane but could not book it (exit 1). End as reference/auto-run.md §Stopping says.')
+  })
+
   test('books no engine compaction over a pending clear', async ($, on) => {
     const w: World = { ...SIGNED_IN, autoRuns: [] }
     world(on, w)

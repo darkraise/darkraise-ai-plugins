@@ -3927,6 +3927,11 @@ async function bookAutoCompaction($: EngineInterface, fromPane = false, seconds 
     await trackAutoRun($)
     scheduleAutoAct($, 'continue', 0)
   }
+  // The pane took the compact stage, which no longer books itself: the run
+  // would wait on a stage that already ran.
+  else if (code !== 0 && fromPane && auto.pending === 'compact') {
+    await endUnboundRun($, await $.session.id(), `the cockpit compacted from the pane but could not book it (exit ${code})`)
+  }
 }
 
 // Stops the run a closed session left (auto-run stop --stale), then reads
