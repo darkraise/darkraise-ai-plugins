@@ -411,7 +411,7 @@ Run same scenarios WITH skill. Agent should now comply.
 
 ### REFACTOR: Close Loopholes
 
-Agent found new rationalization? Add explicit counter. Re-test until bulletproof.
+Agent found new rationalization? Add explicit counter. Re-test until bulletproof, for at most six rounds: if the sixth still finds a new rationalization, stop and show your human partner the ones left.
 
 ### Micro-Test Wording Before Full Scenarios
 
@@ -493,7 +493,7 @@ Deploying untested skills = deploying untested code. It's a violation of quality
 - [ ] Add explicit counters (if discipline skill)
 - [ ] Build rationalization table from all test iterations
 - [ ] Create red flags list
-- [ ] Re-test until bulletproof
+- [ ] Re-test until bulletproof (at most six rounds; then show your human partner the rationalizations left)
 
 **Quality Checks:**
 - [ ] Small flowchart only if decision non-obvious
