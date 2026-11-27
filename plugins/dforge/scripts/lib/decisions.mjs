@@ -21,7 +21,7 @@ function finish(result) {
   process.exit(0)
 }
 
-// An evidence file's text. decide checked the path it sends; a link, or
+// An evidence file's text and its size in bytes. decide checked the path it sends; a link, or
 // anything but a regular file, put there since is refused, as is a total over
 // the limit.
 function evidenceText(path, left) {
@@ -31,7 +31,10 @@ function evidenceText(path, left) {
     const stat = fstatSync(fd)
     if (!stat.isFile()) throw new Error('evidence is not a regular file')
     if (stat.size > left) throw new Error('evidence over the limit')
-    return readFileSync(fd, 'utf8')
+    // The bytes read, not the size seen: a file that grew since counts in full.
+    const bytes = readFileSync(fd)
+    if (bytes.length > left) throw new Error('evidence over the limit')
+    return { text: bytes.toString('utf8'), size: bytes.length }
   } finally {
     closeSync(fd)
   }
@@ -43,8 +46,8 @@ function buildRequest(req) {
   const lines = [req.question, '', 'Options:', ...req.options.map((text, i) => `${i + 1}. ${text}`)]
   let left = Number.isFinite(req.limit) ? req.limit : EVIDENCE_LIMIT
   for (const file of req.evidence) {
-    const text = evidenceText(file.path, left)
-    left -= Buffer.byteLength(text)
+    const { text, size } = evidenceText(file.path, left)
+    left -= size
     lines.push('', `--- ${file.label} ---`, text)
   }
   const ask = 'Choose the option that best answers the question in the input.'
