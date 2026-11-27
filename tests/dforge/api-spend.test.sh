@@ -69,6 +69,12 @@ check "the default file is untouched" "$(j '.agentrouter.spent_usd // 0' < "$FIL
 unset DFORGE_API_SPEND_FILE
 printf '{"openai": {"spent_usd": 5' > "$FILE"
 check "a spend file that cannot be read closes every budget" "$(status | grep -c 'open=false .* reason=unreadable$')" "3"
+: > "$FILE"
+bash "$SPEND" add openai 1 2>"$TMP/empty.err"; rc=$?
+check "add to an empty spend file: refused and the file kept" "$rc|$(cat "$TMP/empty.err")|$(wc -c < "$FILE" | tr -d ' ')" "1|api-spend: cannot read $FILE|0"
+printf '{"a":1}{"b":2}' > "$FILE"
+bash "$SPEND" add openai 1 2>/dev/null; rc=$?
+check "add to a spend file of two documents: refused" "$rc|$(cat "$FILE")" '1|{"a":1}{"b":2}'
 rm -f "$FILE"
 for _ in 1 2 3 4 5 6 7 8 9 10; do bash "$SPEND" add openai 0.1 & done; wait
 check "ten adds at once all land" "$(j '.openai.calls' < "$FILE") $(line openai | sed 's/.* spent=\([0-9.]*\) .*/\1/')" "10 1.0000"

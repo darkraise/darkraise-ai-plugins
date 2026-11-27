@@ -23,10 +23,13 @@ USAGE
 add_locked() {
   local file=$1 id=$2 usd=$3 tmp
   tmp=$(mktemp "$(dirname "$file")/.api-spend.XXXXXX") || return 1
-  if ! { if [ -f "$file" ]; then cat -- "$file"; else printf '{}'; fi; } |
-    jq --arg id "$id" --arg usd "$usd" \
-      '.[$id].spent_usd = ((.[$id].spent_usd // 0) + ($usd | tonumber)) | .[$id].calls = ((.[$id].calls // 0) + 1)' \
-      > "$tmp"; then
+  # Exactly one JSON value or the add is refused: jq given none, or two,
+  # writes an empty or doubled record over the file.
+  if ! { if [ -e "$file" ] || [ -L "$file" ]; then cat -- "$file"; else printf '{}'; fi; } |
+    jq -n --arg id "$id" --arg usd "$usd" \
+      '[inputs] | if length == 1 then .[0] else error("not one value") end
+       | .[$id].spent_usd = ((.[$id].spent_usd // 0) + ($usd | tonumber)) | .[$id].calls = ((.[$id].calls // 0) + 1)' \
+      2>/dev/null > "$tmp"; then
     rm -f -- "$tmp"
     echo "api-spend: cannot read $file" >&2
     return 1
