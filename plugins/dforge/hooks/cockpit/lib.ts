@@ -1281,10 +1281,18 @@ export function termColor(name: string | null | undefined): string | undefined {
 
 /** "claude-opus-5-5[1m]" → "Opus 5.5", or "Opus" when short. */
 export function modelName(id: string, isShort = false): string {
-  const bare = id.replace(/\[.*?\]$/, '').replace(/^claude-/, '').replace(/-\d{8}$/, '')
-  const [family = bare, ...rest] = bare.split('-')
+  // Bedrock (us.anthropic.claude-…-v1:0), Vertex (…@20250929) and the older
+  // claude-3-5-sonnet order all name the same parts.
+  const bare = id
+    .replace(/\[.*?\]$/, '')
+    .replace(/^.*?claude-/, '')
+    .replace(/@.*$/, '')
+    .replace(/-v\d+(?::\d+)?$/, '')
+    .replace(/-\d{8}$/, '')
+  const parts = bare.split('-')
+  const family = parts.find(part => !/^\d+$/.test(part)) ?? bare
   const name = family.charAt(0).toUpperCase() + family.slice(1)
-  const version = rest.filter(part => /^\d+$/.test(part)).join('.')
+  const version = parts.filter(part => /^\d+$/.test(part)).join('.')
   return isShort || version === '' ? name : `${name} ${version}`
 }
 
