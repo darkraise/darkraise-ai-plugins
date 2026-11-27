@@ -1362,9 +1362,10 @@ export function turnsToBudget(perTurn: readonly number[], limit: number): number
   const recent = perTurn.slice(-6)
   const last = recent[recent.length - 1]
   if (recent.length < 3 || last === undefined || last >= limit) return null
-  const steps = recent.slice(1).map((value, index) => value - (recent[index] ?? value)).filter(step => step > 0)
-  if (steps.length === 0) return null
-  const growth = steps.reduce((sum, step) => sum + step, 0) / steps.length
+  // A compaction's drop is no step; a turn that added nothing still counts.
+  const steps = recent.slice(1).map((value, index) => value - (recent[index] ?? value)).filter(step => step >= 0)
+  const growth = steps.length === 0 ? 0 : steps.reduce((sum, step) => sum + step, 0) / steps.length
+  if (growth === 0) return null
   return Math.max(1, Math.ceil((limit - last) / growth))
 }
 
