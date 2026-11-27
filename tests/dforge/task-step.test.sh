@@ -610,6 +610,22 @@ rr_run rereview docs/plan.md 1
 RR_S=$RR_S_KEEP
 check "rereview runs context-size once and prints its line" "$rr_rc:$(grep -c '' "$RR_TMP/context-size.count" 2>/dev/null):$(tail -n 1 <<<"$rr_out")" "0:1:budget: kit"
 
+# A second rereview before the round's report reprints the round.
+rr_reset
+rr_edit app.txt mod
+rr_git add -A && rr_git commit -qm fix
+rr_fix 1 1 "- app.txt: wrong value"
+rr_run rereview docs/plan.md 1
+rr_run rereview docs/plan.md 1
+check "rereview repeated before its report: reprints round 1 and keeps the round" \
+  "$rr_rc $(jq -r '.round' "$RR_WS/task-1-step.json") $(head -n 1 <<<"$rr_out")" \
+  "0 1 task 1: re-review round 1: prompt already written, no report yet"
+rr_reset
+rr_fix 1 1 "- app.txt: wrong value"
+rr_run rereview docs/plan.md 1
+check "rereview with no commit since the review exits 6" \
+  "$rr_rc $(grep -c 'no commit since the reviewed head' <<<"$rr_err") $(cmp -s "$RR_WS/task-1-step.json" "$RR_TMP/state1.0" && echo same || echo changed)" "6 1 same"
+
 # Refusals write nothing.
 rr_reset
 rr_run rereview docs/plan.md 3

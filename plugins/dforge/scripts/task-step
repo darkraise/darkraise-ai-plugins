@@ -377,6 +377,16 @@ cmd_rereview() (
     exit 6
   fi
   round=$(jq -r '.round // 0' "$state" | tr -d '\r')
+  # A repeat before the round's report is in reprints the round: a second
+  # call must not spend the next fix round.
+  if [ "$round" -ge 1 ] && [ ! -f "$ws/task-$first-fix-$((round + 1)).md" ] \
+    && [ -f "$ws/task-$first-rereview-$round-prompt.md" ] && [ ! -f "$ws/task-$first-rereview-$round-report.md" ]; then
+    printf 'task %s: re-review round %s: prompt already written, no report yet\n' "$first" "$round"
+    printf 'seat: dforge:judge-sonnet-high prompt: %s\n' "$ws/task-$first-rereview-$round-prompt.md"
+    printf 'state: base %s review-head %s round %s t0 %s\n' \
+      "$(jq -r '.base' "$state" | tr -d '\r' | cut -c1-7)" "$(jq -r '.reviewHead' "$state" | tr -d '\r' | cut -c1-7)" "$round" "$(jq -r '.t0 // empty' "$state" | tr -d '\r')"
+    exit 0
+  fi
   new_round=$((round + 1))
   if [ "$new_round" -gt 2 ]; then
     echo "task-step: fix round $new_round is past the cap of 2; send the open findings to the breaker (reference/delegated-task.md §4)" >&2
@@ -400,6 +410,10 @@ cmd_rereview() (
   [ -n "$head_ref" ] || head_ref=HEAD
   head_sha=$(git rev-parse --verify --quiet "$head_ref^{commit}") || { echo "bad HEAD: $head_ref" >&2; exit 2; }
   fix_base_sha=$(git rev-parse --verify --quiet "$review_head^{commit}") || { echo "bad BASE: $review_head" >&2; exit 2; }
+  if [ "$fix_base_sha" = "$head_sha" ]; then
+    echo "task-step: no commit since the reviewed head ${head_sha:0:7}; commit the fix before rereview" >&2
+    exit 6
+  fi
 
   pkg=$(bash "$here/review-package" "$plan" "$fix_base_sha" "$head_sha") || { printf '%s\n' "$pkg" >&2; exit 2; }
   diff_file=$(printf '%s\n' "$pkg" | sed -n -E '/^wrote /{s/^wrote (.*): [0-9]+ commit\(s\), [0-9]+ bytes$/\1/;p;q;}')
