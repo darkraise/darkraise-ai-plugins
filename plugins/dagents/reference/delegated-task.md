@@ -376,7 +376,10 @@ needed.
 **Scores are additive.** The verdict digest carries the spec and quality
 verdicts and the four scores — spec, scope, verification, quality — each 1 to 20 against
 [task-review.md](../criteria/task-review.md). Read them as bands: **1-8
-fails** and joins the fix-loop trigger; **9-13** is borderline, recorded on
+fails**, and the reviewer names its cause in a Critical or Important finding,
+which starts the loop; a 1-8 score with no such finding is recorded on the
+complete line, as a borderline one is, for the final review to triage;
+**9-13** is borderline, recorded on
 the complete line for the final review to triage, never settled by you;
 **14-20 passes**. The verdicts still drive the loop; a report that drops a
 verdict line is malformed: `task-step verdict` exits 5 on it (When
@@ -597,7 +600,7 @@ On a `Host: codex` plan no task is held: every task is reviewed alone (§3).
 ## 4. The fix loop
 
 The loop triggers when the digest shows `spec: fail`, any Critical or Important
-finding line, any score of 1-8, or a cannot-verify item the ruling seat confirmed as a gap.
+finding line, or a cannot-verify item the ruling seat confirmed as a gap.
 
 Before the loop starts, two routes leave it immediately:
 

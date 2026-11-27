@@ -177,7 +177,8 @@ Subagent (the judge seat task-step review --group prints):
     indented by two spaces below it. `<file>` is the repository path the
     fix belongs in and `<line>` the line, or 0 when no single line applies.
     Every missing, extra or misunderstood requirement is a finding at
-    Critical or Important. A plan-mandated finding begins its one-liner
+    Critical or Important. A member's score of 8 or less names its cause in a
+    Critical or Important finding for that member. A plan-mandated finding begins its one-liner
     with `plan-mandated: `. Leave a section with nothing in it empty under
     its heading.
 

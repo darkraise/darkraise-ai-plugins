@@ -193,7 +193,8 @@ Subagent ([JUDGE]):
     indented by two spaces below it. `<file>` is the repository path the
     fix belongs in and `<line>` the line, or 0 when no single line applies.
     Every missing, extra or misunderstood requirement is a finding at
-    Critical or Important. A plan-mandated finding begins its one-liner
+    Critical or Important. A score of 8 or less names its cause in a
+    Critical or Important finding. A plan-mandated finding begins its one-liner
     with `plan-mandated: `. Leave a section with nothing in it empty under
     its heading.
 
