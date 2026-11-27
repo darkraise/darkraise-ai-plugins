@@ -333,7 +333,7 @@ if [ "$(jq -r '.refusal' <<<"$result")" = true ] \
     status "$back_model" "$back_effort" TIMEOUT "$rc" timeout; exit 1
   fi
   if [ "$rc" -eq 0 ] && valid_output && ! unread_output; then
-    status "$back_model" "$back_effort" FALLBACK "$rc"; exit 0
+    status "$back_model" "$back_effort" FALLBACK "$rc" refused; exit 0
   fi
   reason=$(fail_reason "$result" "$rc")
   [ "$reason" != quota ] || reason=$(quota_off)

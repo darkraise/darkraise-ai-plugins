@@ -220,6 +220,7 @@ present "outer_kill_is_timeout" "$out" "status=TIMEOUT exit=124 out=$TMP/o.md ev
 
 out=$(STUB_REFUSE_ONCE=1 seat final --out "$TMP/o.md" --base main); rc=$?
 present "a refused model falls back once" "$out" "status=FALLBACK"
+present "fallback_names_reason" "$out" "status=FALLBACK exit=0 out=$TMP/o.md evidence=none reason=refused"
 present "the fallback line names the model that ran" "$out" "codex-judge gpt-6.1-sol/high"
 check "FALLBACK exits 0" "$rc" "0"
 check "the fallback runs exactly one extra seat" "$(cat "$TMP/calls")" "2"
