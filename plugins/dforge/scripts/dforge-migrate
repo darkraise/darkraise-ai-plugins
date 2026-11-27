@@ -427,21 +427,23 @@ older_spellings() {
   esac
 }
 
-# rewrite_moved FILE OLD — FILE, a handoff just renamed from OLD (paths, one
-# per line), made to name itself: each OLD in its text becomes FILE, and a
-# first prompt without a claim step gets the one next-step writes now. A
-# draft, adhoc or kept handoff's stored block is replayed as it stands, so
-# its prompt would otherwise send the next session to OLD with nothing to
-# claim.
+# rewrite_moved FILE OLD NEW — FILE, a handoff to be renamed NEW, written to a
+# temporary file beside it made to name itself: each OLD (paths, one per line)
+# in its text becomes NEW, and a first prompt without a claim step gets the
+# one next-step writes now. A draft, adhoc or kept handoff's stored block is
+# replayed as it stands, so its prompt would otherwise send the next session
+# to OLD with nothing to claim. The temporary file's name is left in
+# $rewritten.
 rewrite_moved() {
-  local file=$1 old=$2 key clause="" tmp
-  key=${file##*/}; key=${key%.md}
+  local file=$1 old=$2 new=$3 key clause="" tmp
+  rewritten=""
+  key=${new##*/}; key=${key%.md}
   case " $(marker_of "$file") " in
     *" host=codex "*) case $key in adhoc-*) clause="When you hand off, pass \`--key $key\` to next-step. " ;; esac ;;
     *) clause="Before anything else, claim it with dforge's \`scripts/handoff claim\` on that file. " ;;
   esac
-  tmp=$(mktemp "$file.dforge-migrate.XXXXXX") || return 1
-  OLD=$old NEW=$file CLAUSE=$clause awk '
+  tmp=$(temp_beside "$file") || return 1
+  OLD=$old NEW=$new CLAUSE=$clause awk '
     BEGIN { n = split(ENVIRON["OLD"], olds, "\n") }
     {
       for (k = 1; k <= n; k++) {
@@ -455,8 +457,8 @@ rewrite_moved() {
       i = index($0, "enter it first. ")
       if (i > 0) $0 = substr($0, 1, i + 15) ENVIRON["CLAUSE"] substr($0, i + 16)
     }
-    { print }' "$file" > "$tmp" || { rm -f "$tmp"; return 1; }
-  if cmp -s "$tmp" "$file"; then rm -f "$tmp"; else mv -- "$tmp" "$file"; fi
+    { print }' "$file" > "$tmp" || { rm -f -- "$tmp"; return 1; }
+  rewritten=$tmp
 }
 
 # migrate_latest FILE [AS] — FILE (a latest.md) renamed to the key its marker
@@ -495,20 +497,25 @@ migrate_latest() {
   elif [ -e "$target" ] || [ -L "$target" ] \
     || { [ "$as" != "$f" ] && { [ -e "${f%/*}/$key.md" ] || [ -L "${f%/*}/$key.md" ]; }; }; then
     refuse "$as is the handoff for $key, and $target already exists; keep one by hand, then run dforge-migrate again"
+  elif [ "$dry" -eq 1 ]; then
+    done_move "$as" "$target"
+  # The rewrite comes before the rename, so a run killed during it leaves
+  # latest.md as it was, for the next run to list and rename.
+  elif ! rewrite_moved "$f" "$(older_spellings "$f")" "$target"; then
+    refuse "could not rewrite $f to name $target; it is left as it was"
   # A hard link fails on an existing name, so a <key>.md another session
   # writes after the test above is never replaced, as mv would replace it.
-  elif [ "$dry" -eq 0 ] && ! ln -- "$f" "$target" 2>/dev/null; then
+  elif ! ln -- "$rewritten" "$target" 2>/dev/null; then
+    rm -f -- "$rewritten"
     if [ -e "$target" ] || [ -L "$target" ]; then
       refuse "$as is the handoff for $key, and $target already exists; keep one by hand, then run dforge-migrate again"
     else
       refuse "could not move $f to $target"
     fi
-  elif [ "$dry" -eq 0 ] && ! rm -f -- "$f"; then
+  elif ! rm -f -- "$rewritten" "$f"; then
     refuse "could not remove $f once it was linked to $target; remove it by hand"
   else
     done_move "$as" "$target"
-    [ "$dry" -eq 1 ] || rewrite_moved "$target" "$(older_spellings "$f")" \
-      || printf 'dforge-migrate: %s could not be rewritten to name itself; its first prompt still names %s\n' "$target" "$f"
   fi
 }
 
