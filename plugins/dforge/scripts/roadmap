@@ -285,7 +285,7 @@ cmd_close() {
 # close_row — cmd_close's checks and write, under the roadmap's lock so the
 # row it judged is the row it writes.
 close_row() {
-  local m reg state earlier f out
+  local m reg state earlier f
   IFS=$'\037' read -r m _ _ reg state _ < <(register_cells <<<"$(roadmap_row "$FILE" "$want")")
   [ "$state" != closed ] || { echo "$want is already closed"; return 0; }
   earlier=$(roadmap_rows "$FILE" | awk -F'\t' -v w="$want" '$1 == w { exit } $5 != "closed" { print $1 }' | tr '\n' ' ')
@@ -310,6 +310,10 @@ with_register_locks() {
   f=$1; shift
   if [ ! -f "$f" ]; then with_register_locks "$@"; return; fi
   base=$(dr_lock_base "$f") || { echo "cannot lock $f" >&2; exit 2; }
+  # A register listed twice, or two spellings of one file, share a lock this
+  # call already holds; taking it again would wait on itself.
+  case $'\n'"${_held_locks:-}" in *$'\n'"$base"$'\n'*) with_register_locks "$@"; return ;; esac
+  _held_locks="${_held_locks:-}$base"$'\n'
   dr_locked "$base" with_register_locks "$@"
 }
 
