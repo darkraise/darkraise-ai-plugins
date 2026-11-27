@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { startStub, storedDocument } from "./stub-server.mjs";
-import { makeHome, makeRepo, run, scratch, write } from "./helpers.mjs";
+import { sha, startStub, storedDocument } from "./stub-server.mjs";
+import { makeHome, makeRepo, read, run, scratch, write } from "./helpers.mjs";
 
 const LEDGER = "# SDD ledger — plan: docs/superpowers/plans/p1.md\n\nTask 1: implementer (assigned)\nTask 1: complete\n\n\n| a | b |\r\n\r\nTask 2: complete\n";
 
@@ -187,6 +187,9 @@ test("a verified import records documents, never progress, as applied darkmem", 
   const record = JSON.parse(fs.readFileSync(path.join(home.home, ".dforge", "stores.json"), "utf8"));
   assert.deepEqual(record, { [repo]: { project: "proj", mirror: home.mirror, documents: "darkmem" } });
   assert.match(result.stdout, /^note: recorded documents as applied darkmem in .*stores\.json$/m);
+  assert.equal(read(path.join(home.docsRoot, "specs", "s.md")), "# Spec\n");
+  const state = JSON.parse(fs.readFileSync(path.join(home.mirror, ".sync-state.json"), "utf8"));
+  assert.equal(state.documents["dforge/specs/s.md"], sha("# Spec\n"));
 });
 
 test("another writer's append during a fresh ledger import is refused, and the workstream is not closed", async t => {

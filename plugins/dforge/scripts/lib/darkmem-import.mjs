@@ -2,7 +2,8 @@
 // repository's docs directory and its local ledgers and handoff notes into
 // darkmem. It reads the repository, never the mirror, and finishes by pulling
 // everything it filed into a scratch directory with pull's own code and
-// comparing bytes. A pull afterwards fills the real mirror.
+// comparing bytes. Once it records documents as applied darkmem, a pull with
+// the same code fills the real mirror.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -183,4 +184,14 @@ export async function importRepository(context) {
   if (!families.length) return;
   writeApplied(env, cfg.repoRoot, Object.fromEntries(families.map(family => [family, "darkmem"])), { project: cfg.project, mirror: cfg.mirror });
   report.notes.push(`recorded ${families.join(" and ")} as applied darkmem in ${storesPath(env)}`);
+  // The documents now live in the mirror, so fill it before anyone reads it.
+  // Its own counts stay out of the import's, which are those of its puts.
+  const filled = { conflicts: [], failures: [], notes: [], counts: { documents: 0, ledgers: 0 } };
+  await pullDocuments({
+    ...context,
+    roots: { docsRoot: path.join(cfg.mirror, DOC_PREFIX), workRoot: path.join(cfg.mirror, "work"), worktreeRoot: cfg.repoRoot, families: { documents: true, progress: false } },
+    report: filled,
+  });
+  report.conflicts.push(...filled.conflicts);
+  report.failures.push(...filled.failures);
 }
