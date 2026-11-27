@@ -636,6 +636,13 @@ ar --session s-1 switch >/dev/null 2>&1; status=$?
 check "switch: a first prompt naming another plan: exit 4" "$status:$(field pending)" "4:null"
 ar --session s-1 attach --plan docs/plan.md
 ar --session s-1 phase plan
+cp "$REPO/.dagents/handoff/stored.md" "$TMP/stored.keep"
+sed 's#Execute docs/plan.md#Execute docs/myplan.md#' "$TMP/stored.keep" > "$REPO/.dagents/handoff/stored.md"
+ar --session s-1 switch >/dev/null 2>&1; status=$?
+check "switch: a first prompt naming myplan.md is another plan" "$status:$(field pending):$(field phase)" "4:null:plan"
+cp "$TMP/stored.keep" "$REPO/.dagents/handoff/stored.md"
+ar --session s-1 attach --plan docs/plan.md
+ar --session s-1 phase plan
 ar --session s-1 switch; status=$?
 check "switch: exit 0, switch pending" "$status:$(field pending)" "0:switch"
 check "switch: the phase moves to execute" "$(field phase)" "execute"
