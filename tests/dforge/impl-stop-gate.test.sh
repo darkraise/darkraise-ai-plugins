@@ -173,6 +173,19 @@ check "a missing working directory lets the stop through and logs why" "$CODE|$O
 mkdir -p "$STATE/impl-stop-gate/a-cdir"
 gate "$(input dforge:impl-sonnet-high a-cdir "$M1")"
 check "a counter that cannot be written lets the stop through and logs why" "$CODE|$OUT|$ERR|$(grep -c 'a-cdir .*cannot write the block counter' "$FALLBACK")" "0|||1"
+ln -s "$TMP/victim-counter" "$STATE/impl-stop-gate/a-link"
+gate "$(input dforge:impl-sonnet-high a-link "$M1")"
+check "a symlinked counter is not written through" \
+  "$CODE|$([ -e "$TMP/victim-counter" ] && echo written || echo untouched)|$(grep -c 'a-link .*symbolic link' "$FALLBACK")" "0|untouched|1"
+REPO3="$TMP/repo3"
+git init -q "$REPO3"
+STATE3=$(cd "$REPO3" && bash "$PATHS" state | tr -d '\r')
+mkdir -p "$STATE3" && ln -s "$TMP/victim-log" "$STATE3/impl-stop-gate.log"
+R3=$(for m in "$M1" "$M2" "$M3"; do
+  gate "$(fjq -nc --arg c "$REPO3" --arg m "$m" '{cwd:$c,agent_id:"a-log",agent_type:"dforge:impl-sonnet-high",last_assistant_message:$m}')"
+  printf '%s ' "$CODE"
+done)
+check "a symlinked pass-through log is not written through" "$R3|$([ -e "$TMP/victim-log" ] && echo written || echo untouched)" "2 2 0 |untouched"
 
 LINES0=$(wc -l < "$FALLBACK" | tr -d ' ')
 gate "$(fjq -nc --arg m "All done.

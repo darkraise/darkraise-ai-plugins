@@ -81,7 +81,8 @@ read_counter() {
   case $fires in '' | *[!0-9]*) fires=0 ;; esac
 }
 awaiting_counter() { locate_counter && [ -f "$counter" ] && read_counter && [ "$passed" = awaiting ]; }
-clear_awaiting() { printf '%s\n%s\n\n%s\n' "$count" "$last" "$fires" > "$counter"; }
+linked() { [ -L "$dir" ] || [ -L "$counter" ]; }
+clear_awaiting() { linked || printf '%s\n%s\n\n%s\n' "$count" "$last" "$fires" 2>/dev/null > "$counter"; }
 
 report=$(grep -E '^Report: (.+)$' <<<"$message" | tail -n 1 | sed -E 's/^Report: //; s/[[:space:]]+$//')
 if [ -z "$report" ]; then
@@ -121,6 +122,7 @@ block() {
 
 unkept() { note "$agent_id $agent_type: $1; the stop passes unchecked ($reason)"; exit 0; }
 locate_counter || unkept "$why"
+! linked || unkept "the block counter is a symbolic link"
 mkdir -p "$dir" 2>/dev/null || unkept "cannot keep the block counter in $dir"
 
 read_counter
@@ -133,8 +135,9 @@ if [ "$fires" -gt 5 ]; then via="5 fires"
 elif [ "$hash" != "$last" ] && [ "$count" -ge 2 ]; then via="2 blocks"
 fi
 if [ -n "$via" ]; then
-  printf '%s\n%s\npassed\n%s\n' "$count" "$last" "$fires" > "$counter"
-  printf '%s %s %s pass-through after %s — %s\n' "$(date +%s)" "$agent_id" "$(clean "$agent_type")" "$via" "$(clean "$reason")" >> "$state/impl-stop-gate.log"
+  printf '%s\n%s\npassed\n%s\n' "$count" "$last" "$fires" 2>/dev/null > "$counter"
+  [ -L "$state/impl-stop-gate.log" ] ||
+    printf '%s %s %s pass-through after %s — %s\n' "$(date +%s)" "$agent_id" "$(clean "$agent_type")" "$via" "$(clean "$reason")" 2>/dev/null >> "$state/impl-stop-gate.log"
   exit 0
 fi
 if [ "$hash" != "$last" ]; then count=$((count + 1)) last=$hash; fi
