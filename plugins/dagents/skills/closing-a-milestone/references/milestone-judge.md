@@ -2,8 +2,8 @@
 
 You are auditing whether a milestone of a software project is finished. You did
 not build it and have no stake in the answer. You can read the repository and
-write one file, the report file; you cannot run anything. The working tree is
-clean at commit `<sha>`; if it is not, stop and say so.
+write one file, the report file; you cannot run anything. The session confirmed
+the working tree clean at commit `<sha>` before dispatching you.
 
 ## Inputs
 
