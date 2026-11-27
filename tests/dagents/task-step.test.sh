@@ -1557,6 +1557,38 @@ check "verdict: a hash that is no object id gets no command" \
 check "verdict: and its text is printed nowhere" "$(grep -c 'pwned' <<<"$rr_err")" "0"
 rr_git checkout -- other.txt
 
+# A name git quotes, and a mode-only change, still reach the check.
+if ! command -v cygpath >/dev/null 2>&1; then
+  rr_reset
+  printf 'one\n' > "$RR_REPO/q\"uote.txt"
+  rr_git add -A && rr_git commit -qm quoted
+  printf 'two\n' >> "$RR_REPO/q\"uote.txt"
+  rr_run review docs/plan.md 1
+  vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: pass
+|quality: approved
+|scores: spec 17 / scope 18 / verification 16 / quality 16
+REPORT
+  printf 'three\n' >> "$RR_REPO/q\"uote.txt"
+  rr_run verdict docs/plan.md 1
+  check "verdict: a change to a file whose name git quotes exits 6" "$rr_rc $(grep -cx 'q"uote.txt' <<<"$rr_err")" "6 1"
+  rr_reset
+  printf 'dirty\n' >> "$RR_REPO/other.txt"
+  rr_run review docs/plan.md 1
+  vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: pass
+|quality: approved
+|scores: spec 17 / scope 18 / verification 16 / quality 16
+REPORT
+  chmod +x "$RR_REPO/other.txt"
+  rr_run verdict docs/plan.md 1
+  check "verdict: a mode-only change to a file dirty at review time exits 6" "$rr_rc $(grep -cx 'other.txt' <<<"$rr_err")" "6 1"
+  chmod -x "$RR_REPO/other.txt"
+  rr_git checkout -- other.txt
+fi
+
 # A state recorded before the check existed still reads its report; usage.
 rr_reset
 vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
