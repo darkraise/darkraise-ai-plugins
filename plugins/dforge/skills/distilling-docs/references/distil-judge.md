@@ -7,7 +7,8 @@ instruction set: the judge has no other context.
 ## Placeholders
 
 - `[SOURCES]` — the wave's source file paths, one per line.
-- `[DISTILLED]` — the four `<docs>/distilled/*.md` paths.
+- `[DISTILLED]` — every `*.md` file under `<docs>/distilled/`: the four kind
+  files and any `<area>-<kind>.md` split from them.
 - `[COMMIT]` — the SHA of the commit that added this wave's distilled entries;
   with documents in darkmem, one `<name>@r<id>` line per distilled file, as
   `darkmem-sync revision` printed it after the push.
