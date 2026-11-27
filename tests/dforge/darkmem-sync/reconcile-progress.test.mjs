@@ -1579,3 +1579,20 @@ test("a handoff note another client changes after the check is not overwritten",
   assert.equal(s.stub.db.documents.get(key).content, "edited elsewhere\n");
 });
 
+test("a handoff written in the primary checkout during the move keeps progress local and is named", async t => {
+  const s = await setup(t, "darkmem");
+  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  const late = path.join(s.repo, ".dforge", "handoff", "late.md");
+  s.stub.db.onRequest = (method, route) => {
+    if (method !== "POST" || route !== "/api/v1/worklog/entries") return;
+    s.stub.db.onRequest = null;
+    write(late, LATEST);
+  };
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): progress changed in the checkouts during the move; nothing was moved locally\n"), result.stdout);
+  assert.ok(result.stdout.includes(`  ${late}: created during the move\n`), result.stdout);
+  assert.equal(s.stores().progress, "local");
+  assert.equal(read(late), LATEST);
+  assert.deepEqual(movedAside(s.repo), []);
+});

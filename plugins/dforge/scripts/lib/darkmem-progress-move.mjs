@@ -434,6 +434,12 @@ export async function progressToDarkmem(context) {
     }
     if (!now?.equals(item.buffer)) changed.push(`${item.file}: changed or removed during the move`);
   }
+  // A file written since the first gather (a handoff, a new ledger) would be
+  // left behind in the checkout while its family moved.
+  const again = gatherLocalProgress(cfg);
+  const seen = new Set(files.map(item => item.file));
+  for (const item of again.files) if (!seen.has(item.file)) changed.push(`${item.file}: created during the move`);
+  changed.push(...again.problems);
   if (changed.length) return refuse("progress changed in the checkouts during the move; nothing was moved locally", changed);
   // A link can be swapped into the mirror while darkmem is written, and the
   // atomic write follows one in any directory above the file it replaces.
