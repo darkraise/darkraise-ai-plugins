@@ -878,6 +878,21 @@ describe('attribution guard', () => {
     expect(cases.filter(([command, want]) => A6_FOUND(command) !== want).map(([command]) => command)).toEqual([])
   })
 
+  test('A6: reads a message file named after a quoted separator', async ($, on) => {
+    expect(gitTextFiles("git commit -F '/tmp/a;b.txt'")).toEqual(['/tmp/a;b.txt'])
+    const files: World['files'] = { '/tmp/a;b.txt': { text: `fix\n\n${A6_AI}\n` }, '/tmp/body.md': { text: `fix\n\n${A6_AI}\n` } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    const commands = ["git commit -F '/tmp/a;b.txt'", "gh pr create --title 'fix; tidy' --body-file /tmp/body.md"]
+    const denials: (string | undefined)[] = []
+    for (const command of commands) denials.push((await $.tool.call({ tool: 'Bash', command })).deny)
+    expect(denials).toEqual([A6_DENY, A6_DENY])
+    files['/tmp/a;b.txt'] = { text: 'fix\n' }
+    files['/tmp/body.md'] = { text: 'fix\n' }
+    const clean: (string | undefined)[] = []
+    for (const command of commands) clean.push((await $.tool.call({ tool: 'Bash', command })).deny)
+    expect(clean).toEqual([undefined, undefined])
+  })
 
 
   test('finds AI attribution and leaves human co-authors alone', () => {
