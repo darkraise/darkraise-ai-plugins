@@ -1245,5 +1245,13 @@ CLAUDE_CODE_SESSION_ID=s-term run "$TR" --notes "$TMP/notes-85.md" "$PLAN_REL"
 TH=$(cd "$TR" && CLAUDE_CODE_SESSION_ID=s-term bash "$SCRIPT" --target "$PLAN_REL")
 check "notes: a Next session section in the notes is dropped" \
   "$status:$(grep -c '^## Next session' "$TH"):$(grep -c '^s1$' "$TH"):$(grep -c 'old block' "$TH")" "0:1:1:0"
+HDT="$TR_ROOT/.dagents/handoff"
+mkdir -p "$HDT/claims"
+printf '# Other\n' > "$HDT/other.md"
+printf 'session=s-term\n' > "$HDT/claims/other"
+CLAUDE_CODE_SESSION_ID=s-term run "$TR" --complete "$PLAN_REL"
+check "terminal: claims under other keys are released, their handoffs kept" \
+  "$status:$([ -e "$HDT/claims/other" ] && echo held || echo released):$([ -e "$HDT/other.md" ] && echo kept || echo gone):$(grep -cF "next-step: kept $HDT/other.md (released)" "$TMP/stderr")" \
+  "0:released:kept:1"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
