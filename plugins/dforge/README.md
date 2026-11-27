@@ -543,7 +543,9 @@ needs. dforge hands off instead.
   skill writes the plan's handoff and its `handoff.md` and ends with the
   resume guide from `scripts/next-step`.
 - **Stops.** A saved plan outside an auto run (an auto run clears the session
-  and goes on) is a hard stop.
+  and goes on) is a hard stop, except a light plan of 1-3 tasks, which goes on
+  to execution in the same session when the budget allows
+  (`skills/writing-plans/references/execution-handoff.md`).
   The last task completing is no stop by itself: the final whole-branch review
   and finishing run in the same session while its budget lines say `ok`. In an
   auto run, finishing runs in a session of its own. In strict mode the plan's
@@ -979,7 +981,7 @@ The same settings can be set with
 | Cockpit | `guardAttribution` | `true` | Blank the engine's attribution text and refuse git writes that carry it. |
 | Minimized | `bandLine1` | empty | The minimized band's first line, in order, comma-separated: `dir`, `git`, `model`, `effort`, `style`, `turn`, `run`, `agents`, `shells`, `ctx`, `cache`, `cost`, `5h`, `7d`, `time`. Empty shows `dir`, `git`, `model`, `effort`, `style`, `turn`, `run`, `agents`, `shells`; `none` hides the line. The tab's chips add a segment last on a line and take it off the other. |
 | Minimized | `bandLine2` | empty | The second line, from the same names. Empty shows `ctx`, `cache`, `cost`, `5h`, `7d`; `none` hides it. A name on both lines shows on the first. In the desktop app the picked `ctx`, `cache`, `5h` and `7d` are its meters and the rest its text rows. |
-| Context | `handoffTokens` | `0` | The handoff budget in tokens, for the pane and the budget scripts alike. `0` follows dforge's own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000, and never below a fifth of that window. `DFORGE_BUDGET` overrides it; `relaxed` handoff mode ignores it, and the settings view locks the row then. |
+| Context | `handoffTokens` | `0` | The handoff budget in tokens, for the pane and the budget scripts alike. `0` follows dforge's own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000, and never below a fifth of that window. `DFORGE_BUDGET` overrides it; `relaxed` handoff mode ignores it while an auto run still uses it, and the settings view locks the row in relaxed mode. |
 | Context | `handoffMode` | `strict` | `strict` hands off at the handoff budget, except that a plan's last two tasks and its final phase run past it to finish the plan. `relaxed` measures every task against the final-phase limit, 85% of the window, so a session carries a plan further; a worst-case fix loop late in such a session may compact, and the compaction snapshot carries it on. |
 | Context | `nudgeModel` | `true` | Add the one note to the conversation at the budget, in `dforge` sessions. |
 | Context | `autoCompactWindow` | `0` | Claude's own `autoCompactWindow`, written to Claude's user settings file: `0` leaves it unset, else 100,000 to 1,000,000. Applies from the next session. |
@@ -1003,7 +1005,7 @@ The same settings can be set with
 | Process | `questionStyle` | `single` | `single` asks one clarifying question per message; `batched` asks them all in one. |
 | Finish | `finishAction` | `ask` | What finishing does once the final review is clean. `ask` keeps the question before the first task; `merge`, `pr` or `keep` skips it and runs that action at once; `wait` skips it and shows the finish menu then. |
 | Notifications | `limitAlertAt` | `90` | The share at which a usage limit sends the Discord `limit` message, in percent. `0` turns it off. |
-| Notifications | `notifyOn` | empty | The Discord events to send, comma-separated (see above). Empty sends the default set; `none` sends nothing. `dforge-config` rejects a value naming an unknown event; one written by hand into the settings file sends nothing. |
+| Notifications | `notifyOn` | empty | The Discord events to send, comma-separated (see above). Empty sends the default set; `none` sends nothing. `dforge-config` rejects a value naming an unknown event; in a value written by hand into the settings file, unknown names are dropped and the known ones are sent, and a value with no known name sends nothing. |
 | Notifications | `notifyAfter` | `60` | Seconds a turn must run before `done` sends. `0` sends every turn. |
 | Notifications | `notifyAskAfter` | `20` | Seconds an approval or question waits before it sends. `0` sends at once. |
 | Notifications | `notifyDetail` | `full` | `full` includes command and answer excerpts; `brief` sends titles and fields only. |
