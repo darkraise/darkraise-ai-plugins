@@ -111,16 +111,19 @@ export function leftoverLines(cfg) {
     .map(dir => `darkmem-sync reconcile: ${dir} is not read while documents are applied darkmem`);
 }
 
+// Every checkout's top level. A failed listing is a problem: reading the
+// primary checkout alone would miss a linked worktree's ledgers and documents.
 function worktreeTops(cfg) {
   const listing = worktreeList(cfg.repoRoot, 60000);
-  return listing.status === 0 ? listing.dirs.map(dir => path.resolve(dir)) : [cfg.repoRoot];
+  if (listing.status === 0) return { tops: listing.dirs.map(dir => path.resolve(dir)), problem: null };
+  return { tops: [cfg.repoRoot], problem: `git worktree list failed in ${cfg.repoRoot}: ${listing.stderr.trim()}` };
 }
 
 // Where the ledgers live: every worktree's state directory while progress is
 // local, the mirror's work tree while it is darkmem.
-function ledgerSources(cfg) {
+function ledgerSources(cfg, tops) {
   if (cfg.progress.applied === "darkmem") return [{ sdd: path.join(cfg.mirror, "work", "sdd"), checkout: cfg.repoRoot }];
-  return worktreeTops(cfg).map(tree => ({ sdd: path.join(dforgeDir("state", tree), "sdd"), checkout: tree }));
+  return tops.map(tree => ({ sdd: path.join(dforgeDir("state", tree), "sdd"), checkout: tree }));
 }
 
 function planFile(cfg, checkout, name) {
@@ -150,14 +153,14 @@ const realOr = file => {
 // so a worktree nested inside the primary checkout is not taken for the
 // primary's own files. A relative name, or an absolute one under no root, is
 // unchanged.
-function rootedName(cfg, checkout, name) {
+function rootedName(cfg, checkout, name, tops) {
   if (!path.isAbsolute(name)) return name;
   const bases = [
     [dforgeDir("docs", checkout), DOCS],
     [checkout, null],
     [dforgeDir("docs", cfg.repoRoot), DOCS],
     [cfg.repoRoot, null],
-    ...worktreeTops(cfg).flatMap(tree => [[dforgeDir("docs", tree), DOCS], [tree, null]]),
+    ...tops.flatMap(tree => [[dforgeDir("docs", tree), DOCS], [tree, null]]),
   ];
   if (cfg.documents.applied === "darkmem") bases.unshift([path.join(cfg.mirror, DOC_PREFIX), DOCS]);
   for (const resolve of [file => path.resolve(file), realOr]) {
@@ -181,8 +184,8 @@ function rootedName(cfg, checkout, name) {
 // identity is mapped first and completed.md is found from the mapped name: the
 // directory the absolute path names is gone once the documents have moved. An
 // identity no root maps is never finished, whatever lies beside it.
-export function planFinished(cfg, checkout, identity) {
-  const name = rootedName(cfg, checkout, identity);
+export function planFinished(cfg, checkout, identity, tops = worktreeTops(cfg).tops) {
+  const name = rootedName(cfg, checkout, identity, tops);
   if (path.isAbsolute(name)) return false;
   let text;
   try {
@@ -196,7 +199,7 @@ export function planFinished(cfg, checkout, identity) {
 // Why no move may run now (spec §4, C8): an active auto run, then each ledger
 // whose plan completed.md does not record, by its plan name, or by its path
 // when it has no identity line.
-export function inProgress(cfg) {
+export function inProgress(cfg, tops = worktreeTops(cfg).tops) {
   const found = [];
   try {
     const run = JSON.parse(readRegular(path.join(dforgeDir("state", cfg.repoRoot), "sdd", "auto-run.json"), { follow: true }).toString("utf8"));
@@ -207,7 +210,7 @@ export function inProgress(cfg) {
     // is not a regular file holds no run, since auto-run.sh writes the record
     // with tmp+mv, which replaces a link or a pipe at the path.
   }
-  for (const { sdd, checkout } of ledgerSources(cfg)) {
+  for (const { sdd, checkout } of ledgerSources(cfg, tops)) {
     for (const { name: slug, linked } of dirEntries(sdd)) {
       // A linked plan directory is not read through, so nothing can show its
       // plan finished.
@@ -227,7 +230,7 @@ export function inProgress(cfg) {
       }
       const name = ledgerPlanPath(text);
       if (!name) found.push(ledger);
-      else if (!planFinished(cfg, checkout, name)) found.push(name);
+      else if (!planFinished(cfg, checkout, name, tops)) found.push(name);
     }
   }
   return found;
@@ -236,7 +239,9 @@ export function inProgress(cfg) {
 // C8's refusal: null, or the first in-progress item as the reason and the
 // rest as details. A move calls it again after its own pull.
 export function inProgressReason(context) {
-  const found = inProgress(context.cfg);
+  const { tops, problem } = worktreeTops(context.cfg);
+  if (problem) return { reason: problem, details: [] };
+  const found = inProgress(context.cfg, tops);
   return found.length ? { reason: `a plan is in progress: ${found[0]}`, details: found.slice(1) } : null;
 }
 
@@ -354,10 +359,12 @@ export function carriedDocuments(repoRoot, docsDir, rel) {
 // uncommitted ones. The move carries only the primary's docs directory, so
 // these would be left in a checkout reconcile then names as not read.
 function worktreeOnlyDocuments(cfg) {
+  const { tops, problem } = worktreeTops(cfg);
+  if (problem) return { failed: problem };
   const head = runGit(cfg.repoRoot, ["rev-parse", "HEAD"]);
   if (head.status !== 0) return { failed: `git rev-parse failed: ${head.stderr.trim()}` };
   const found = [];
-  for (const tree of worktreeTops(cfg)) {
+  for (const tree of tops) {
     if (realOr(tree) === realOr(cfg.repoRoot)) continue;
     const rel = slash(path.relative(tree, dforgeDir("docs", tree)));
     const committed = runGit(tree, ["diff", "--name-only", "-z", "--diff-filter=ACMR", `${head.stdout.trim()}...HEAD`, "--", rel]);

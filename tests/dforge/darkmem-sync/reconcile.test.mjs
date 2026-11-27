@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
@@ -10,7 +11,7 @@ import { readNoFollow, readRegular } from "../../../plugins/dforge/scripts/lib/d
 import {
   NOT_A_FILE, carriedDocuments, fileHash, inProgress, inProgressReason, nameSpellings, pendingFamilies, reconcile as reconcileInProcess, refreshContext, runGit, stayLine,
 } from "../../../plugins/dforge/scripts/lib/darkmem-reconcile.mjs";
-import { STUB_KEY, sha, startStub } from "./stub-server.mjs";
+import { STUB_KEY, sha, startStub, storedDocument } from "./stub-server.mjs";
 import { git, makeHome, makeRepo, namedPipe, read, run, scratch, write } from "./helpers.mjs";
 
 // A HOME mapping `repo` to project "proj" with the mapping entry's overrides,
@@ -1273,3 +1274,16 @@ test("a mapping changed to another project moves the old mirror's families back 
   assert.equal(record.project, "renamed");
   assert.equal(read(path.join(s.home, ".dforge", "mirror", "renamed", "dforge", "specs", "a.md")), "# A, never pushed\n");
 });
+
+test("documents stay local when git worktree list fails, rather than reading only the primary checkout", { skip: process.platform === "win32" && "a POSIX git shim" }, async t => {
+  const s = await docsRepo(t);
+  const bin = scratch("dms-nowt-");
+  const real = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
+  fs.writeFileSync(path.join(bin, "git"), `#!/bin/sh\nfor a in "$@"; do [ "$a" = worktree ] && { echo "fatal: refused by the test" >&2; exit 128; }; done\nexec "${real}" "$@"\n`, { mode: 0o755 });
+  const result = await reconcile(s.repo, { ...s.env, PATH: `${bin}${path.delimiter}${s.env.PATH ?? process.env.PATH}` });
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes(`darkmem-sync reconcile: documents stay local (configured darkmem): git worktree list failed in ${s.repo}: fatal: refused by the test\n`), result.stdout);
+  assert.deepEqual(writes(s.stub), []);
+  assert.equal(s.stores().documents, "local");
+});
+
