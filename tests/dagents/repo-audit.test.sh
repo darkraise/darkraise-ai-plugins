@@ -403,5 +403,10 @@ if command -v flock >/dev/null 2>&1; then
 else
   printf "skip - fix: a removal with no claims directory takes the claims lock: no flock\n"
 fi
+# --- an empty repository ---
+E="$TMP/empty"
+git init -q -b main "$E"
+out=$(cd "$E" && bash "$SCRIPT" 2>/dev/null); rc=$?
+check "an empty repository: exit 0" "$rc:$(sed -n '/^## Recent commits/,$p' <<<"$out" | sed -n 2p)" "0:- (no commits)"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

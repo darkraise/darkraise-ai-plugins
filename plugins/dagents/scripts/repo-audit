@@ -282,4 +282,8 @@ fi
 
 echo
 echo "## Recent commits"
-git log -5 --oneline 2>/dev/null | sed 's/^/- /'
+if git rev-parse --verify -q HEAD >/dev/null 2>&1; then
+  git log -5 --oneline 2>/dev/null | sed 's/^/- /'
+else
+  echo "- (no commits)"
+fi
