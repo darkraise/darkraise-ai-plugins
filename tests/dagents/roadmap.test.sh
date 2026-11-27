@@ -317,6 +317,13 @@ if command -v flock >/dev/null 2>&1; then
 else
   printf "skip - close: holds each register's lock: no flock\n"
 fi
+[ "$(roadmap_row "$D4/roadmap.md" M1 | cut -f5)" = closed ] || bash "$RM" close --root "$R4" M1 --note x >/dev/null
+bash "$RM" close --root "$R4" M2 --note y >/dev/null
+before=$(cksum < "$D4/roadmap.md")
+run bash "$RM" reopen --root "$R4" M1 --note x
+check "reopen: refused while a later milestone is closed" \
+  "$RC:$(grep -c '^refused: reopen M2 first — a later milestone cannot stay closed$' <<<"$OUT"):$(cksum < "$D4/roadmap.md"):$(bash "$RM" check --root "$R4" >/dev/null 2>&1; echo $?)" \
+  "1:1:$before:0"
 
 run bash "$RM"
 check "usage: no verb" "$RC" "2"

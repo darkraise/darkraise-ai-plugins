@@ -23,8 +23,9 @@
 #              a register below it missing or failing register check) or
 #              the roadmap or a register below it locked, 2 usage, unknown
 #              milestone or a missing note
-#       reopen 0 written, 1 the roadmap is locked by another writer, 2 usage,
-#              unknown milestone or a missing note
+#       reopen 0 written, 1 the roadmap is locked by another writer or
+#              refused (a later milestone is closed), 2 usage, unknown
+#              milestone or a missing note
 #       settle 0 done (whether or not a row changed), 2 usage
 set -uo pipefail
 
@@ -339,8 +340,21 @@ close_checked() {
 cmd_reopen() {
   local want note
   parse_m_note "$@"
-  locked rewrite_row "$want" open "$note" || exit $?
+  locked reopen_row || exit $?
   echo "reopened $want"
+}
+
+# reopen_row — cmd_reopen's check and write, under the roadmap's lock.
+# Milestones close in order, so one reopened behind a later closed one would
+# leave that one closed while an earlier one is open.
+reopen_row() {
+  local later
+  later=$(roadmap_rows "$FILE" | awk -F'\t' -v w="$want" 'seen && $5 == "closed" { last = $1 } $1 == w { seen = 1 } END { print last }')
+  if [ -n "$later" ]; then
+    echo "refused: reopen $later first — a later milestone cannot stay closed"
+    exit 1
+  fi
+  rewrite_row "$want" open "$note"
 }
 
 cmd_settle() {
