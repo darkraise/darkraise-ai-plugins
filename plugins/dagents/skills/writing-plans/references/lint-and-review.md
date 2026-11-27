@@ -37,7 +37,7 @@
      and a background call's limit defaults to 30 minutes):
 
      ```bash
-     bash scripts/run-codex-review.sh --kind plan --cwd <repository-root> \
+     bash <plugin-root>/scripts/run-codex-review.sh --kind plan --cwd <repository-root> \
        --out <workspace>/plan-review-round-1.json --prompt <workspace>/plan-review-prompt.md
      ```
 
