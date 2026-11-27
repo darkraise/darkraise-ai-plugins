@@ -115,6 +115,11 @@ printf '// change cr\n' >> src/App.tsx
 out=$(PATH="$CRJQ:$PATH" stop s-cr9 'Done.')
 check "a jq that ends lines with CR: a UI change without proof is held" "$(decision "$(tr -d '\r' <<<"$out")")" "block"
 git checkout -q src/App.tsx
+prompt s-crlf
+sed 's/$/\r/' "$HOME/.claude/dagents/sessions/turns/s-crlf.refs" > "$TMP/crlf.refs" && mv "$TMP/crlf.refs" "$HOME/.claude/dagents/sessions/turns/s-crlf.refs"
+printf '// change crlf\n' >> src/App.tsx
+check "stop: a refs stamp with CRLF lines still finds the base" "$(decision "$(stop s-crlf 'Done.')")" "block"
+git checkout -q src/App.tsx
 check "stop: the retry passes" "$(stop s-2 'Done.' true)" ""
 check "stop: the pending line passes" "$(stop s-2 $'Done.\n\nUI proof: pending — no browser on this host')" ""
 check "stop: a hyphen, backticks and trailing blank lines pass" "$(stop s-2 $'Done.\n`UI proof: pending - no browser`\n\n')" ""
