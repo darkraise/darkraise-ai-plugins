@@ -123,6 +123,11 @@ bash "$ROUTE" plan.md --task 9 >/dev/null 2>&1; check "task: a missing task exit
 bash "$ROUTE" plan.md >/dev/null 2>&1; check "usage: exit 2" "$?" "2"
 { printf 'Host: codex\n\n'; cat plan.md; } > codex.md
 bash "$ROUTE" codex.md --task 1 >/dev/null 2>&1; check "a Codex-host plan exits 2" "$?" "2"
+printf '%s\n' '# Split' '' '## Task index' '' '4. split' '' '### Task 4: split' '' '**Lenses:** lang-bash' '' \
+  '#### Part A: a' '' '**Evaluation:** files 0 - spec 0 - coupling 0 - risk 3 = 3' '**Lenses:** security' '' \
+  '#### Part B: b' '' '**Evaluation:** files 0 - spec 0 - coupling 0 - risk 3 = 3' '**Lenses:** test-quality, security' > split.md
+out=$(bash "$ROUTE" split.md --task 4)
+check "task: a split task routes every part's lenses" "$(sed -E 's/ criteria=[^ ]*//' <<<"$out" | tr '\n' ';')" "lens security;lens test-quality;"
 
 # --- the depth of the plan sizes the final lenses ---
 # A plan's depth is the higher of its spec's Depth line and its riskiest task
