@@ -951,7 +951,40 @@ describe('attribution guard', () => {
     expect(ran.deny).toBe(`dforge: this project keeps AI attribution out of git. Remove "${A6_GENERATED}" and try again.`)
   })
 
+  test('A6: reads a relative message file from the directory a cd or git -C names', async ($, on) => {
+    const WEB = '/home/me/code/shop/web'
+    const files: NonNullable<World['files']> = {
+      [`${WEB}/.worktrees/x/commit-msg.txt`]: { text: `fix: tidy\n\n${A6_AI}\n` },
+      [`${WEB}/commit-msg.txt`]: { text: 'fix: tidy\n' },
+    }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    const commands = [
+      `cd ${WEB}/.worktrees/x && git commit -F commit-msg.txt`,
+      'cd .worktrees/x && git commit -F commit-msg.txt',
+      'git -C .worktrees/x commit -F commit-msg.txt',
+    ]
+    const denials: (string | undefined)[] = []
+    for (const command of commands) denials.push((await $.tool.call({ tool: 'Bash', command })).deny)
+    expect(denials).toEqual([A6_DENY, A6_DENY, A6_DENY])
+    files[`${WEB}/.worktrees/x/commit-msg.txt`] = { text: 'fix: tidy\n' }
+    files[`${WEB}/commit-msg.txt`] = { text: `fix: tidy\n\n${A6_AI}\n` }
+    const clean: (string | undefined)[] = []
+    for (const command of commands) clean.push((await $.tool.call({ tool: 'Bash', command })).deny)
+    expect(clean).toEqual([undefined, undefined, undefined])
+  })
 
+  test('refuses a relative message file after a cd it cannot follow', async ($, on) => {
+    const files: World['files'] = { '/tmp/clean.md': { text: 'fix\n' } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    const unread = await $.tool.call({ tool: 'Bash', command: 'cd "$WT" && git commit -F commit-msg.txt' })
+    expect(unread.deny).toBe('dforge: the attribution guard cannot tell which directory commit-msg.txt is read from; name the message file by an absolute path.')
+    const absolute = await $.tool.call({ tool: 'Bash', command: 'cd "$WT" && git commit -F /tmp/clean.md' })
+    expect(absolute.deny).toBeUndefined()
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /✗ Bash: message file not read: commit-msg\.txt/ })).toBeDefined()
+  })
 
 
 

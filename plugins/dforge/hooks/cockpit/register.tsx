@@ -50,8 +50,9 @@ import {
   isGitWriteTool,
   isDforge,
   gitMessageTexts,
-  gitTextFiles,
+  gitTextSources,
   isAbsolutePath,
+  sourcePath,
   isPlanTail,
   isServiceCommand,
   isTimerCommand,
@@ -949,11 +950,11 @@ export const register: Register = on => {
       }
     }
     const options = await live($)
-    const line = options.guardAttribution ? await attributionLine($, tool, e) : undefined
-    if (line !== undefined) {
-      const refusal: CockpitRefusal = { at: await $.clock.now(), tool, line }
+    const found = options.guardAttribution ? await attributionLine($, tool, e) : undefined
+    if (found !== undefined) {
+      const refusal: CockpitRefusal = { at: await $.clock.now(), tool, line: found.line }
       await update($, refusals, list => [...list, refusal].slice(-20))
-      return { deny: `dforge: this project keeps AI attribution out of git. Remove "${line}" and try again.` }
+      return { deny: found.deny }
     }
     const id = e.tool_use_id
     // The guards have judged. What follows before next() only feeds the pane,
@@ -5492,7 +5493,11 @@ async function judgeWriteDenial($: EngineInterface, tool: string, e: { agentId?:
   }
 }
 
-async function attributionLine($: EngineInterface, tool: string, e: object): Promise<string | undefined> {
+// The refusal for an attribution line: the deny text, and the line the
+// refusals list keeps.
+const attributionRefusal = (line: string) => ({ line, deny: `dforge: this project keeps AI attribution out of git. Remove "${line}" and try again.` })
+
+async function attributionLine($: EngineInterface, tool: string, e: object): Promise<{ line: string; deny: string } | undefined> {
   if (tool === 'Bash') {
     const command = String((e as { command?: unknown }).command ?? '')
     if (!writesGitText(command)) return undefined
@@ -5502,30 +5507,35 @@ async function attributionLine($: EngineInterface, tool: string, e: object): Pro
     const { texts, isWhole } = gitMessageTexts(command)
     for (const text of texts) {
       const inline = attributionIn(text)
-      if (inline !== undefined) return inline
+      if (inline !== undefined) return attributionRefusal(inline)
     }
-    // A relative file is read from the session's directory: a cd earlier in
-    // the command is not followed. Only a regular file is read: this hook runs
-    // before the tool, and a read of /dev/stdin or a pipe would wait on input
-    // the command has not yet given.
+    // A relative file is read below the session's directory, each cd, pushd
+    // and git -C before it applied; one that follows a directory the command
+    // does not spell out is refused, as no read can tell which file git takes.
+    // Only a regular file is read: this hook runs before the tool, and a read
+    // of /dev/stdin or a pipe would wait on input the command has not yet given.
     let isUnseen = isWhole
     const cwd = await $.session.cwd().catch(() => null)
-    for (const file of gitTextFiles(command)) {
-      const path = isAbsolutePath(file) || cwd === null ? file : `${cwd.replace(/[\\/]+$/, '')}/${file}`
+    for (const { file, dirs } of gitTextSources(command)) {
+      if (dirs === null && !isAbsolutePath(file)) {
+        return { line: `message file not read: ${file}`, deny: `dforge: the attribution guard cannot tell which directory ${file} is read from; name the message file by an absolute path.` }
+      }
+      const path = sourcePath(cwd ?? '', [...(dirs ?? []), file])
       const text = (await $.fs.stat(path).catch(() => null))?.kind === 'file' ? await $.fs.read(path).catch(() => null) : null
       if (text === null) {
         isUnseen = true
         continue
       }
       const line = attributionIn(String(text))
-      if (line !== undefined) return line
+      if (line !== undefined) return attributionRefusal(line)
     }
-    return isUnseen ? attributionIn(command, true) : undefined
+    const line = isUnseen ? attributionIn(command, true) : undefined
+    return line === undefined ? undefined : attributionRefusal(line)
   }
   if (!isGitWriteTool(tool)) return undefined
   for (const text of stringsIn(e)) {
     const line = attributionIn(text)
-    if (line !== undefined) return line
+    if (line !== undefined) return attributionRefusal(line)
   }
   return undefined
 }
