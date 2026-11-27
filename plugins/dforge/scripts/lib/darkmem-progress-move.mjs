@@ -11,7 +11,7 @@ import { dforgeDir } from "./darkmem-config.mjs";
 import { importLedger } from "./darkmem-import.mjs";
 import {
   DOC_PREFIX, checkpointFiledSince, checkpointTarget, decodeUtf8, handoffKey, handoffMarker, ledgerPieces, listDocumentFiles, propertiesFor,
-  recordCheckpointAt, sha256, unsupportedPlanDirs, uriFamily, utcStamp, validKey, writeFileAtomic,
+  parseWorktreeList, recordCheckpointAt, sha256, unsupportedPlanDirs, uriFamily, utcStamp, validKey, writeFileAtomic,
 } from "./darkmem-mirror.mjs";
 import { pullCheckpoints, pullDocuments, pullLedgers, remoteLedger } from "./darkmem-pull.mjs";
 import { inProgressReason, planFinished } from "./darkmem-reconcile.mjs";
@@ -127,9 +127,9 @@ function ledgersIn(workRoot) {
 
 // The primary checkout first, then every linked worktree git lists.
 function checkouts(repoRoot) {
-  const result = spawnSync("git", ["-C", repoRoot, "worktree", "list", "--porcelain"], { encoding: "utf8", timeout: 10000 });
+  const result = spawnSync("git", ["-C", repoRoot, "worktree", "list", "--porcelain", "-z"], { encoding: "utf8", timeout: 10000 });
   if (result.status !== 0) return { problem: `git worktree list failed in ${repoRoot}: ${(result.stderr || result.error?.message || "").trim()}` };
-  const listed = result.stdout.split(/\r?\n/).filter(line => line.startsWith("worktree ")).map(line => line.slice("worktree ".length));
+  const listed = parseWorktreeList(result.stdout);
   return { dirs: [repoRoot, ...listed.filter(dir => path.resolve(dir) !== path.resolve(repoRoot))] };
 }
 

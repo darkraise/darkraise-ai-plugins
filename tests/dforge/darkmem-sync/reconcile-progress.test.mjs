@@ -4,7 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 import { createClient } from "../../../plugins/dforge/scripts/lib/darkmem-client.mjs";
-import { emptyState, ledgerPieces, loadState, utcStamp } from "../../../plugins/dforge/scripts/lib/darkmem-mirror.mjs";
+import { emptyState, ledgerPieces, loadState, pathToUri, utcStamp } from "../../../plugins/dforge/scripts/lib/darkmem-mirror.mjs";
 import { checkProgressTargets, gatherLocalProgress, progressToLocal, readNoFollow, readRegular } from "../../../plugins/dforge/scripts/lib/darkmem-progress-move.mjs";
 import { STUB_KEY, sha, startStub } from "./stub-server.mjs";
 import { git, makeHome, makeRepo, namedPipe, read, run, scratch, write } from "./helpers.mjs";
@@ -1532,3 +1532,16 @@ test("a darkmem ledger whose absolute identity names a worktree nested in the pr
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to local$/m);
 });
+
+test("a linked worktree whose path holds a newline is listed whole", { skip: process.platform === "win32" && "Windows paths cannot hold a newline" }, () => {
+  const repo = makeRepo();
+  const worktree = path.join(scratch("dms-wt-"), "side\nline");
+  git(repo, "worktree", "add", "-q", "-b", "side", worktree);
+  write(path.join(worktree, ".dforge", "sdd", "p2", "progress.md"), LEDGER("p2"));
+  const { problems, sources } = gatherLocalProgress({ repoRoot: repo });
+  assert.deepEqual(problems, []);
+  const p2 = sources.find(item => item.rel === "sdd/p2/progress.md");
+  assert.ok(p2 && p2.file.startsWith(worktree), JSON.stringify(sources));
+  assert.equal(pathToUri({ docsRoot: scratch("dms-elsewhere-"), worktreeRoot: repo }, path.join(worktree, "docs", "dforge", "specs", "s.md")), "dforge/specs/s.md");
+});
+

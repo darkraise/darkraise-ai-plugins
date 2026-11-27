@@ -786,14 +786,19 @@ export function ledgerEntries(text) {
   return entries;
 }
 
+// The checkout paths in `git worktree list --porcelain -z` output: its fields
+// end in NUL, so a path holding a newline stays whole.
+export function parseWorktreeList(stdout) {
+  return String(stdout).split("\0").filter(field => field.startsWith("worktree ")).map(field => field.slice("worktree ".length));
+}
+
 // Every worktree's docs directory, as `git worktree list` names the
 // checkouts; none when git cannot list them.
 function worktreeDocsRoots(worktreeRoot) {
   if (!worktreeRoot) return [];
-  const listed = spawnSync("git", ["-C", worktreeRoot, "worktree", "list", "--porcelain"], { encoding: "utf8", timeout: 10000 });
+  const listed = spawnSync("git", ["-C", worktreeRoot, "worktree", "list", "--porcelain", "-z"], { encoding: "utf8", timeout: 10000 });
   if (listed.status !== 0) return [];
-  return listed.stdout.split(/\r?\n/).filter(line => line.startsWith("worktree "))
-    .map(line => path.join(line.slice("worktree ".length), "docs", "dforge"));
+  return parseWorktreeList(listed.stdout).map(dir => path.join(dir, "docs", "dforge"));
 }
 
 // The darkmem uri a document's name or path stands for: a name under

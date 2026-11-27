@@ -7,7 +7,7 @@ import path from "node:path";
 import { HttpError, TransportError } from "./darkmem-client.mjs";
 import { ConfigError, dforgeDir, resolveStores, writeApplied } from "./darkmem-config.mjs";
 import {
-  DOC_PREFIX, caseGroups, decodeUtf8, isArchiveUri, ledgerPlanPath, listDocumentFiles, sha256, uriFamily, uriProblem, utcStamp,
+  DOC_PREFIX, caseGroups, decodeUtf8, isArchiveUri, ledgerPlanPath, listDocumentFiles, parseWorktreeList, sha256, uriFamily, uriProblem, utcStamp,
 } from "./darkmem-mirror.mjs";
 import { progressToDarkmem, progressToLocal, readNoFollow, readRegular, writeExclusive } from "./darkmem-progress-move.mjs";
 import { pullDocuments } from "./darkmem-pull.mjs";
@@ -112,10 +112,8 @@ export function leftoverLines(cfg) {
 }
 
 function worktreeTops(cfg) {
-  const listing = runGit(cfg.repoRoot, ["worktree", "list", "--porcelain"]);
-  return listing.status === 0
-    ? listing.stdout.split(/\r?\n/).filter(line => line.startsWith("worktree ")).map(line => path.resolve(line.slice("worktree ".length)))
-    : [cfg.repoRoot];
+  const listing = runGit(cfg.repoRoot, ["worktree", "list", "--porcelain", "-z"]);
+  return listing.status === 0 ? parseWorktreeList(listing.stdout).map(dir => path.resolve(dir)) : [cfg.repoRoot];
 }
 
 // Where the ledgers live: every worktree's state directory while progress is
