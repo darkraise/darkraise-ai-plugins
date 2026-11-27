@@ -215,7 +215,10 @@ needed.
 **Scores are additive.** The verdict digest carries the spec and quality
 verdicts and the four scores — spec, scope, verification, quality — each 1 to 20 against
 [task-review.md](../criteria/task-review.md). Read them as bands: **1-8
-fails** and joins the fix-loop trigger; **9-13** is borderline, recorded on
+fails**, and the reviewer names its cause in a Critical or Important finding,
+which starts the loop; a 1-8 score with no such finding is recorded on the
+complete line, as a borderline one is, for the final review to triage;
+**9-13** is borderline, recorded on
 the complete line for the final review to triage, never settled by you;
 **14-20 passes**. The verdicts still drive the loop; a report that drops a
 verdict line is malformed: `task-step verdict` exits 5 on it (When
@@ -318,10 +321,8 @@ report | wrote a malformed report | changed <files>> —
 restored the seat's changes and re-dispatched once
 — none`, delete the report file, and re-dispatch the same seat once with the
 same prompt file.
-A second failure dispatches the route's fallback judge:
-the judge after `fallback:` on the `seat:` line when it names one, otherwise
-`dforge:judge-opus`, a fresh dispatch even when the failed seat was
-judge-opus; say so. A third failure is `Task <N>: BLOCKED — review seat —
+A second failure dispatches `dforge:judge-opus`, a fresh dispatch even when
+the failed seat was judge-opus; say so. A third failure is `Task <N>: BLOCKED — review seat —
 no usable report after three dispatches`. Exit 6 with
 `run task-step review … first` means the review step never ran: run it.
 Exit 7 is not a seat failure: it means the suite has no record at the review
@@ -374,7 +375,7 @@ failed spec review — it enters the fix loop with the other findings.
 ## 4. The fix loop
 
 The loop triggers when the digest shows `spec: fail`, any Critical or Important
-finding line, any score of 1-8, or a cannot-verify item the ruling seat confirmed as a gap.
+finding line, or a cannot-verify item the ruling seat confirmed as a gap.
 
 Before the loop starts, two routes leave it immediately:
 
