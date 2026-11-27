@@ -61,7 +61,7 @@ uiux_is_ui() {
 uiux_filter() {
   UIUX_INC=$(uiux_globs "$1") UIUX_EXC=$UIUX_EXCLUDE_GLOBS LC_ALL=C awk '
     # A bash case pattern as an anchored regex: * and ? cross /, [!...] negates.
-    function re(g,   out, i, n, c, j) {
+    function re(g,   out, i, n, c, j, k) {
       out = "^"; n = length(g)
       for (i = 1; i <= n; i++) {
         c = substr(g, i, 1)
@@ -72,7 +72,14 @@ uiux_filter() {
           j = i + 1
           if (substr(g, j, 1) == "!" || substr(g, j, 1) == "^") j++
           if (substr(g, j, 1) == "]") j++
-          while (j <= n && substr(g, j, 1) != "]") j++
+          # [:name:], [=c=] and [.c.] are one unit: their inner ] does not end the set.
+          while (j <= n && substr(g, j, 1) != "]") {
+            if (substr(g, j, 1) == "[" && index(":=.", substr(g, j + 1, 1)) && j + 1 <= n) {
+              k = index(substr(g, j + 2), substr(g, j + 1, 1) "]")
+              if (k) { j += k + 3; continue }
+            }
+            j++
+          }
           if (j > n) { out = out lit(c); continue }
           c = substr(g, i + 1, j - i - 1); sub(/^!/, "^", c)
           out = out "[" c "]"; i = j
