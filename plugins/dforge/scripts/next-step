@@ -436,7 +436,7 @@ if [ "$latest_mode" -eq 1 ]; then
   case $m_kind in
     plan)
       plan_finished "$root" "$m_subject" && gone "the plan is finished: $m_subject"
-      if grep -qE '^\*\*Status:\*\* .*[1-9][0-9]* of [0-9]+ tasks complete' <<<"$stored" \
+      if grep -qE '^\*\*Status:\*\* .*([1-9][0-9]* of [0-9]+|all [0-9]+) tasks complete' <<<"$stored" \
          && ! plan_ledger_any "$root" "$m_subject" >/dev/null && ! plan_finished "$root" "$m_subject"; then
         gone "the ledger is gone and the plan is unrecorded: $m_subject"
       fi

@@ -257,6 +257,11 @@ latest
 check "latest plan: a lost ledger never restarts the plan" "$status" 6
 has "latest plan: the reason is named" "$err" "the ledger is gone and the plan is unrecorded"
 check "latest plan: nothing on stdout" "$out" ""
+lfixture
+stored "<!-- next-step: kind=plan done=1 closed=0 subject=$P at=1 -->" "Plan \`$P\`: all 3 tasks complete." "Run the final review."
+latest
+check "latest plan: a lost ledger with all tasks complete never restarts the plan" \
+  "$status:$(grep -cF "next-step: the ledger is gone and the plan is unrecorded: $P" <<<"$err")" "6:1"
 mkdir -p "$L/.dforge/sdd/2026-11-01-p"
 printf '# SDD ledger — plan: %s\nTask 1: complete (x)\nTask 2: complete (x)\n' "$P" > "$L/.dforge/sdd/2026-11-01-p/progress.md"
 PM="<!-- next-step: kind=plan done=1 closed=0 subject=$P at=1 -->"
