@@ -678,7 +678,8 @@ ar_owner_handoff() {
 }
 
 # ar_handoff — the first prompt and launch from the handoff scripts/next-step
-# just wrote, into AR_PROMPT, AR_MODEL and AR_EFFORT.
+# just wrote, into AR_PROMPT, AR_MODEL and AR_EFFORT. Returns 5 when another
+# live session holds the plan's handoff.
 ar_handoff() {
   local primary here plan latest="" launch
   AR_PROMPT="" AR_MODEL="" AR_EFFORT=""
@@ -689,7 +690,18 @@ ar_handoff() {
   # checkout: where T falls can depend on where next-step runs.
   plan=$(ar_get plan)
   if [ -n "$plan" ]; then
-    latest=$(cd "$here" && bash "$AR_LIB_DIR/../next-step" --target "$plan" 2>/dev/null) || latest=""
+    local err rc=0
+    err=$(mktemp) || return 1
+    latest=$(cd "$here" && bash "$AR_LIB_DIR/../next-step" --target "$plan" 2>"$err") || rc=$?
+    # 7: another live session holds the plan's handoff, and next-step has
+    # stopped this session's run; its line names the holder.
+    if [ "$rc" -eq 7 ]; then
+      grep '^next-step: ' "$err" >&2
+      rm -f "$err"
+      return 5
+    fi
+    rm -f "$err"
+    [ "$rc" -eq 0 ] || latest=""
   else
     # A design-phase clear: the newest handoff whose marker names the run's
     # owner session, read by name; another session's handoff is never resumed.
@@ -713,7 +725,7 @@ ar_switch() {
   local plan
   plan=$(ar_get plan)
   [ -n "$plan" ] || { echo "auto-run: no plan is attached; run auto-run attach --plan first" >&2; return 4; }
-  ar_handoff || return 1
+  ar_handoff || return
   [[ $AR_PROMPT == *"$(basename "$plan")"* ]] \
     || { echo "auto-run: the handoff's first prompt names another plan than $plan; run scripts/next-step $plan again" >&2; return 4; }
   ar_update '.pending = "switch" | .phase = "execute" | .setupDue = true | .compactionsSinceTask = 0 | .resumePrompt = $p
@@ -727,7 +739,7 @@ ar_switch() {
 # (return 5).
 ar_clear() {
   local is_phase=$1 resumes plan
-  ar_handoff || return 1
+  ar_handoff || return
   # The plan's checkout may hold a block another session left there for
   # another plan; storing its prompt would resume the wrong plan.
   plan=$(ar_get plan)
