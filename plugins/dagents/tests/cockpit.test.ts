@@ -3584,6 +3584,15 @@ describe('account', () => {
     expect(billingLabel('stripe_subscription')).toBe('subscription')
   })
 
+  test('names Bedrock, Vertex and older model ids', () => {
+    expect(modelName('us.anthropic.claude-sonnet-4-5-20250929-v1:0')).toBe('Sonnet 4.5')
+    expect(modelName('claude-sonnet-4-5@20250929')).toBe('Sonnet 4.5')
+    expect(modelName('claude-3-5-sonnet-20241022')).toBe('Sonnet 3.5')
+    expect(modelName('anthropic.claude-3-5-haiku-20241022-v1:0', true)).toBe('Haiku')
+    expect(modelName('claude-opus-5-5[1m]')).toBe('Opus 5.5')
+    expect(modelName('claude-sonnet-4-5-20250929', true)).toBe('Sonnet')
+  })
+
   test('shows a card with the email, organization, model and config directory', async ($, on) => {
     world(on, SIGNED_IN)
     signedIn(on)
