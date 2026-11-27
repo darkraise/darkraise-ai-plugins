@@ -131,9 +131,9 @@ if [ "$dry_run" = true ]; then
 fi
 
 # Structured reports must satisfy the bundled schema before they can be used.
-# Final reviews are prose and only have to be non-empty.
+# Final reviews are prose and only have to hold a non-blank character.
 valid_output() {
-  [ -n "$schema" ] || { [ -s "$out" ]; return; }
+  [ -n "$schema" ] || { grep -q '[^[:space:]]' "$out" 2>/dev/null; return; }
   jq -e -s --slurpfile schema "$schema" '
     def valid($s):
       . as $v |

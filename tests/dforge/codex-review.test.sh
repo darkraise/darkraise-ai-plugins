@@ -186,6 +186,9 @@ out=$(STUB_TURN_STATUS=1 STUB_FINAL_MESSAGE='the diff mentions an unsupported mo
 present "prose that mentions a refusal is not a refusal" "$out" "status=FAILED"
 check "a prose mention runs no second seat" "$(cat "$TMP/calls")" "1"
 
+out=$(STUB_FINAL_MESSAGE=$' \n\t ' seat final --out "$TMP/o.md" --base main)
+present "blank_final_is_schema" "$out" "status=FAILED exit=0 out=$TMP/o.md evidence=none reason=schema"
+
 out=$(STUB_MODE=logged-out seat final --out "$TMP/o.md" --base main)
 present "an auth failure is FAILED, not a model change" "$out" "status=FAILED"
 check "an auth failure runs no second seat" "$(cat "$TMP/calls")" "1"
