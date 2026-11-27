@@ -75,7 +75,9 @@ Three conditions, checked per file, all required:
    checkout keeps its own; `scripts/repo-audit` lists them under `## Handoff`),
    finds neither the file's path, nor its basename, nor any **ancestor**
    directory path beneath those roots. The ancestor check matters: a plan naming
-   a capture directory references every file in it without naming one.
+   a capture directory references every file in it without naming one. Hits on
+   lines starting `Source:` under `<docs>/distilled/` do not count, since every
+   entry cites its source that way.
 
 **Never deleted**, whatever a judge says: specs, plans, `completed.md`, `README`,
 `CLAUDE.md`, `AGENTS.md`, licence files, hand-written research anywhere else in
@@ -135,8 +137,10 @@ docs(<scope>): remove absorbed <area> notes   # git rm only - no content changes
 
 One or more distil commits — each `MISSING` or `DISTORTED` verdict produces
 another — then **exactly one removal commit**, carrying only the files the judge
-returned `CARRIED` against the committed content. Never combined, and
-never squashed on integration: a squash collapses the two commits the recovery
+returned `CARRIED` against the committed content. Just before the removal
+commit, re-run all three conditions on each `CARRIED` file, and leave out of
+that commit any file that now fails one. Never combined, and never squashed
+on integration: a squash collapses the two commits the recovery
 story depends on, so merge with `--no-ff` or fast-forward. Reverting a bad
 deletion is then one `git revert` that keeps the distillation.
 
