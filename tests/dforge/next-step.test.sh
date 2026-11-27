@@ -1231,5 +1231,18 @@ h=$(cd "$NX" && CLAUDE_CODE_SESSION_ID=$SA bash "$SCRIPT" --target "$PLAN_REL")
 has "no auto run keeps the prompt (A5)" "$(prompt_of "$out")" \
   "Start in \`$NX\` (branch x); its handoff is \`$h\`. If your working directory is not \`$NX\`, enter it first. Before anything else, claim it"
 
+# --- amendments, notes and a terminal block ---
+TR="$TMP/term"
+git init -q -b main "$TR"
+TR_ROOT="$(git -C "$TR" rev-parse --show-toplevel)"
+mkdir -p "$TR/docs/plans"
+write_plan "$TR/$PLAN_REL" "$EXEC_SUB" ""
+git -C "$TR" add -A && git -C "$TR" commit -qm init
+AMD="$TR/.dforge/sdd/2026-01-01-demo"
+mkdir -p "$AMD"
+printf '## A1 — Task 1\nReason: r\nCost if wrong: c\n### Old\n````text\n### Task 1: First thing\n````\n### New\n````text\n### Task 1: Renamed thing\n````\n' > "$AMD/amendments.md"
+CLAUDE_CODE_SESSION_ID=s-term run "$TR" --print "$PLAN_REL"
+has "amendments: routing reads the amended task title" "$out" "**Next:** Start at Task 1 (Renamed thing)."
+rm -f "$AMD/amendments.md"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

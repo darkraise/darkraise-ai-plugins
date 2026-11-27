@@ -518,16 +518,27 @@ elif [ "$draft" -eq 1 ]; then
   launch_cmd=$(launch_for design)
   prompt="Continue from \`$rel\` (the authority): $next_action Read \`$own_handoff\` first."
 else
-  tasks=$(plan_tasks "$plan")
+  # Routing reads the plan with its amendments applied, as task-brief does,
+  # and writes nothing: plan_amendments_ready, which moves and logs, is
+  # task-brief's.
+  route=$plan amended=""
+  amend=$(plan_amendments_file "$plan")
+  if [ -n "$amend" ]; then
+    amended=$(mktemp 2>/dev/null) || amended=""
+    if [ -n "$amended" ] && plan_apply_amendments "$plan" "$amend" > "$amended" 2>/dev/null; then route=$amended
+    else printf 'next-step: amendments did not apply; routing reads the plan as written\n' >&2; fi
+  fi
+  tasks=$(plan_tasks "$route")
+  execution=$(plan_header_line "$route" Execution)
+  program=$(plan_header_line "$route" Program)
+  header=$(plan_header "$route")
+  [ -z "$amended" ] || rm -f "$amended"
   [ -n "$tasks" ] || fail 3 "no tasks in ${plan} (no heading matching 'Task N')"
   total=$(wc -l <<<"$tasks" | tr -d ' ')
 
-  execution=$(plan_header_line "$plan" Execution)
-  program=$(plan_header_line "$plan" Program)
-
   # A Codex plan states its host in the header and its native pair on the
   # Execution line; the flag is for the paths with no plan to read.
-  if plan_is_codex "$(plan_header "$plan")"; then host=codex; fi
+  if plan_is_codex "$header"; then host=codex; fi
 
   launch_cmd=$(execution_launch "$execution")
 
