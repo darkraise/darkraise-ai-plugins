@@ -363,10 +363,22 @@ export function shellCommands(src: string): { raw: string; words: string[] }[] {
   return out
 }
 
-// The options whose next word is a commit's or pull request's text: git
-// commit's -m and --message (alone or ending a cluster such as -am), gh pr's
-// --title, -t, --body, -b and --subject.
-const MESSAGE_FLAG = /^(?:-[A-Za-z]*m|--message|-t|--title|-b|--body|--subject)$/
+type MessageKind = 'text' | 'trailer' | 'file'
+// The long options whose value is a commit's, merge's or pull request's text,
+// a trailer, or a file holding the text: git's --message, --trailer and
+// --file, gh pr's --title, --body, --body-file and --subject.
+const LONG_OPTIONS = new Map<string, MessageKind>([
+  ['message', 'text'],
+  ['title', 'text'],
+  ['body', 'text'],
+  ['subject', 'text'],
+  ['trailer', 'trailer'],
+  ['file', 'file'],
+  ['body-file', 'file'],
+])
+// git takes a long option by any unambiguous prefix; three letters keep these
+// clear of the options they share a start with.
+const ABBREVIABLE = ['message', 'trailer', 'file']
 // The names a message file can give stdin by.
 const STDIN_PATH = /^(?:-|\/dev\/stdin|\/dev\/fd\/0|\/proc\/self\/fd\/0)$/
 // A `$(cat <<'EOF' … EOF)` message: its text is the body as written when the
@@ -378,6 +390,47 @@ function isExpanding(text: string): boolean {
   const doc = CAT_HEREDOC.exec(text)
   if (doc !== null) return doc[1] === undefined && /[$`]/.test(doc[3] ?? '')
   return /[$`]/.test(text)
+}
+
+// The option a word opens, with its value when the word holds it. A
+// single-dash cluster is read left to right: the first m, t or b takes the
+// rest of the word as text (a leading = dropped), the first F takes it as a
+// file, and either takes the next word when it ends the cluster.
+function messageOption(word: string): { kind: MessageKind; value: string | undefined } | undefined {
+  const long = /^--([a-z][a-z-]*)(?:=([\s\S]*))?$/.exec(word)
+  if (long !== null) {
+    const given = long[1] ?? ''
+    const name = LONG_OPTIONS.has(given) ? given : ABBREVIABLE.find(one => given.length >= 3 && one.startsWith(given))
+    const kind = name === undefined ? undefined : LONG_OPTIONS.get(name)
+    return kind === undefined ? undefined : { kind, value: long[2] }
+  }
+  if (!/^-[A-Za-z]/.test(word)) return undefined
+  for (let at = 1; at < word.length; at++) {
+    const letter = word[at] ?? ''
+    if (!/[A-Za-z]/.test(letter)) return undefined
+    const kind: MessageKind | undefined = letter === 'm' || letter === 't' || letter === 'b' ? 'text' : letter === 'F' ? 'file' : undefined
+    if (kind === undefined) continue
+    const rest = word.slice(at + 1)
+    return { kind, value: rest === '' ? undefined : kind === 'text' ? rest.replace(/^=/, '') : rest }
+  }
+  return undefined
+}
+
+// Every message option in a simple command's words: its kind, its value, the
+// option's word and the word holding the value.
+function messageOptions(words: readonly string[]): { kind: MessageKind; value: string; at: number; valueAt: number }[] {
+  const out: { kind: MessageKind; value: string; at: number; valueAt: number }[] = []
+  for (let at = 0; at < words.length; at++) {
+    const option = messageOption(words[at] ?? '')
+    if (option === undefined) continue
+    if (option.value !== undefined) {
+      out.push({ kind: option.kind, value: option.value, at, valueAt: at })
+    } else if (at + 1 < words.length) {
+      out.push({ kind: option.kind, value: words[at + 1] ?? '', at, valueAt: at + 1 })
+      at++
+    }
+  }
+  return out
 }
 
 /**
@@ -395,39 +448,24 @@ export function gitMessageTexts(command: string): { texts: string[]; isWhole: bo
   const all = shellCommands(command)
   for (const one of all) {
     if (!isGitWriteCommand(one.words)) continue
-    one.words.forEach((word, at) => {
-      const next = one.words[at + 1]
-      const text = MESSAGE_FLAG.test(word) && next !== undefined
-        ? next
-        : /^--(?:message|title|body|subject)=/.test(word)
-          ? word.slice(word.indexOf('=') + 1)
-          : /^-m./.test(word)
-            ? word.slice(2)
-            : undefined
-      if (text !== undefined) {
-        texts.push(text)
-        if (isExpanding(text)) isWhole = true
+    for (const { kind, value, at, valueAt } of messageOptions(one.words)) {
+      if (kind === 'text') {
+        texts.push(value)
+        if (isExpanding(value)) isWhole = true
+        continue
       }
-      const trailer = word === '--trailer' ? next : /^--trailer=/.test(word) ? word.slice(10) : undefined
-      if (trailer !== undefined) {
-        texts.push(trailer.replace(/^([\w-]+)[ \t]*=[ \t]*/, '$1: '))
-        if (isExpanding(trailer)) isWhole = true
+      if (kind === 'trailer') {
+        texts.push(value.replace(/^([\w-]+)[ \t]*=[ \t]*/, '$1: '))
+        if (isExpanding(value)) isWhole = true
+        continue
       }
-      const file = /^(?:-[a-z]*F|--file|--body-file)$/.test(word)
-        ? next
-        : /^--(?:file|body-file)=/.test(word)
-          ? word.slice(word.indexOf('=') + 1)
-          : /^-[a-z]*F./.test(word)
-            ? word.slice(word.indexOf('F') + 1)
-            : undefined
-      if (file === undefined) return
       // By the last path segment, so `> msg.txt` and `-F ./msg.txt` name one file.
       const tail = (p: string) => p.replace(/^.*[\\/]/, '')
       const isWritten = all.some(other =>
-        other.words.some((w, wAt) => (other !== one || (wAt !== at && wAt !== at + 1)) && tail(w.replace(/^\d*(?:&>>?|>>?\|?)/, '')) === tail(file)),
+        other.words.some((w, wAt) => (other !== one || (wAt !== at && wAt !== valueAt)) && tail(w.replace(/^\d*(?:&>>?|>>?\|?)/, '')) === tail(value)),
       )
-      if (STDIN_PATH.test(file) || file.startsWith('<(') || isExpanding(file) || isWritten) isWhole = true
-    })
+      if (STDIN_PATH.test(value) || value.startsWith('<(') || isExpanding(value) || isWritten) isWhole = true
+    }
   }
   return { texts, isWhole }
 }
