@@ -29,7 +29,8 @@ cleanly."
   says `ok`. In strict mode the plan's last two tasks and its final phase say
   `ok` past the budget and `handoff` only at the hard limit
   ([session-budget.md](../../reference/session-budget.md)); in relaxed mode
-  they never hand off. A plain task budget line printed during the final
+  they are measured against the final-phase limit, a tail task past it hands
+  off, and finishing never hands off. A plain task budget line printed during the final
   phase does not stop it. Finishing checks `scripts/context-size --finish`
   once at its entry.
 - On Codex: after every 3 completed tasks, or after any task that needed 3 or
@@ -59,7 +60,9 @@ cleanly."
    launched that is still running, including an agent that sent its report
    (`DONE`, `DONE_WITH_CONCERNS`, …) but left a shell or agent of its own
    alive, which Claude Code keeps listing. A report is not the end of the
-   launch; the list is. Exit 0 means nothing is running; exit 3 means it could
+   launch; the list is. Exit 0 means no work is running, though it may list
+   services (dev servers, watchers): stop each service you started unless the
+   next session needs it, and say which you left up. Exit 3 means it could
    not read this session, so list them by hand (`list_agents` on Codex, or the
    launch ids in your transcript). `scripts/next-step` runs the same check and
    prints no block while anything is listed. For each one, either wait for it,
