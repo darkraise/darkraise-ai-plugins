@@ -185,7 +185,8 @@ show_handoff() {
   esac
   before=$(digest_of "$f")
   if co=$(handoff_checkout "$f"); then
-    out=$(cd "$co" && bash "$here/with-timeout" 20 bash "$here/next-step" --print --handoff "$f" 2>&1 </dev/null) || rc=$?
+    # 60 s: a 1,000-row register fixture takes 24-27 s on Windows CI.
+    out=$(cd "$co" && bash "$here/with-timeout" 60 bash "$here/next-step" --print --handoff "$f" 2>&1 </dev/null) || rc=$?
   else
     out="repo-audit: $f is in no checkout" rc=1
   fi
