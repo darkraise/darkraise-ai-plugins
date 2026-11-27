@@ -3924,6 +3924,20 @@ async function readWhere($: EngineInterface) {
   }
   S.where.host = (await $.env.get('HOSTNAME')) || (await firstLine(['hostname']))
   S.where.tmux = (await $.env.get('TMUX')) ? await firstLine(['tmux', 'display-message', '-p', '#S']) : null
+  await readPrimary($)
+}
+
+// The primary checkout of the repository the session is in now.
+async function readPrimary($: EngineInterface) {
+  const firstLine = async (argv: string[]) => {
+    try {
+      const ran = await $.process.run(argv, { timeoutMs: 2000 })
+      const line = ran.exitCode === 0 ? (ran.stdout.split('\n')[0] ?? '').trim() : ''
+      return line === '' ? null : line
+    } catch {
+      return null
+    }
+  }
   // A worktree's .dagents/ lives in the primary checkout: the work tree of the
   // common git directory's parent, as ar_primary_root (scripts/lib/auto-run.sh)
   // finds it, so a layout the scripts resolve no primary for (a submodule)
@@ -4622,7 +4636,10 @@ async function readPlace($: EngineInterface) {
     // No working directory on this host: the strip starts at the branch.
   }
   const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { timeoutMs: 2000 }).catch(() => null)
+  const was = S.where.checkout
   S.where.checkout = top?.exitCode === 0 ? (top.stdout.split('\n')[0] ?? '').trim() || null : null
+  // A cd into another repository moves its primary checkout too.
+  if (S.where.checkout !== was) await readPrimary($)
 }
 
 // Until the first request goes out: the session's model and the effort setting.

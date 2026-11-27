@@ -4554,6 +4554,23 @@ describe('discord', () => {
     expect((quiet.embeds as Record<string, unknown>[])[0]?.description).toBeUndefined()
   })
 
+  test('a message after a cd into another repository names that repository', async ($, on) => {
+    const fetches: World['fetches'] = []
+    const w: World = { tokens: 50_000, fetches, config: { notifyAfter: 60 } }
+    let cwd = '/home/me/code/shop/web'
+    world(on, w)
+    on('session.cwd', () => ({ value: cwd }))
+    mock.store(on, { notifyUrl: WEBHOOK })
+    await $.session.start(START)
+    cwd = '/home/me/code/depot'
+    w.checkout = '/home/me/code/depot'
+    w.primary = '/home/me/code/depot'
+    await $.tool.call({ tool: 'Bash', command: 'cd /home/me/code/depot' } as never)
+    await $.turn.start({ text: 'go', turnId: 't1' })
+    await $.turn.complete({ answer: 'Done.', durationMs: 125_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect((fetches[0]?.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.author).toEqual({ name: 'devbox · depot' })
+  })
+
   test('sends a long turn\'s end, and nothing without a webhook', async ($, on) => {
     const fetches: World['fetches'] = []
     world(on, { tokens: 50_000, fetches, config: { notifyAfter: 60 } })
