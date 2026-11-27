@@ -100,8 +100,11 @@ _darkmem_session_step() {
 
 # darkmem_session_lines DIR SID [ROOM] [SECONDS] — reconcile's and pull's lines
 # for the session start note, without notes, "nothing to pull" or a pull
-# summary that reports nothing, fitted to 20 lines and ROOM characters
-# (default: no character limit). A malformed config prints its one-line reason
+# summary that reports nothing, fitted by _darkmem_fit: the 20-line cap
+# applies to indented detail lines and the closing count line, while
+# unindented lines are bounded only by ROOM characters (default: no character
+# limit), which session-start.sh sets from its 9500-character budget. A
+# malformed config prints its one-line reason
 # instead. A repository that is disabled or unmapped still reconciles while a
 # family is in the mirror, so that family moves back.
 #
