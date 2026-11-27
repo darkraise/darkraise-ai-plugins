@@ -113,6 +113,10 @@ ar --session s-2 start --spec "$SPEC" --register docs/r.md >/dev/null 2>&1; stat
 check "a second start while the first is live: exit 4" "$status:$(field session)" "4:s-1"
 live s-1 '2 hours ago'
 beat s-1 7200
+jq '.decisions = [{"id":"d1"}] | .rulings = ["r1"]' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+err=$(ar --session s-2 start --spec "$SPEC" --register docs/r.md 2>&1 >/dev/null); status=$?
+check "a stale run holding decisions refuses a start" "$status:$(grep -c 'auto-run stop --stale' <<<"$err"):$(field session):$(jq '.decisions | length' "$STATE")" "4:1:s-1:1"
+jq '.decisions = [] | .rulings = []' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
 ar --session s-2 start --spec "$SPEC" --register docs/r.md >/dev/null 2>&1; status=$?
 check "a stale run gives way" "$status:$(field session):$(field register)" "0:s-2:docs/r.md"
 mkdir -p "$HOME/.claude/projects/q"
