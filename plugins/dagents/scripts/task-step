@@ -1009,7 +1009,7 @@ do_review() {
       *) secs=$(ladder_block codex-judge | awk 'NR == 1 { print $3 }') ;;
     esac
     timeout_ms=$(( (${secs:-0} + 120) * 1000 ))
-    cmd="bash \"$plugin_root/scripts/run-codex-review.sh\" --kind task --tier $tier --cwd \"$top\" --out \"$codex_out\" --prompt \"$codex_prompt\""
+    cmd="bash $(printf %q "$plugin_root/scripts/run-codex-review.sh") --kind task --tier $tier --cwd $(printf %q "$top") --out $(printf %q "$codex_out") --prompt $(printf %q "$codex_prompt")"
   fi
   for line in "$judge_prompt" ${tier:+"$codex_prompt"}; do
     unexpanded=$(template_placeholder "$template" "$line")
@@ -1318,7 +1318,7 @@ parse_report() {
 # task's state file, so a path outside the work tree or a hash that is no
 # object id gets no command: the session runs these lines as printed.
 restore_hints() {
-  local root p h line rmode nmode nh
+  local root p h line rmode nmode nh q link
   root=$(git -C "$1" rev-parse --show-toplevel | tr -d '\r')
   while IFS= read -r line; do
     [ -n "$line" ] || continue
@@ -1338,6 +1338,16 @@ restore_hints() {
         printf '  restore: none: the recorded path is outside the work tree; restore it by hand\n'
         continue ;;
     esac
+    # A link swapped in after the review would carry a restore outside the tree.
+    link="" q=$p
+    while [ -n "$q" ]; do
+      [ ! -L "$root/$q" ] || link=$q
+      case $q in */*) q=${q%/*} ;; *) q="" ;; esac
+    done
+    if [ -n "$link" ]; then
+      printf '  restore: none: %s is a symbolic link now; restore it by hand\n' "$link"
+      continue
+    fi
     if [ -z "$h" ]; then
       printf '  restore: git -C %q checkout -- %q\n' "$root" "$p"
     elif [ "$h" = deleted ]; then
@@ -1345,7 +1355,8 @@ restore_hints() {
     elif ! [[ $h =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]; then
       printf '  restore: none: the recorded content hash is no object id; restore it by hand\n'
     elif git -C "$root" cat-file -e "$h" 2>/dev/null; then
-      printf '  restore: git -C %q cat-file --filters --path=%q %q > %q\n' "$root" "$p" "$h" "$root/$p"
+      printf '  restore: git -C %q cat-file --filters --path=%q %q > %q && mv -f -- %q %q\n' \
+        "$root" "$p" "$h" "$root/$p.dagents-restore" "$root/$p.dagents-restore" "$root/$p"
     else
       printf '  restore: none: its content at review time (%s) was not stored; restore it by hand\n' "$h"
     fi

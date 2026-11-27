@@ -344,7 +344,17 @@ step review docs/plan.md 1
 CP="$WS/task-1-review-codex-prompt.md"
 check "review: the light seat" "$(grep '^seat:' <<<"$out")" "seat: codex:light prompt: $CP fallback: dagents:judge-sonnet-high prompt: $JP"
 check "review: the runner command" "$(grep '^codex:' <<<"$out")" \
-  "codex: bash \"$PR/scripts/run-codex-review.sh\" --kind task --tier light --cwd \"$TOP\" --out \"$WS/task-1-review-codex.json\" --prompt \"$CP\""
+  "codex: bash $(printf %q "$PR/scripts/run-codex-review.sh") --kind task --tier light --cwd $(printf %q "$TOP") --out $(printf %q "$WS/task-1-review-codex.json") --prompt $(printf %q "$CP")"
+# The printed runner line is run by the session: a checkout path is text there.
+SUB_REPO="$TMP/fix-\$(touch pwned)"
+cp -a "$REPO" "$SUB_REPO"
+sub_line=$(cd "$SUB_REPO" && bash "$STEP" review docs/plan.md 1 2>/dev/null | grep '^codex:')
+sub_top=$(cd "$SUB_REPO" && git rev-parse --show-toplevel)
+mkdir -p "$TMP/empty"
+sub_arg=$(cd "$TMP/empty" && eval "set -- ${sub_line#codex: }" && printf '%s' "${8:-}")
+check "review: a checkout path holding \$(…) reaches the panel command as text" \
+  "$([ "$sub_arg" = "$sub_top" ] && echo yes || echo no) $([ -e "$TMP/empty/pwned" ] && echo yes || echo no)" "yes no"
+rm -rf "$SUB_REPO" "$TMP/empty"
 check "review: the light timeout" "$(grep '^timeout:' <<<"$out")" "timeout: 2520000"
 check "review: no gate line while the surface is open" "$(grep -c '^gate:' <<<"$out")" "0"
 check "review: the judge prompt is still written, with its lens" "$(grep -c 'Lens Criteria' "$JP")" "1"
@@ -361,7 +371,7 @@ check "review: and says the tracked files cannot be recorded" "$(grep -c 'cannot
 check "review: and leaves the state file alone" "$(cat "$WS/task-1-step.json")" "$state1"
 git worktree add -q --detach "$TMP/wt" HEAD
 step review docs/plan.md 1 --cwd "$TMP/wt"
-check "review: --cwd names the runner's working directory" "$(grep -c -- "--kind task --tier light --cwd \"$TMP/wt\" --out" <<<"$out")" "1"
+check "review: --cwd names the runner's working directory" "$(grep -cF -- "--kind task --tier light --cwd $(printf %q "$TMP/wt") --out" <<<"$out")" "1"
 git worktree remove --force "$TMP/wt"
 # --- --cwd's checkout answers every git question (row 56) ---
 state_keep=$(cat "$WS/task-1-step.json")
@@ -1638,6 +1648,26 @@ REPORT
   rr_run verdict docs/plan.md 1
   check "verdict: a mode-only change to a file dirty at review time exits 6" "$rr_rc $(grep -cx 'other.txt' <<<"$rr_err")" "6 1"
   chmod -x "$RR_REPO/other.txt"
+  rr_git checkout -- other.txt
+  # A restore line never writes through a link swapped in after the review.
+  rr_reset
+  printf 'dirty\n' >> "$RR_REPO/other.txt"
+  rr_run review docs/plan.md 1
+  vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: pass
+|quality: approved
+|scores: spec 17 / scope 18 / verification 16 / quality 16
+REPORT
+  printf 'keep\n' > "$RR_TMP/outside.txt"
+  rm -f "$RR_REPO/other.txt" && ln -s "$RR_TMP/outside.txt" "$RR_REPO/other.txt"
+  rr_run verdict docs/plan.md 1
+  link_rc=$rr_rc
+  while IFS= read -r restore; do
+    (cd "$RR_REPO" && bash -c "$restore" >/dev/null 2>&1)
+  done < <(grep -A1 -x 'other.txt' <<<"$rr_err" | sed -n 's/^  restore: //p')
+  check "verdict: a path swapped for a symbolic link is not written through" "$link_rc $(cat "$RR_TMP/outside.txt")" "6 keep"
+  rm -f "$RR_REPO/other.txt"
   rr_git checkout -- other.txt
 fi
 
