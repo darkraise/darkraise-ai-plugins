@@ -329,6 +329,18 @@ check "reopen: refused while a later milestone is closed" \
   "$RC:$(grep -c '^refused: reopen M2 first — a later milestone cannot stay closed$' <<<"$OUT"):$(cksum < "$D4/roadmap.md"):$(bash "$RM" check --root "$R4" >/dev/null 2>&1; echo $?)" \
   "1:1:$before:0"
 
+# An epic assigned to the spec its milestone register covers lists that
+# register twice; close takes its lock once.
+R6="$TMP/repo6"
+git init -q -b main "$R6"
+D6="$R6/docs/dagents"
+mkdir -p "$D6/registers" "$D6/specs"
+printf '# P\n' > "$D6/specs/product.md"
+register "$D6/registers/m1.md" docs/dagents/specs/product.md '| 1 | Epic | docs/dagents/specs/product.md | x | done | - |'
+printf '# R\n\n**Product:** p\n**Spec:** docs/dagents/specs/product.md\n\n| M | Name | Exit criteria | Register | State | Note |\n|---|---|---|---|---|---|\n| M1 | MVP | x | docs/dagents/registers/m1.md | open | - |\n' > "$D6/roadmap.md"
+run env DR_LOCK_TENTHS=10 bash "$RM" close --root "$R6" M1 --note x
+check "close: a register listed twice is locked once" "$RC" "0"
+
 run bash "$RM"
 check "usage: no verb" "$RC" "2"
 run bash "$RM" frobnicate --root "$ROOT"
