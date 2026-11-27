@@ -863,6 +863,16 @@ check "A8: clear in the primary reads the worktree's handoff" "$status:$(field r
 (cd "$ARW" && bash "$AR" --session s-1 clear --phase >/dev/null 2>&1); status=$?
 check "A8: clear in the worktree reads its own handoff" "$status:$(field resumePrompt)" "0:Resume \`docs/wplan.md\` with dforge:resume-execution. From W."
 ar --session s-1 attach --plan docs/plan.md
+# --- clear: a handoff another live session holds (row 75) ---
+live s-9; beat s-9
+mkdir -p "$REPO/.dforge/handoff/claims"
+printf 'session=s-9\nat=%s\n' "$(date +%s)" > "$REPO/.dforge/handoff/claims/plan"
+CLAUDE_CODE_SESSION_ID=s-1 ar --session s-1 clear >/dev/null 2>"$TMP/err"; status=$?
+check "clear: a handoff held by another live session stops with exit 5" \
+  "$status:$(grep -c 'handoff plan is held by s-9' "$TMP/err"):$(field active)" "5:1:false"
+rm -f "$REPO/.dforge/handoff/claims/plan"
+ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+ar --session s-1 attach --plan docs/plan.md
 # --- stop --stale (row 33) ---
 ar --session s-2 stop --stale >/dev/null 2>&1; status=$?
 check "stop --stale: refused while the owner lives" "$status:$(field active)" "3:true"
