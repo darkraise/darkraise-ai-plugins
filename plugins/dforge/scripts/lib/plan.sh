@@ -272,6 +272,15 @@ _plan_ctx() {
   if git -C "$dir" rev-parse --show-toplevel >/dev/null 2>&1; then printf '%s\n' "$dir"; else printf '%s\n' "$here"; fi
 }
 
+# plan_root PLAN — the top level of the checkout PLAN belongs to (_plan_ctx:
+# a mirror plan's is the working directory's, even in a HOME under git), else
+# the working directory.
+plan_root() {
+  local top
+  top=$(git -C "$(_plan_ctx "$1")" rev-parse --show-toplevel 2>/dev/null) && [ -n "$top" ] || top=$(pwd)
+  printf '%s\n' "${top%$'\r'}"
+}
+
 # plan_locate PLAN — prefer the applied document store, then an existing
 # checkout file; a missing mirror copy never falls back to stale local docs.
 plan_locate() {

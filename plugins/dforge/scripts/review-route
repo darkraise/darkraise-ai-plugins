@@ -84,7 +84,7 @@ plan_shape() {
 # and standard 1, full 2. A depth that does not print takes the full cap.
 claude_cap() {
   local root depth
-  root=$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)
+  root=$(plan_root "$plan")
   depth=$(depth_plan_depth "$src" "$root")
   case $depth in light|standard) cap=1 ;; *) cap=2 ;; esac
 }

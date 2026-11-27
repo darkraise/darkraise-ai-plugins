@@ -138,7 +138,7 @@ case $1 in
     cap=${DFORGE_LENS_CAP:-$(dforge_setting lensCap 5)}
     [[ "$cap" =~ ^[0-9]+$ ]] || cap=5
     if [ "$cap" -eq 0 ]; then echo "lenses off"; exit 0; fi
-    depth=$(depth_plan_depth "$src" "$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)")
+    depth=$(depth_plan_depth "$src" "$(plan_root "$plan")")
     changed=$(git -c core.quotepath=off diff --name-only "$base..$head") \
       || die "cannot read the change set $base..$head"
     added=$(git diff -U0 "$base..$head" | awk '/^\+\+\+ /{next} /^\+/{print substr($0, 2)}') \

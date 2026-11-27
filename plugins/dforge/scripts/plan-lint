@@ -47,7 +47,7 @@ if ! plan_apply_amendments "$plan" "$amend" > "$src" 2> "$TMP/amend.err"; then
   tr -d '\r' < "$plan" > "$src"
 fi
 
-root=$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)
+root=$(plan_root "$plan")
 dforge_stores_init "$root"
 SEP='( — | – | - | -- )'
 header=$(plan_header "$src")

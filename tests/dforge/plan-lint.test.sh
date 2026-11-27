@@ -1009,6 +1009,16 @@ out=$(cd "$SR" && HOME=$SH bash "$LINT" docs/dforge/plans/p.md 2>&1)
 lacks "darkmem: the Spec path resolves in the mirror" "$out" "Spec path does not exist"
 lacks "darkmem: the plan is found by name" "$out" "no such plan file"
 has "darkmem: the lint ran to its summary" "$out" " errors, "
+# A HOME that is itself a git repository holds the mirror inside a checkout:
+# the plan still belongs to the working directory's checkout.
+SHG="$TMP/stores-git-home"; mkdir -p "$SHG"; git init -q "$SHG"
+MG=$(stores_home "$SHG" "$SR" proj darkmem darkmem)
+mkdir -p "$MG/dforge/specs" "$MG/dforge/plans"
+printf '# Spec\n' > "$MG/dforge/specs/s.md"
+printf '# P\n\n**Spec:** docs/dforge/specs/s.md\n\n### Task 1: One\n' > "$MG/dforge/plans/p.md"
+out=$(cd "$SR" && HOME=$SHG bash "$LINT" docs/dforge/plans/p.md 2>&1)
+lacks "darkmem in a git-tracked HOME: the Spec path resolves in the mirror" "$out" "Spec path does not exist"
+has "darkmem in a git-tracked HOME: the lint ran to its summary" "$out" " errors, "
 
 # --- Lenses lines ---
 variant lens-low.md 's/^(\*\*Approach:\*\* inline - skip 2: follows the pattern)$/\1\n**Lenses:** security/'

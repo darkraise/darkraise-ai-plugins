@@ -348,6 +348,8 @@ printf '# GP\n' > "$GM/dforge/plans/gp.md"
 printf '# SDD ledger — plan: docs/dforge/plans/gp.md\n' > "$GM/work/sdd/gp/progress.md"
 check "plan_ledger: a mirror plan in a home under git finds its ledger" \
   "$(cd "$SR" && HOME=$GH plan_ledger "$GM/dforge/plans/gp.md")" "$GM/work/sdd/gp/progress.md"
+check "plan_root: a mirror plan in a git-tracked HOME takes the working checkout" \
+  "$(cd "$SR" && HOME=$GH plan_root "$GM/dforge/plans/gp.md" 2>&1)" "$STOP"
 printf '{not json\n' > "$GH/.dforge/config.json"
 (cd "$SR" && HOME=$GH plan_ledger "$GM/dforge/plans/gp.md" > /dev/null 2> "$TMP/ledger-err")
 check "plan_ledger: a ConfigError exits 2" "$?" "2"
