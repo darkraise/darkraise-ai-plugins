@@ -57,7 +57,9 @@ never a silent skip.
 12. **Commit** the report and its `.judge.md`, and on a first run
     `<docs>/ui-ux/profile.md`: they are not UI files, so committing them
     leaves the stamp current, and the report is the record that survives the
-    worktree.
+    worktree. While `bash <plugin-root>/scripts/dforge-path store` prints
+    `documents darkmem`, `<docs>` is not in git: run
+    `bash <plugin-root>/scripts/darkmem-sync push` in place of the commit.
 
 Any UI edit after step 8 makes the stamp stale: stamp again, and since the
 stamp drops a judge line for another fingerprint, judge again.
@@ -110,7 +112,7 @@ stamp drops a judge line for another fingerprint, judge again.
   `committed`.
 - While documents live in darkmem (`dforge-path store` prints
   `documents darkmem`), screenshots are `**Evidence:** local` under the
-  checkout's `.dforge/ui-proofs/` and cited from there; the profile's
+  checkout's `.dforge/ui-ux/<slug>/` and cited from there; the profile's
   `**Screenshots:** commit` is not honoured then.
 
 ## The judge

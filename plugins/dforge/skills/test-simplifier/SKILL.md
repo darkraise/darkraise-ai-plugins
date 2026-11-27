@@ -25,7 +25,10 @@ Every run keeps one ledger, `<docs>/test-simplifier/<YYYY-MM-DD>.md`:
 the baseline, one row per phase or wave with `test-profile --brief` before and
 after, every removal with its evidence, and every judge verdict with the SHA it
 was given. It is how a later session resumes and how a reviewer audits a
-deletion. Commit it with each wave.
+deletion. Commit it with each wave; while
+`bash <plugin-root>/scripts/dforge-path store` prints `documents darkmem`,
+`<docs>` is not in git, so run `bash <plugin-root>/scripts/darkmem-sync push`
+in place of that commit.
 
 ## Scope
 
