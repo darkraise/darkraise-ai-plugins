@@ -20,6 +20,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
 . "$HERE/lib/timeout.sh"
+. "$HERE/lib/lock.sh"
 
 die() { printf 'task-step: %s\n' "$1" >&2; exit "${2:-2}"; }
 # plan_budget_line SCRIPTS CALLER PLAN_SRC LEDGER — the session budget line,
@@ -340,10 +341,94 @@ rr_render() { # rr_render TEMPLATE FINDINGS_FILE — the fenced prompt body, de-
 
 # A subshell body: every exit below leaves only the subshell, so the
 # dispatch branch passes the status on.
+# rereview_transition: cmd_rereview from its round read to its state write,
+# run under the step file's lock by dr_locked, which needs a return: its
+# lock-directory fallback releases the lock only after the command returns.
+rereview_transition() {
+  round=$(jq -r '.round // 0' "$state" | tr -d '\r')
+  # A repeat before the round's report is in reprints the round: a second
+  # call must not spend the next fix round.
+  if [ "$round" -ge 1 ] && [ ! -f "$ws/task-$first-fix-$((round + 1)).md" ] \
+    && [ -f "$ws/task-$first-rereview-$round-prompt.md" ] && [ ! -f "$ws/task-$first-rereview-$round-report.md" ]; then
+    printf 'task %s: re-review round %s: prompt already written, no report yet\n' "$first" "$round"
+    printf 'seat: dforge:judge-sonnet-high prompt: %s\n' "$ws/task-$first-rereview-$round-prompt.md"
+    printf 'state: base %s review-head %s round %s t0 %s\n' \
+      "$(jq -r '.base' "$state" | tr -d '\r' | cut -c1-7)" "$(jq -r '.reviewHead' "$state" | tr -d '\r' | cut -c1-7)" "$round" "$(jq -r '.t0 // empty' "$state" | tr -d '\r')"
+    return 0
+  fi
+  new_round=$((round + 1))
+  if [ "$new_round" -gt 2 ]; then
+    echo "task-step: fix round $new_round is past the cap of 2; send the open findings to the breaker (reference/delegated-task.md §4)" >&2
+    return 7
+  fi
+
+  fix=$ws/task-$first-fix-$new_round.md
+  if [ ! -f "$fix" ]; then
+    echo "task-step: no fix message $fix; write it before rereview" >&2
+    return 6
+  fi
+  bullets=$(awk '{ sub(/\r$/, "") } /^- / { print; next } { exit }' "$fix")
+  nopen=$(printf '%s\n' "$bullets" | awk 'NF { n++ } END { print n + 0 }')
+  if [ "$nopen" -lt 1 ]; then
+    echo "task-step: $fix must start with one '- <file>: <finding>' bullet per open finding" >&2
+    return 2
+  fi
+
+  # A step file written before 5.0 may name a head ref; it still packages to it.
+  head_ref=$(jq -r '.head // empty' "$state" | tr -d '\r')
+  [ -n "$head_ref" ] || head_ref=HEAD
+  head_sha=$(git rev-parse --verify --quiet "$head_ref^{commit}") || { echo "bad HEAD: $head_ref" >&2; return 2; }
+  fix_base_sha=$(git rev-parse --verify --quiet "$review_head^{commit}") || { echo "bad BASE: $review_head" >&2; return 2; }
+  if [ "$fix_base_sha" = "$head_sha" ]; then
+    echo "task-step: no commit since the reviewed head ${head_sha:0:7}; commit the fix before rereview" >&2
+    return 6
+  fi
+
+  pkg=$(bash "$here/review-package" "$plan" "$fix_base_sha" "$head_sha") || { printf '%s\n' "$pkg" >&2; return 2; }
+  diff_file=$(printf '%s\n' "$pkg" | sed -n -E '/^wrote /{s/^wrote (.*): [0-9]+ commit\(s\), [0-9]+ bytes$/\1/;p;q;}')
+
+  prompt=$ws/task-$first-rereview-$new_round-prompt.md
+  tpl=$here/../reference/prompts/re-review-prompt.md
+  [ -f "$tpl" ] || { echo "task-step: missing template $tpl" >&2; return 2; }
+  printf '%s\n\nThe fix message holds each finding'"'"'s detail: %s\n' "$bullets" "$fix" > "$tmp/findings"
+  judge_report=$ws/task-$first-rereview-$new_round-report.md
+  RR_BRIEF=$ws/task-$first-brief.md RR_REPORT=$ws/task-$first-report.md RR_JUDGE_REPORT=$judge_report \
+    RR_FIX_BASE=$fix_base_sha RR_HEAD=$head_sha RR_DIFF=$diff_file rr_render "$tpl" "$tmp/findings" > "$tmp/prompt"
+  if grep -qE '\[(BRIEF_FILE|FINDINGS|IMPLEMENTER_REPORT_FILE|REPORT_FILE|FIX_BASE_SHA|HEAD_SHA|DIFF_FILE|MODEL)\]' "$tmp/prompt"; then
+    echo "task-step: $tpl holds a placeholder rereview does not fill" >&2
+    return 2
+  fi
+  rm -f "$judge_report"
+  cp "$tmp/prompt" "$prompt"
+
+  check_dir=$(jq -r '.reviewCheck.cwd // empty' "$state" | tr -d '\r')
+  [ -n "$check_dir" ] || check_dir=$(git rev-parse --show-toplevel | tr -d '\r')
+  snap=$(tracked_snapshot "$check_dir") || {
+    echo "task-step: cannot record the tracked files of $check_dir for the verdict check" >&2
+    return 2
+  }
+  now=$(date +%s)
+  old_base=$(suite_base_sha "$state")
+  old_suite=$(jq -r '.suite // empty' "$state" | tr -d '\r')
+  jq --arg rh "$head_sha" --argjson r "$new_round" --argjson t "$now" --argjson chk "$snap" \
+    '.reviewHead = $rh | .round = $r | .t0 = $t | .reviewCheck = $chk' \
+    "$state" > "$tmp/state.new" && dr_replace "$state" "$tmp/state.new" \
+    || { echo "task-step: cannot update $state" >&2; return 2; }
+  drop_base_cache "$state" "$first" "$old_base" "$old_suite"
+
+  printf 'task %s: re-review round %s: packaged %s..%s, prompt written\n' "$first" "$new_round" "${fix_base_sha:0:7}" "${head_sha:0:7}"
+  printf 'seat: dforge:judge-sonnet-high prompt: %s\n' "$prompt"
+  printf 'state: base %s review-head %s round %s t0 %s\n' \
+    "$(jq -r '.base' "$state" | tr -d '\r' | cut -c1-7)" "${head_sha:0:7}" "$new_round" "$now"
+  # review-package already measured the session; its line is the digest's.
+  budget=$(grep -E '^budget' <<<"$pkg" | tail -n 1)
+  printf '%s\n' "${budget:-budget: unknown}"
+}
+
 cmd_rereview() (
   local here plan_arg plan tmp src header ws state first t
   local fix bullets nopen review_head round new_round head_ref head_sha fix_base fix_base_sha
-  local pkg diff_file now prompt tpl check_dir snap old_base old_suite
+  local pkg diff_file now prompt tpl check_dir snap old_base old_suite lock
   here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
   . "$here/lib/plan.sh"
   [ $# -eq 2 ] && [[ $2 =~ ^[0-9]+$ ]] || rr_usage
@@ -377,83 +462,9 @@ cmd_rereview() (
     echo "task-step: rereview before review: run task-step review for task $first first" >&2
     exit 6
   fi
-  round=$(jq -r '.round // 0' "$state" | tr -d '\r')
-  # A repeat before the round's report is in reprints the round: a second
-  # call must not spend the next fix round.
-  if [ "$round" -ge 1 ] && [ ! -f "$ws/task-$first-fix-$((round + 1)).md" ] \
-    && [ -f "$ws/task-$first-rereview-$round-prompt.md" ] && [ ! -f "$ws/task-$first-rereview-$round-report.md" ]; then
-    printf 'task %s: re-review round %s: prompt already written, no report yet\n' "$first" "$round"
-    printf 'seat: dforge:judge-sonnet-high prompt: %s\n' "$ws/task-$first-rereview-$round-prompt.md"
-    printf 'state: base %s review-head %s round %s t0 %s\n' \
-      "$(jq -r '.base' "$state" | tr -d '\r' | cut -c1-7)" "$(jq -r '.reviewHead' "$state" | tr -d '\r' | cut -c1-7)" "$round" "$(jq -r '.t0 // empty' "$state" | tr -d '\r')"
-    exit 0
-  fi
-  new_round=$((round + 1))
-  if [ "$new_round" -gt 2 ]; then
-    echo "task-step: fix round $new_round is past the cap of 2; send the open findings to the breaker (reference/delegated-task.md §4)" >&2
-    exit 7
-  fi
-
-  fix=$ws/task-$first-fix-$new_round.md
-  if [ ! -f "$fix" ]; then
-    echo "task-step: no fix message $fix; write it before rereview" >&2
-    exit 6
-  fi
-  bullets=$(awk '{ sub(/\r$/, "") } /^- / { print; next } { exit }' "$fix")
-  nopen=$(printf '%s\n' "$bullets" | awk 'NF { n++ } END { print n + 0 }')
-  if [ "$nopen" -lt 1 ]; then
-    echo "task-step: $fix must start with one '- <file>: <finding>' bullet per open finding" >&2
-    exit 2
-  fi
-
-  # A step file written before 5.0 may name a head ref; it still packages to it.
-  head_ref=$(jq -r '.head // empty' "$state" | tr -d '\r')
-  [ -n "$head_ref" ] || head_ref=HEAD
-  head_sha=$(git rev-parse --verify --quiet "$head_ref^{commit}") || { echo "bad HEAD: $head_ref" >&2; exit 2; }
-  fix_base_sha=$(git rev-parse --verify --quiet "$review_head^{commit}") || { echo "bad BASE: $review_head" >&2; exit 2; }
-  if [ "$fix_base_sha" = "$head_sha" ]; then
-    echo "task-step: no commit since the reviewed head ${head_sha:0:7}; commit the fix before rereview" >&2
-    exit 6
-  fi
-
-  pkg=$(bash "$here/review-package" "$plan" "$fix_base_sha" "$head_sha") || { printf '%s\n' "$pkg" >&2; exit 2; }
-  diff_file=$(printf '%s\n' "$pkg" | sed -n -E '/^wrote /{s/^wrote (.*): [0-9]+ commit\(s\), [0-9]+ bytes$/\1/;p;q;}')
-
-  prompt=$ws/task-$first-rereview-$new_round-prompt.md
-  tpl=$here/../reference/prompts/re-review-prompt.md
-  [ -f "$tpl" ] || { echo "task-step: missing template $tpl" >&2; exit 2; }
-  printf '%s\n\nThe fix message holds each finding'"'"'s detail: %s\n' "$bullets" "$fix" > "$tmp/findings"
-  judge_report=$ws/task-$first-rereview-$new_round-report.md
-  RR_BRIEF=$ws/task-$first-brief.md RR_REPORT=$ws/task-$first-report.md RR_JUDGE_REPORT=$judge_report \
-    RR_FIX_BASE=$fix_base_sha RR_HEAD=$head_sha RR_DIFF=$diff_file rr_render "$tpl" "$tmp/findings" > "$tmp/prompt"
-  if grep -qE '\[(BRIEF_FILE|FINDINGS|IMPLEMENTER_REPORT_FILE|REPORT_FILE|FIX_BASE_SHA|HEAD_SHA|DIFF_FILE|MODEL)\]' "$tmp/prompt"; then
-    echo "task-step: $tpl holds a placeholder rereview does not fill" >&2
-    exit 2
-  fi
-  rm -f "$judge_report"
-  cp "$tmp/prompt" "$prompt"
-
-  check_dir=$(jq -r '.reviewCheck.cwd // empty' "$state" | tr -d '\r')
-  [ -n "$check_dir" ] || check_dir=$(git rev-parse --show-toplevel | tr -d '\r')
-  snap=$(tracked_snapshot "$check_dir") || {
-    echo "task-step: cannot record the tracked files of $check_dir for the verdict check" >&2
-    exit 2
-  }
-  now=$(date +%s)
-  old_base=$(suite_base_sha "$state")
-  old_suite=$(jq -r '.suite // empty' "$state" | tr -d '\r')
-  jq --arg rh "$head_sha" --argjson r "$new_round" --argjson t "$now" --argjson chk "$snap" \
-    '.reviewHead = $rh | .round = $r | .t0 = $t | .reviewCheck = $chk' \
-    "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
-  drop_base_cache "$state" "$first" "$old_base" "$old_suite"
-
-  printf 'task %s: re-review round %s: packaged %s..%s, prompt written\n' "$first" "$new_round" "${fix_base_sha:0:7}" "${head_sha:0:7}"
-  printf 'seat: dforge:judge-sonnet-high prompt: %s\n' "$prompt"
-  printf 'state: base %s review-head %s round %s t0 %s\n' \
-    "$(jq -r '.base' "$state" | tr -d '\r' | cut -c1-7)" "${head_sha:0:7}" "$new_round" "$now"
-  # review-package already measured the session; its line is the digest's.
-  budget=$(grep -E '^budget' <<<"$pkg" | tail -n 1)
-  printf '%s\n' "${budget:-budget: unknown}"
+  lock=$(dr_lock_base "$state") || { echo "task-step: cannot lock $state" >&2; exit 2; }
+  dr_locked "$lock" rereview_transition
+  exit $?
 )
 
 if [ "${1:-}" = rereview ]; then
@@ -623,8 +634,8 @@ do_review() {
     open_sha=$(git rev-parse --verify --quiet "$open_base^{commit}") || die "the open line's base $open_base is not a commit" 6
     ledger_init
     jq -n --argjson task "$first" --arg base "$open_sha" \
-      '{tasks: [$task], base: $base, head: null, reviewHead: null, round: 0, t0: null}' > "$state.tmp" \
-      && mv "$state.tmp" "$state" || die "cannot update $state"
+      '{tasks: [$task], base: $base, head: null, reviewHead: null, round: 0, t0: null}' > "$TMP/state.new" \
+      && dr_replace "$state" "$TMP/state.new" || die "cannot update $state"
   fi
   top=$(git rev-parse --show-toplevel)
   base=$(jq -r '.base' "$state" | tr -d '\r')
@@ -726,7 +737,7 @@ do_review() {
     --arg suite "$suite_arg" --arg sbase "$suite_base_sha_arg" \
     '.reviewHead = $rh | .t0 = $t0
      | .reviewCheck = $chk | (if $suite == "" then . else .suite = $suite end) | (if $sbase == "" then . else .suiteBase = $sbase end)' \
-    "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
+    "$state" > "$TMP/state.new" && dr_replace "$state" "$TMP/state.new" || die "cannot update $state"
   drop_base_cache "$state" "$first" "$old_base" "$old_suite"
   if [ -n "$suite_arg" ]; then
     ledger_init

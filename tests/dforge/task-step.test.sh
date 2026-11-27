@@ -1126,15 +1126,17 @@ if want start; then
   cd "$REPO" || exit 1
   rm -f "$WS/task-5-step.json"
   open_task 5
-  mkdir "$WS/task-5-step.json.tmp"
-  step review docs/plan.md 5
+  # The step file is replaced through a temporary file beside it: a mktemp
+  # that refuses that name is a write that fails.
+  mkdir -p "$TMP/shim"
+  printf '%s\n' '#!/usr/bin/env bash' 'case "$*" in *.task-5-step.json.*) exit 1 ;; esac' "exec $(command -v mktemp) \"\$@\"" > "$TMP/shim/mktemp"
+  chmod +x "$TMP/shim/mktemp"
+  out=$(PATH="$TMP/shim:$PATH" bash "$STEP" review docs/plan.md 5 2>"$TMP/err"); rc=$?
   check "review: a step state that cannot be written fails" "$rc:$(grep -c 'cannot update' "$TMP/err")" "2:1"
-  rmdir "$WS/task-5-step.json.tmp"
-  echo w > w5.txt && git add w5.txt && git commit -qm "feat: add w5"
-  mkdir "$WS/task-5-step.json.tmp"
   step review docs/plan.md 5
+  echo w > w5.txt && git add w5.txt && git commit -qm "feat: add w5"
+  out=$(PATH="$TMP/shim:$PATH" bash "$STEP" review docs/plan.md 5 2>"$TMP/err"); rc=$?
   check "review: a review head that cannot be recorded fails" "$rc:$(grep -c 'cannot update' "$TMP/err")" "2:1"
-  rmdir "$WS/task-5-step.json.tmp"
 fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
