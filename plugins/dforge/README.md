@@ -190,9 +190,11 @@ two or more lists carry findings, a fresh `judge-opus` dedupes and verifies
 them, tagging each finding's origins (`[claude+agy]`). No review route names
 `judge-fable`: on 2026-09-23 Opus 5.5 at high effort matched or beat Fable 5.1
 on two replayed reviews with known defects, at about 40% of the cost, so Fable
-takes a review seat only when you ask for it. An auto run is the exception: it
-dispatches `judge-fable` for the spec review and for each batch of rulings
-(`reference/auto-run.md`). With one list there is no third seat: the fixer
+takes a review seat only when you ask for it. The `judge-opus` seat itself runs
+at medium effort (`agents/judge-opus.md` sets `effort: medium`, and a dispatch
+passes no effort), a setting that replay did not measure. An auto run is the
+exception: it dispatches `judge-fable` for the spec review and for each batch
+of rulings (`reference/auto-run.md`). With one list there is no third seat: the fixer
 triages each finding against the code and the scoped re-review rules on every
 rejection. `scripts/review-route` prints the review seat for a task or plan
 round, and each runner (`scripts/run-codex-review.sh`,
@@ -323,9 +325,11 @@ UI files.
 
 **The upstream workflow ships in-plugin.** The fork carries the full skill
 set — brainstorming through finishing-a-development-branch — frozen at upstream
-6.3.0, so no other plugin is required: every agent definition preloads
-`dforge:verification-before-completion` through its `skills:`
-frontmatter, and writing-plans and executing-plans use the plugin's own
+6.3.0, so no other plugin is required: the Acceptance QA and UI walkthrough seat
+(`impl-sonnet-high`) preloads `dforge:verification-before-completion` through
+its `skills:` frontmatter, while the three judges, which only read and write
+their report, carry no `skills:` key (`agents/judge-*.md`); writing-plans and
+executing-plans use the plugin's own
 `scripts/sdd-workspace`, `task-brief`, `review-package`, `next-step`,
 `context-size`, `repo-audit`, `plan-lint`, and `plan-amend` — `next-step` ends every session with its next
 action and writes it into a handoff per piece of work,
@@ -402,7 +406,7 @@ The dforge 4.x agent workflow (implementer agents, subagent mode, external execu
 A `SessionStart` hook (matcher `startup|resume|clear|compact|fork`) injects the
 `dforge:using-dforge` entry point as `additionalContext`, so every
 session starts with the skill-routing rules — including the pointers to
-`selecting-approaches`, implementer assignment in `writing-plans`, and plan
+`selecting-approaches`, plan writing in `writing-plans`, and plan
 execution in `executing-plans` that a PreToolUse nudge used to add. The same
 script persists the session's `transcript_path`, `session_id`, `cwd`, and
 `source` to `~/.claude/dforge/sessions/by-id/<sanitized-session-id>.json`
@@ -487,6 +491,14 @@ carries the `## Next session` block `next-step` wrote this turn, when a ledger
 written this turn ends on a `Task <N>: waiting — ` question, and while finite
 background work or a timer runs: none of those stops claims the UI work is
 done, so a handoff is not held for a proof the next session will run.
+
+A `SubagentStop` hook (matcher `^(dforge:)?impl-sonnet-high$`, 30 s timeout)
+runs `scripts/impl-stop-gate`. When the seat's reply ends with a
+`Report: <path>` line, it blocks the stop while that path is not absolute,
+the file does not exist, or its first non-empty line is not `## Verdict` (an
+Acceptance QA report) or `# UI proof:` (a UI walkthrough's proof report).
+Every other stop passes; after two blocks the next distinct failing stop
+passes, as does any stop after five fires.
 
 ### Fast mode
 
@@ -641,7 +653,7 @@ headline on the title line, under one **Now** row that says what the
 session is doing:
 
 ```
-● running 2m14s · step 18 · Bash in judge-sonnet-high
+● running 2m14s · step 18 · Read in judge-sonnet-high
 ╭ Account ──────────────────────────── subscription ╮
 │ ● you@example.com                                 │
 │   You · Acme (admin)                              │
@@ -669,7 +681,7 @@ session is doing:
 ╰───────────────────────────────────────────────────╯
 ╭ Agents ───────────────────────── ● 1 running ✓ 2 ╮
 │ ● judge-sonnet-high Task 4 4m17s                  │
-│ ✓ reviewer-opus Review task 3                     │
+│ ✓ judge-opus Review task 3                        │
 │ Seats by input                                    │
 │   judge-sonnet-high ×1                            │
 │   ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰ 120k in · 80% cached · 7k out  │
