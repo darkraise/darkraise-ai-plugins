@@ -421,15 +421,13 @@ test("localChanges names new, modified, unpushed, rewritten, unsupported and che
   assert.equal(EMPTY_SHA, sha256(""));
 });
 
-test("the lock admits one holder, waits on a live one however old, and takes over a dead one", () => {
+test("the lock admits one holder, waits on a live one, and takes over a dead one", () => {
   const { root } = mirror();
   const lock = path.join(root, ".sync.lock");
   const release = acquireLock(root);
   assert.equal(typeof release, "function");
   assert.equal(lockOwner(root).pid, process.pid);
   assert.equal(acquireLock(root), null);
-  const old = new Date(Date.now() - 60 * 60 * 1000);
-  fs.utimesSync(lock, old, old);
   assert.equal(acquireLock(root), null, "this process is alive, so its lock is not stale");
   const dead = spawnSync(process.execPath, ["-e", ""]).pid;
   fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify({ pid: dead, host: os.hostname(), token: "t" }));
@@ -440,6 +438,37 @@ test("the lock admits one holder, waits on a live one however old, and takes ove
   successor();
   assert.equal(fs.existsSync(lock), false);
   assert.deepEqual(fs.readdirSync(root), [], "no side directory is left behind");
+});
+
+test("a held lock is refreshed, and one left unrefreshed for staleMs is taken over on any host", async () => {
+  const { root } = mirror();
+  const lock = path.join(root, ".sync.lock");
+  const ago = minutes => new Date(Date.now() - minutes * 60 * 1000);
+  const release = acquireLock(root, { heartbeatMs: 50 });
+  fs.utimesSync(lock, ago(60), ago(60));
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.ok(Math.abs(Date.now() - fs.statSync(lock).mtimeMs) < 5000, "the holder refreshed its lock");
+  assert.equal(acquireLock(root), null);
+  release();
+  const placed = (host, age) => {
+    fs.mkdirSync(lock, { recursive: true });
+    fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify({ pid: process.pid, host, token: `t-${host}-${age}` }));
+    fs.utimesSync(lock, ago(age), ago(age));
+  };
+  const takes = () => {
+    const taken = acquireLock(root);
+    if (taken) taken();
+    else fs.rmSync(lock, { recursive: true, force: true });
+    return typeof taken;
+  };
+  placed(os.hostname(), 20);
+  assert.equal(takes(), "function", "a same-host lock nobody refreshed names a reused pid");
+  placed(os.hostname(), 0);
+  assert.equal(takes(), "object", "a fresh same-host lock of a live pid is held");
+  placed("elsewhere", 0);
+  assert.equal(takes(), "object");
+  placed("elsewhere", 20);
+  assert.equal(takes(), "function");
 });
 
 test("a workstream key is refused when the uri mapping or Windows could not use it", () => {

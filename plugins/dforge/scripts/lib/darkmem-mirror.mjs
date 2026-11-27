@@ -461,12 +461,15 @@ function lockSnapshot(lock) {
   return { owner: readOwner(lock), mtimeMs };
 }
 
-// A lock is abandoned when the process that took it on this host is gone. A
-// lock with no readable owner (a crash between mkdir and the owner write), or
-// taken on another host, is abandoned once older than staleMs.
+// A holder refreshes its lock's mtime every heartbeat, so a lock nobody
+// refreshed for staleMs is abandoned on any host: on this one its pid may
+// have been reused. A lock taken on this host is also abandoned once its
+// process is gone. A lock with no readable owner (a crash between mkdir and
+// the owner write) is judged by its age alone.
 function lockAbandoned({ owner, mtimeMs }, staleMs) {
-  if (owner?.host === os.hostname() && Number.isSafeInteger(owner.pid)) return !processAlive(owner.pid);
-  return mtimeMs === null || Date.now() - mtimeMs >= staleMs;
+  const old = mtimeMs === null || Date.now() - mtimeMs >= staleMs;
+  if (owner?.host === os.hostname() && Number.isSafeInteger(owner.pid)) return old || !processAlive(owner.pid);
+  return old;
 }
 
 // What makes a lock this lock rather than one taken since: its owner's token,
@@ -537,7 +540,7 @@ function placeLock(dir, lock, owner) {
 // this holder's token. beforeTakeover and beforeRestore are test seams: the
 // first runs between judging a lock abandoned and claiming it, the second
 // before giving back a lock that was moved aside by mistake.
-export function acquireLock(dir, { staleMs = 10 * 60 * 1000, beforeTakeover, beforeRestore } = {}) {
+export function acquireLock(dir, { staleMs = 10 * 60 * 1000, heartbeatMs = 60 * 1000, beforeTakeover, beforeRestore } = {}) {
   const lock = path.join(dir, ".sync.lock");
   const owner = { pid: process.pid, host: os.hostname(), token: crypto.randomUUID() };
   fs.mkdirSync(dir, { recursive: true });
@@ -590,9 +593,21 @@ export function acquireLock(dir, { staleMs = 10 * 60 * 1000, beforeTakeover, bef
       }
       continue;
     }
+    // The heartbeat keeps a long sync's lock from reading as abandoned.
+    const heartbeat = setInterval(() => {
+      if (readOwner(lock)?.token !== owner.token) return;
+      try {
+        const now = new Date();
+        fs.utimesSync(lock, now, now);
+      } catch {
+        // Gone or unwritable: the next acquire judges what is left.
+      }
+    }, heartbeatMs);
+    heartbeat.unref();
     // Moved aside before it is deleted: a recursive delete in place would
     // leave an empty lock for a moment, which a restore could land on.
     return () => {
+      clearInterval(heartbeat);
       if (readOwner(lock)?.token !== owner.token) return;
       const gone = `${lock}.stale-${owner.token}`;
       try {

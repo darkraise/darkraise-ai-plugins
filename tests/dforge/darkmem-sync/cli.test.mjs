@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
+import http from "node:http";
 import path from "node:path";
 import test from "node:test";
-import { makeHome, makeRepo, read, run, scratch, write } from "./helpers.mjs";
+import { SCRIPT, makeHome, makeRepo, read, run, scratch, write } from "./helpers.mjs";
 import { startStub } from "./stub-server.mjs";
 
 test("no command, an unknown command or an unknown flag is a usage error", async () => {
@@ -179,4 +181,26 @@ test("a negative or infinite lock wait falls back to the default wait", async t 
   const waited = await run(["push"], { cwd: repo, env: { ...env, DARKMEM_SYNC_LOCK_WAIT_MS: "-5" } });
   assert.equal(waited.code, 0, waited.stdout + waited.stderr);
   assert.ok(Date.now() - started >= 1400, "a negative wait did not refuse at once");
+});
+
+test("a sync stopped by SIGTERM releases the mirror lock and exits 143", { skip: process.platform === "win32" && "POSIX signals" }, async t => {
+  const server = http.createServer(() => {});
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+  const repo = makeRepo();
+  const home = makeHome({ repo, url: `http://127.0.0.1:${server.address().port}` });
+  const child = spawn("bash", [SCRIPT, "pull"], { cwd: repo, env: { ...home.env, DARKMEM_SYNC_TIMEOUT_MS: "30000" }, stdio: "ignore" });
+  t.after(() => child.kill("SIGKILL"));
+  const exited = new Promise(resolve => child.on("exit", code => resolve(code)));
+  const lock = path.join(home.mirror, ".sync.lock");
+  for (let i = 0; i < 200 && !fs.existsSync(lock); i += 1) await new Promise(resolve => setTimeout(resolve, 50));
+  assert.equal(fs.existsSync(lock), true, "the pull took the mirror lock");
+  const sent = Date.now();
+  child.kill("SIGTERM");
+  assert.equal(await exited, 143);
+  assert.ok(Date.now() - sent < 5000, "the child exited within 5 s");
+  assert.equal(fs.existsSync(lock), false, "the lock was released");
 });

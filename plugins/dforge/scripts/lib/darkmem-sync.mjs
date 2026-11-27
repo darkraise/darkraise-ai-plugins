@@ -298,6 +298,14 @@ async function main(argv, {
     err(`darkmem-sync: another darkmem-sync (${holder}) holds ${path.join(cfg.mirror, ".sync.lock")}; if that process is gone, remove the directory`);
     return 1;
   }
+  // A signal would end node without the finally below, leaving the lock for
+  // the next sync to wait out.
+  const onSignal = code => () => {
+    release();
+    process.exit(code);
+  };
+  const signals = [["SIGTERM", onSignal(143)], ["SIGINT", onSignal(130)]];
+  for (const [signal, handler] of signals) process.on(signal, handler);
   const report = { conflicts: [], failures: [], notes: [], counts: {}, partial: false, refused: 0 };
   let state = null;
   let code = 0;
@@ -363,6 +371,7 @@ async function main(argv, {
       }
     } finally {
       release();
+      for (const [signal, handler] of signals) process.off(signal, handler);
     }
   }
   for (const line of report.conflicts) out(`conflict: ${line}`);
