@@ -36,7 +36,7 @@ if (cd "$root" && bash "$SCRIPT_DIR/auto-run" --session "$session_id" pending >/
 
 stamp="${HOME:-}/.claude/dforge/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-')"
 [ -f "$stamp.refs" ] || exit 0
-base=$(tail -n +3 "$stamp.refs" | awk -F'\t' -v top="$root" 'stop { next } $2 == top { print $1; stop = 1 }')
+base=$(tail -n +3 "$stamp.refs" | tr -d '\r' | TOP=$root awk -F'\t' 'stop { next } $2 == ENVIRON["TOP"] { print $1; stop = 1 }')
 [ -n "$base" ] || exit 0
 
 . "$SCRIPT_DIR/lib/ui-ux.sh"
