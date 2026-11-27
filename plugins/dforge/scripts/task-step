@@ -112,12 +112,13 @@ suite_failing_lines() {
 # A failure no test line names cannot be shown to be the same failure at the
 # base and the head, so the marker makes the two lines differ: an unnamed head
 # failure is never excused by an unnamed base failure. Each call runs in its
-# own $(…) subshell, whose $BASHPID differs.
+# own $(…) subshell, whose process id differs; it is read as the parent of a
+# child sh, since bash 3.2 has no variable for it.
 suite_fail_set() {
   local lines
   lines=$(suite_failing_lines "$1" || true)
   if [ -n "$lines" ]; then printf '%s\n' "$lines"
-  else printf 'command exit %s (unnamed %s-%s)\n' "$2" "$(date +%s)" "$BASHPID"; fi
+  else printf 'command exit %s (unnamed %s-%s)\n' "$2" "$(date +%s)" "$(sh -c 'echo "$PPID"')"; fi
 }
 
 # header_command TEXT: the command a header value names, as task-brief's

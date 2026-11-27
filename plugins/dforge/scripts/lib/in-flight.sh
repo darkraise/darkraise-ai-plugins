@@ -146,8 +146,12 @@ inflight_scan() {
     echo "in-flight: could not tell services and timers from work (jq failed on $_INFLIGHT_SERVICES); every shell counts as work" >&2
   fi
   roles=${roles//$'\r'/}
+  # A read loop, not mapfile: bash 3.2 has none.
   local -a role_of=()
-  [ -z "$roles" ] || mapfile -t role_of <<<"$roles"
+  local line
+  if [ -n "$roles" ]; then
+    while IFS= read -r line; do role_of+=("$line"); done <<<"$roles"
+  fi
   local n=0 role
   while IFS=$'\t' read -r kind id start out what cmd; do
     role=work

@@ -240,6 +240,8 @@ result toolu_t 'Command running in background with ID: t1. Output is being writt
 bash_use toolu_w 'Run the suite' 'npm test'
 result toolu_w 'Command running in background with ID: w1. Output is being written to: /tmp/w1.output.'
 check "scan: the sixth field is the role" "$(inflight_scan "$TP" | cut -f2,6 | tr '\n' ' ')" "d1	service t1	timer w1	work "
+check "bash 3.2: a service is told from work without mapfile" \
+  "$( (enable -n mapfile readarray; inflight_scan "$TP" | cut -f2,6 | tr '\n' ' ') )" "d1	service t1	timer w1	work "
 cp "$TP" "$TP.keep"
 bash_use toolu_o 'Odd launch' '--arg x'
 result toolu_o 'Command running in background with ID: o1. Output is being written to: /tmp/o1.output.'
