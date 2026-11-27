@@ -5425,8 +5425,10 @@ async function judgeReports($: EngineInterface, prompt: string): Promise<{ repor
 
 // The root is trusted as an existing directory; each path below it down to
 // the target must not be a symbolic link. A stat rejection that statMissing
-// does not read as a missing path refuses. The walk stops at the first missing
-// path, as nothing below it exists.
+// does not read as a missing path refuses. A rejection with no code is
+// checked against its directory's listing: a path the listing names exists,
+// so it refuses. The walk stops at the first missing path, as nothing below it
+// exists.
 async function isNamedReport($: EngineInterface, target: string, allowed: readonly string[], roots: readonly string[]): Promise<boolean> {
   const canon = canonPath(target)
   if (canon === null) return false
@@ -5445,7 +5447,11 @@ async function isNamedReport($: EngineInterface, target: string, allowed: readon
     try {
       info = await $.fs.stat(parts.slice(0, at).join('/'))
     } catch (error) {
-      return statMissing(error, isAboveDir)
+      if (!statMissing(error, isAboveDir)) return false
+      if (typeof (error as { code?: unknown } | null)?.code === 'string') return true
+      const name = parts[at - 1] ?? ''
+      const listed = await $.fs.list(parts.slice(0, at - 1).join('/')).catch(() => [])
+      return !listed.some(entry => entry.name === name)
     }
     if (info.isLink === true) return false
     isAboveDir = info.kind === 'dir'
