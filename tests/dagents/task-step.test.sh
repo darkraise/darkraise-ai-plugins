@@ -1669,6 +1669,25 @@ REPORT
   check "verdict: a path swapped for a symbolic link is not written through" "$link_rc $(cat "$RR_TMP/outside.txt")" "6 keep"
   rm -f "$RR_REPO/other.txt"
   rr_git checkout -- other.txt
+  # Nor through a link planted at the restore's temporary name.
+  rr_reset
+  printf 'dirty\n' >> "$RR_REPO/other.txt"
+  rr_run review docs/plan.md 1
+  vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: pass
+|quality: approved
+|scores: spec 17 / scope 18 / verification 16 / quality 16
+REPORT
+  printf 'more\n' >> "$RR_REPO/other.txt"
+  ln -s "$RR_TMP/outside.txt" "$RR_REPO/other.txt.dagents-restore"
+  rr_run verdict docs/plan.md 1
+  restore=$(grep -A1 -x 'other.txt' <<<"$rr_err" | sed -n 's/^  restore: //p')
+  (cd "$RR_REPO" && bash -c "$restore" >/dev/null 2>&1)
+  check "verdict: a link at the restore's temporary name is not written through" \
+    "$(cat "$RR_TMP/outside.txt") $(tail -n 1 "$RR_REPO/other.txt")" "keep dirty"
+  rm -f "$RR_REPO/other.txt.dagents-restore"
+  rr_git checkout -- other.txt
 fi
 
 # A ledger that names another plan is never written by this plan's review.
