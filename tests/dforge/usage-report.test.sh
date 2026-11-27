@@ -254,6 +254,11 @@ printf '2026-01-01T00:00:00Z\topen\tdforge\t1.0.0\t/plugin\tdocs/dforge/plans/p.
 missing_case "markers naming a transcript that does not exist" "no transcript"
 missing_case "no node on PATH" "node not found" "$(nonode_path)"
 
+. "$HERE/fixtures/darkmem-stores.sh"
+stores_home "$WT/home" "$WM" wm local darkmem >/dev/null
+missing_case "no node while darkmem stores are applied" "node not found" "$(nonode_path)"
+rm -rf "$WT/home/.dforge/config.json" "$WT/home/.dforge/stores.json" "$WT/home/.dforge/mirror/wm"
+
 # --- fixtures built here: one assistant record per line ---
 # say FILE ID TIME INPUT [MODEL] [BASH] — append a main-chain record, with a Bash call when BASH is given
 say() {

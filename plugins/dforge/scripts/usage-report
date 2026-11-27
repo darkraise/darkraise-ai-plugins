@@ -42,6 +42,11 @@ done
 case $format in md|json) ;; *) usage ;; esac
 [ "$save" -eq 0 ] || [ -n "$plan" ] || usage
 
+missing() { printf 'usage summary missing: %s\n' "$1" >&2; exit 0; }
+# Before anything reads the stores: with darkmem stores applied, reading them
+# needs node, and would exit 2 where this reports the missing summary.
+command -v node >/dev/null 2>&1 || missing "node not found"
+
 top=$(git rev-parse --show-toplevel 2>/dev/null) || top=""
 [ ${#repos[@]} -gt 0 ] || [ -z "$top" ] || repos=("$top")
 
@@ -98,8 +103,6 @@ if [ -n "$plan" ]; then
   [ ! -f "$saved" ] || args+=(--saved "$(dr_native_path "$saved")")
 fi
 
-missing() { printf 'usage summary missing: %s\n' "$1" >&2; exit 0; }
-command -v node >/dev/null 2>&1 || missing "node not found"
 if [ -n "$plan" ] && [ -z "$archive" ]; then
   # A row's transcript resolves as the core's resolveTranscript does: the
   # named file, else <session>.jsonl in a project directory or one below it.
