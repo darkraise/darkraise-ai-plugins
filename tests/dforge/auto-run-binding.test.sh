@@ -56,6 +56,12 @@ check "binding: a second start writes a fresh nonce" "$([ -n "$n1" ] && [ "$n1" 
 ar --session s-b3 start --spec "$SPEC" >/dev/null 2>&1; status=$?
 check "binding: a refused start leaves it" "$status|$([ -e "$RUN/s-b3.json" ] && echo present || echo absent)" "4|absent"
 
+# The command rewrote the binding (a newer write of the same session's): the
+# rollback leaves it.
+newer() { jq -n --arg p "$REPO" '{primary: $p, nonce: "newer", at: 0}' > "$RUN/s-b9.json"; return 1; }
+rc=$( cd "$REPO" && . "$HERE/../../plugins/dforge/scripts/lib/context.sh" && . "$HERE/../../plugins/dforge/scripts/lib/auto-run.sh" && ar_binding_around s-b9 "$REPO" newer >/dev/null 2>&1; echo $? )
+check "binding: a failed call keeps a newer binding" "$rc|$(bfield s-b9 nonce)" "1|newer"
+
 jq '.rebind = true' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
 ar --session s-b2 rebind --to s-b2 >/dev/null 2>&1
 check "binding: rebind writes the new session's" "$(bfield s-b2 primary)|$(jq -r .session "$STATE")" "$REPO|s-b2"
@@ -164,6 +170,7 @@ check "resolver: an active bound run goes before an ended local run" "$out|$stat
 a --session s-old start --spec docs/old.md --force >/dev/null 2>&1
 beat s-old && printf '%s\n' "$(( $(date +%s) - 1000 ))" > "$HOME/.claude/dforge/sessions/cockpit/s-old"
 ar --session s-x start --spec "$SPEC" --force >/dev/null 2>&1
+ar --session s-x stop >/dev/null 2>&1
 cp "$STATE" "$TMP/b.before"
 (cd "$A" && bash "$AR" --session s-x stop --stale >/dev/null 2>&1); s1=$?
 active1=$(jq -r .active "$ASTATE")
@@ -171,6 +178,10 @@ a --session s-x resume >/dev/null 2>&1; s2=$?
 check "resolver: stop --stale and resume act on this repository" \
   "$s1|$active1|$s2|$(jq -r '"\(.active) \(.session)"' "$ASTATE")|$(cmp -s "$STATE" "$TMP/b.before" && echo same)" \
   "0|false|0|true s-x|same"
+a --session s-x start --spec docs/old.md --force >/dev/null 2>&1
+cp "$STATE" "$TMP/b.before"
+err=$(ar --session s-x start --spec "$SPEC" 2>&1 >/dev/null); status=$?
+check "binding: one session runs one auto run" "$status|$(grep -cF "$A" <<<"$err")|$(cmp -s "$STATE" "$TMP/b.before" && echo same)" "4|1|same"
 
 # --- ack: a second HOME whose cockpit never echoes ---
 H2="$TMP/home2"

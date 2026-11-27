@@ -193,16 +193,18 @@ ar_ack_wait() {
 # ar_binding_around SID PRIMARY CMD [ARGS…] — write SID's binding, wait for
 # the cockpit to echo it (return 2 without the echo), run CMD, and when either
 # fails put the binding's earlier bytes back (or remove it when there was
-# none), so a refused start or resume leaves no trace.
+# none), so a refused start or resume leaves no trace. The rollback runs under
+# the binding's lock and only while the file still holds the nonce written
+# here: a newer binding written meanwhile stays.
 ar_binding_around() {
-  local sid=$1 primary=$2 f keep="" rc
+  local sid=$1 primary=$2 f keep="" rc nonce
   shift 2
   f=$(ar_binding_file "$sid")
   if [ -f "$f" ]; then
     keep=$(mktemp "$f.keep.XXXXXX") || return 1
     cp -p "$f" "$keep" || { rm -f "$keep"; return 1; }
   fi
-  if ! ar_binding_write "$sid" "$primary" >/dev/null; then
+  if ! nonce=$(ar_binding_write "$sid" "$primary"); then
     [ -z "$keep" ] || rm -f "$keep"
     return 1
   fi
@@ -214,11 +216,18 @@ ar_binding_around() {
     rc=2
   fi
   if [ "$rc" -ne 0 ]; then
-    if [ -n "$keep" ]; then mv -f "$keep" "$f"; else rm -f "$f"; fi
+    dr_locked "$f" _ar_binding_rollback "$f" "$nonce" "$keep" || [ -z "$keep" ] || rm -f "$keep"
   else
     [ -z "$keep" ] || rm -f "$keep"
   fi
   return "$rc"
+}
+
+_ar_binding_rollback() { # _ar_binding_rollback FILE NONCE KEEP
+  if [ "$(ar_jq -r '.nonce // empty' < "$1" 2>/dev/null)" = "$2" ]; then
+    if [ -n "$3" ]; then mv -f "$3" "$1"; else rm -f "$1"; fi
+  fi
+  [ -z "$3" ] || rm -f "$3"
 }
 
 # ar_state — the state file's JSON; fails when there is none.
@@ -240,14 +249,20 @@ ar_bound() {
 # each reading the file the other is about to replace. The binding is checked
 # again under the lock: a caller that saw the run bound before it waited may
 # find it stopped, replaced or rebound to another session.
+# The run's id is read before the wait, so a run replaced meanwhile (a
+# --force start of the same session) is refused too.
 ar_update() {
-  local path
+  local path seen
   path=$(ar_path) || return 1
-  dr_locked "$path" ar_write "$path" "$@"
+  seen=$(ar_jq -r '.runId // empty' < "$path" 2>/dev/null)
+  AR_RUN_SEEN=$seen dr_locked "$path" ar_write "$path" "$@"
 }
 
-ar_write() { # ar_write PATH FILTER [jq options…]
-  ar_jq -e --arg s "${AR_SESSION:-}" '.active == true and .session == $s' < "$1" >/dev/null 2>&1 \
+# ar_write PATH FILTER [jq options…] — with AR_RUN_SEEN set, the run must
+# still be the one of that id; a state written before run ids skips that.
+ar_write() {
+  ar_jq -e --arg s "${AR_SESSION:-}" --arg r "${AR_RUN_SEEN:-}" \
+    '.active == true and .session == $s and ($r == "" or .runId == null or .runId == $r)' < "$1" >/dev/null 2>&1 \
     || { echo "auto-run: no auto run is bound to this session" >&2; return 3; }
   ar_put "$@"
 }
@@ -335,6 +350,20 @@ ar_log() {
   return 0
 }
 
+# ar_runs_elsewhere — true, with the refusal on stderr, when AR_SESSION's
+# binding names another checkout whose run is active, bound to AR_SESSION and
+# not stale: one session runs one auto run, --force or not.
+ar_runs_elsewhere() {
+  local bound here there
+  bound=$(ar_binding_get "$AR_SESSION" primary)
+  [ -n "$bound" ] || return 1
+  here=$(ar_primary_root 2>/dev/null) || here=""
+  [ "$(dr_native_path "$bound")" != "$(dr_native_path "$here")" ] || return 1
+  there="$(dforge_dir state "$bound")/sdd/auto-run.json"
+  _ar_active_for "$there" "$AR_SESSION" && ! session_gone "$AR_SESSION" || return 1
+  echo "auto-run: this session already runs an auto run in $bound; stop it there first" >&2
+}
+
 # ar_start SPEC REGISTER FORCE [ISOLATION] — prints the register path. A
 # register it creates goes in the checkout the run starts from, where its path
 # resolves. ISOLATION is worktree (the default) or in-place.
@@ -344,6 +373,7 @@ ar_start() {
   # Nothing would compact, switch or wake the run without the cockpit.
   age=$(ar_beat_age "$AR_SESSION") && [ "$age" -le "$AR_BEAT_SECONDS" ] \
     || { echo "auto-run: no live cockpit in this session" >&2; return 2; }
+  ! ar_runs_elsewhere || return 4
   if [ "$force" != 1 ] && ar_busy; then ar_busy_refusal; return; fi
   if [ "$force" != 1 ] && ar_stale_holds; then return 4; fi
   ar_binding_around "$AR_SESSION" "$(ar_primary_root)" _ar_start_bound "$spec" "$register" "$force" "$iso" "$path"
@@ -374,7 +404,7 @@ _ar_start_bound() {
   # session's read and write of the state and is lost.
   dr_locked "$path" ar_create_unless_busy "$force" "$path" --arg s "$AR_SESSION" --arg spec "$spec" --arg reg "$register" --arg base "$base" \
     --arg iso "$iso" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
-    active: true, session: $s, rebind: false, stopped: null, startedAt: $now,
+    active: true, session: $s, runId: $runId, rebind: false, stopped: null, startedAt: $now,
     spec: $spec, plan: null, register: $reg, base: (if $base == "" then null else $base end),
     phase: "spec", regime: "normal", pending: null, resumePrompt: null, launch: null,
     failures: 0, compactions: 0, resumes: 0, decisions: [], rulings: [],
@@ -383,7 +413,7 @@ _ar_start_bound() {
     totals: {compactionSeconds: 0, holds: 0, stalls: 0, apiErrors: 0, reconcilePrompts: 0, panelFailures: 0},
     isolation: $iso, branch: null, branchBase: null, carried: null,
     version: $version, root: $root
-  }' --arg version "$(ar_plugin_version)" --arg root "$AR_PLUGIN_ROOT" || return $?
+  }' --arg version "$(ar_plugin_version)" --arg root "$AR_PLUGIN_ROOT" --arg runId "$(date +%s)-$$-$RANDOM" || return $?
   ar_log start "$spec"
   ar_log bind "$(ar_primary_root)"
   # A register opened at the spec review before the spec existed may still
@@ -434,6 +464,7 @@ ar_resume() {
   age=$(ar_beat_age "$AR_SESSION") && [ "$age" -le "$AR_BEAT_SECONDS" ] \
     || { echo "auto-run: no live cockpit in this session" >&2; return 2; }
   [ -f "$path" ] || { echo "auto-run: there is no auto run to resume" >&2; return 4; }
+  ! ar_runs_elsewhere || return 4
   ar_binding_around "$AR_SESSION" "$(ar_primary_root)" dr_locked "$path" _ar_resume_locked "$path" || return $?
   ar_log resume
   ar_log bind "$(ar_primary_root)"
