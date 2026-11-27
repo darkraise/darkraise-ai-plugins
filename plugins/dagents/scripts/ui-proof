@@ -82,7 +82,10 @@ case $cmd in
       echo "ui-proof: ok — gate off (no UI profile, no UI/UX contract)"
       exit 0
     fi
-    changed=$(uiux_changed "$root" "$base")
+    changed=$(uiux_changed "$root" "$base") || {
+      echo "ui-proof: FAIL scope: cannot list the UI files changed since $base"
+      exit 1
+    }
     if [ -z "$changed" ]; then
       echo "ui-proof: ok — no UI file differs from $base"
       exit 0

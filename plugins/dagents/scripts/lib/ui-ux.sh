@@ -119,10 +119,15 @@ uiux_files() {
 
 # uiux_changed ROOT BASE — the UI files that differ between BASE and the
 # working tree, committed or not, deleted ones included, plus untracked ones.
-uiux_changed() {
-  { git -C "$1" diff -z --no-renames --name-only "$2" -- 2>/dev/null
-    git -C "$1" ls-files -z -o --exclude-standard 2>/dev/null; } | tr '\0' '\n' | LC_ALL=C sort -u | uiux_filter "$1"
-}
+# Status 1 and no output when git or the filter fails: an empty list would
+# read as no UI change.
+uiux_changed() (
+  set -o pipefail
+  d=$(git -C "$1" diff -z --no-renames --name-only "$2" -- 2>/dev/null | tr '\0' '\n') || exit 1
+  o=$(git -C "$1" ls-files -z -o --exclude-standard 2>/dev/null | tr '\0' '\n') || exit 1
+  out=$(printf '%s\n%s\n' "$d" "$o" | LC_ALL=C sort -u | uiux_filter "$1") || exit 1
+  [ -z "$out" ] || printf '%s\n' "$out"
+)
 
 # uiux_fingerprint ROOT — 16 hex digits naming the paths and contents of every
 # UI file, or "none" when there is none. Git does the hashing.
