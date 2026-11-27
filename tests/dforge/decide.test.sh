@@ -182,6 +182,12 @@ if [ -L "$WORK/link.txt" ]; then
   ask "${Q[@]}" --evidence link.txt
   check "A4: a link inside the working tree to a file outside it" "$rc:$out:$(( $(sent) - n ))" "3:no ruling reason=evidence:0"
 fi
+if [ -L "$WORK/link.txt" ]; then
+  n4=$(sent)
+  got=$(printf '{"question":"q","options":["A","B"],"evidence":[{"label":"link.txt","path":"%s"}],"floor":0.85,"timeout":5}' "$WORK/link.txt" \
+    | node "$P/scripts/lib/decisions.mjs" 2>/dev/null | j '.outcome')
+  check "A4: decisions.mjs never reads an evidence link" "$got:$(( $(sent) - n4 ))" "error:0"
+fi
 ask "${Q[@]}" --evidence docs/s.md --evidence .dforge/note.md
 check "A5: a file under the state root is accepted though git ignores it" "$rc:$(( $(sent) - n ))" "0:1"
 has "A5: its text is sent" "$(tail -1 "$REQ" | j '.body.input')" "state note"

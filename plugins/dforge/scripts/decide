@@ -30,8 +30,11 @@ canon() { # canon PATH — the canonical form of an existing PATH, links followe
 
 under() { case $1 in "$2"/*) return 0 ;; *) return 1 ;; esac; }
 
-evidence_ok() { # evidence_ok FILE… — every file may be sent
+# evidence_ok FILE… — every file may be sent. EVIDENCE_CANON keeps each
+# file's canonical path, the one checked, which is the one sent.
+evidence_ok() {
   local f c docs state top gitdir common total=0 size
+  EVIDENCE_CANON=()
   docs=$(bash "$HERE/dforge-path" docs 2>/dev/null | tr -d '\r') && docs=$(canon "$docs") || docs=""
   state=$(bash "$HERE/dforge-path" state 2>/dev/null | tr -d '\r') && state=$(canon "$state") || state=""
   top=$(git rev-parse --show-toplevel 2>/dev/null | tr -d '\r') && top=$(canon "$top") || top=""
@@ -53,6 +56,7 @@ evidence_ok() { # evidence_ok FILE… — every file may be sent
     fi
     size=$(wc -c < "$f" | tr -d ' \r') || return 1
     total=$((total + size))
+    EVIDENCE_CANON+=("$c")
   done
   [ "$total" -le "$EVIDENCE_LIMIT" ]
 }
@@ -115,18 +119,19 @@ cmd_ask() {
 
   evidence_ok ${evidence[@]+"${evidence[@]}"} || { log_ask evidence; no_ruling evidence; }
 
-  local floor timeout request ev
+  local floor timeout request ev i
   floor=$(dforge_setting decisionConfidence 85)
   [[ $floor =~ ^[0-9]+(\.[0-9]+)?$ ]] || floor=85
   timeout=${DFORGE_DECISIONS_TIMEOUT:-30}
   [[ $timeout =~ ^[0-9]+$ ]] || timeout=30
   ev='[]'
-  for f in ${evidence[@]+"${evidence[@]}"}; do
-    ev=$(jq -c --arg label "$f" --arg path "$(canon "$f")" '. + [{label: $label, path: $path}]' <<< "$ev" | tr -d '\r')
+  for i in ${evidence[@]+"${!evidence[@]}"}; do
+    ev=$(jq -c --arg label "${evidence[$i]}" --arg path "${EVIDENCE_CANON[$i]}" '. + [{label: $label, path: $path}]' <<< "$ev" | tr -d '\r')
   done
   request=$(jq -nc --arg q "$question" --argjson options "$OPTIONS_JSON" --argjson evidence "$ev" \
     --argjson floor "$(awk -v f="$floor" 'BEGIN { printf "%.4f", f / 100 }')" --argjson timeout "$timeout" \
-    '{question: $q, options: $options, evidence: $evidence, floor: $floor, timeout: $timeout}' | tr -d '\r')
+    --argjson limit "$EVIDENCE_LIMIT" \
+    '{question: $q, options: $options, evidence: $evidence, floor: $floor, timeout: $timeout, limit: $limit}' | tr -d '\r')
   local -a bound=()
   dforge_timeout && bound=("$DFORGE_TIMEOUT" $((timeout + 15)))
   answer=$(printf '%s' "$request" | ${bound[@]+"${bound[@]}"} node "$(dr_native_path "$HERE/lib/decisions.mjs")" 2>/dev/null | tr -d '\r' | tail -1)

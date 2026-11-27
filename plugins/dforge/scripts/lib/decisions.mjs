@@ -1,14 +1,15 @@
 // One request to OpenAI's Decisions API for scripts/decide.
 // stdin: {"question", "options": [text…], "evidence": [{"label", "path"}…],
-//         "floor": <0..1>, "timeout": <seconds>}
+//         "floor": <0..1>, "timeout": <seconds>, "limit": <evidence bytes>}
 // The key comes from DFORGE_OPENAI_API_KEY and is never printed.
 // stdout: one JSON object, the outcome and the answer fields of a decisions
 // log line plus input_tokens.
-import { readFileSync } from 'node:fs'
+import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } from 'node:fs'
 
 const QUESTIONS = ['ruling', 'ruling_reversed', 'needs_more', 'guarded']
 const NEEDS_MORE_LIMIT = 0.15
 const GUARDED_LIMIT = 0.10
+const EVIDENCE_LIMIT = 400000
 
 const blank = {
   outcome: 'error', choice: null, choice_reversed: null, confidence: null,
@@ -20,12 +21,31 @@ function finish(result) {
   process.exit(0)
 }
 
+// An evidence file's text. decide checked the path it sends; a link, or
+// anything but a regular file, put there since is refused, as is a total over
+// the limit.
+function evidenceText(path, left) {
+  if (!lstatSync(path).isFile()) throw new Error('evidence is not a regular file')
+  const fd = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
+  try {
+    const stat = fstatSync(fd)
+    if (!stat.isFile()) throw new Error('evidence is not a regular file')
+    if (stat.size > left) throw new Error('evidence over the limit')
+    return readFileSync(fd, 'utf8')
+  } finally {
+    closeSync(fd)
+  }
+}
+
 function buildRequest(req) {
   const listed = req.options.map((text, i) => ({ value: `option_${i + 1}`, description: text }))
   const other = { value: 'other', description: 'None of the listed options fits.' }
   const lines = [req.question, '', 'Options:', ...req.options.map((text, i) => `${i + 1}. ${text}`)]
+  let left = Number.isFinite(req.limit) ? req.limit : EVIDENCE_LIMIT
   for (const file of req.evidence) {
-    lines.push('', `--- ${file.label} ---`, readFileSync(file.path, 'utf8'))
+    const text = evidenceText(file.path, left)
+    left -= Buffer.byteLength(text)
+    lines.push('', `--- ${file.label} ---`, text)
   }
   const ask = 'Choose the option that best answers the question in the input.'
   return {
