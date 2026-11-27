@@ -6,7 +6,7 @@ an auto run the cockpit clears the session instead; see Auto run).
 Invoke dagents:handoff. It commits (or pushes) the plan and the spec, writes
 the plan's `<handoff>` through `scripts/next-step PLAN_FILE`, and ends
 your message with the resume guide — the launch command from the Execution
-line and the first prompt for the skill that line names. Offer no execution
+line and the first prompt for dagents:executing-plans for `inline`, dagents:subagent-driven-development for `subagent`. Offer no execution
 choice: the Execution line already made it.
 
 The exception is a plan at depth light, which is no hard stop outside an auto
@@ -18,6 +18,6 @@ so that the plan's handoff is written, then claims it (`scripts/handoff claim`
 on that file, as handoff step 5 says), then plain `scripts/context-size`: the task
 budget, not `--plan`, which measures room to write a plan. On `ok`, say in one
 line that the Execution line's model and effort are not applied in this
-session, and invoke the skill that line names; print no resume guide. On any
+session, and invoke dagents:executing-plans for `inline`, dagents:subagent-driven-development for `subagent`; print no resume guide. On any
 other result, run handoff step 5 and end the session as above. The task count
 decides only this, never the depth.

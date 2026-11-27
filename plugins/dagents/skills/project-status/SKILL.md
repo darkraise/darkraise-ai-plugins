@@ -47,13 +47,18 @@ calls `scripts/next-step` only with `--print`, which writes nothing. See
      completion signal either — the work may be unmerged.
      Either prefix names the same document: `docs/superpowers/<rest>` in a
      ledger, a `completed.md` entry or a register cell matches `docs/dagents/<rest>`.
+     A plan with a `via PR` line whose branch is unmerged is awaiting its PR:
+     list it under In flight as `awaiting PR <branch>`; no rule recommends
+     finishing for it.
    - **Not started** — neither, and only when `completed.md` exists. "No ledger"
      never means "never ran": dagents:finishing-a-development-branch
      deletes the workspace on integration.
-4. **Match specs to plans.** A spec's slug is its filename without the leading
-   `YYYY-MM-DD-` and the trailing `-design`. A plan matches when its filename
-   without its own date prefix equals that slug; dates need not agree. A prefix
-   match counts only when no other spec claims that plan exactly. A spec whose
+4. **Match specs to plans.** A plan matches the spec its `**Spec:**` header
+   names (either prefix, as step 3 says). Only a plan with no `**Spec:**` line
+   falls back to the slug: a spec's slug is its filename without the leading
+   `YYYY-MM-DD-` and the trailing `-design`, and such a plan matches when its
+   filename without its own date prefix equals that slug; dates need not agree.
+   A prefix match counts only when no other spec claims that plan exactly. A spec whose
    body decomposes a programme into sub-projects is a program design and is
    never unplanned — its plans belong to the sub-projects.
 5. **Find unmerged work with no plan.** `git branch --no-merged <base>` plus the
@@ -107,10 +112,10 @@ wins, and the report names which one matched.
 |---|---|---|
 | 0 | A task's **last** ledger line is `Task N: BLOCKED` | No skill. The decision it names goes under Owner-only items |
 | 1 | A ledger has incomplete tasks and no such line | dagents:resume-execution |
-| 2 | Every task complete, no `Final review: clean` line | the final review, via the plan's `**Execution:**` skill |
-| 3 | Final review clean, branch unmerged (`git merge-base --is-ancestor <branch> <base>` exits non-zero) | dagents:finishing-a-development-branch |
+| 2 | Every task complete, no `Final review: clean` line | the final review, via dagents:executing-plans for `inline`, dagents:subagent-driven-development for `subagent` |
+| 3 | Final review clean, branch unmerged (`git merge-base --is-ancestor <branch> <base>` exits non-zero), and `completed.md` has no line for the plan | dagents:finishing-a-development-branch |
 | 4 | `completed.md` exists and a spec has no plan | dagents:writing-plans |
-| 5 | `completed.md` exists and a plan is absent from it with no ledger | dagents:using-git-worktrees, then the plan's execution skill |
+| 5 | `completed.md` exists and a plan is absent from it with no ledger | dagents:using-git-worktrees, then dagents:executing-plans for `inline`, dagents:subagent-driven-development for `subagent` |
 | 6 | A register holds an unresolved row, or a roadmap milestone is not closed, and no rule above matched | Run `scripts/next-step --print --project` (with `--host codex` on Codex) and recommend what its `**Next:**` line names: a plan's execution skill, dagents:writing-plans, dagents:brainstorming, the milestone audit with dagents:closing-a-milestone, or the rows awaiting your check. When it reads `Nothing`, fall to rule 7 |
 | 7 | A dirty tree with no plan in flight | name the files and ask whether they are live work |
 | 8 | None of the above | say the project is between programmes, offer dagents:brainstorming |
