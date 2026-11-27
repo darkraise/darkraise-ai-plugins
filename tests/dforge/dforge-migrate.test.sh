@@ -672,8 +672,8 @@ check "legacy handoffs: a subject that is not a plain .md path is withheld" "$(s
 # latest.md and claimed nothing, and a stored block is replayed as it stands.
 R="$TMP/rrepo"; repo "$R"; RT=$(git -C "$R" rev-parse --show-toplevel)
 mkdir -p "$R/.dforge/handoff" "$TMP/rh-home"
-old_block() { # old_block MARKER-WORDS — an unplanned handoff as the older next-step wrote it in R
-  local old="$RT/.dforge/handoff/latest.md"
+old_block() { # old_block MARKER-WORDS [PATH] — an unplanned handoff as the older next-step wrote it in R, naming itself PATH
+  local old=${2:-$RT/.dforge/handoff/latest.md}
   printf '# Handoff\n\n## Next session\n\n**Status:** Unplanned work: the notes in `%s` are the authority.\n\n```\nStart in `%s` (branch main); its handoff is `%s`. If your working directory is not `%s`, enter it first. Continue the unplanned work recorded in `%s`: Fix the band.\n```\n<!-- next-step: kind=adhoc %s -->\n' "$old" "$RT" "$old" "$RT" "$old" "$1"
 }
 old_block 'session=- done=0 closed=0 subject=- at=1700001000' > "$R/.dforge/handoff/latest.md"
@@ -766,6 +766,21 @@ printf '#!/bin/sh\nst=0 po=0\nfor a in "$@"; do case $a in status) st=1 ;; --por
 chmod +x "$GB/git"
 out=$(PATH="$GB:$PATH" migrate "$FM" "$GS" 2>&1); code=$?
 check "a git status that fails: the docs move is refused" "$code $(grep -c 'could not read the git status of docs/forge' <<<"$out") $(exists "$GS/docs/forge/specs/s.md")" "1 1 yes"
+
+# A renamed handoff an older layout wrote names itself under that layout's path.
+RO="$TMP/orepo"; repo "$RO"; ROT=$(git -C "$RO" rev-parse --show-toplevel)
+mkdir -p "$RO/.forge/handoff"
+old_block 'session=- done=0 closed=0 subject=- at=1700001150' "$ROT/.forge/handoff/latest.md" > "$RO/.forge/handoff/latest.md"
+HOME="$TMP/rh-home" migrate "$FM" "$RO" > /dev/null 2>&1
+check "renamed handoff names itself: an older state directory's path is rewritten" "$(grep -c 'latest\.md' "$RO/.dforge/handoff/adhoc-legacy-1700001150.md" 2>&1)" "0"
+MH="$TMP/mh-home"; mkdir -p "$MH"
+MR="$TMP/mrepo"; repo "$MR"
+stores_home "$MH" "$MR" mproj local darkmem > /dev/null
+mv "$MH/.dforge" "$MH/.dr-forge"
+MOLD=$(tmp_spelled "$(cygpath -m -l "$MH" 2>/dev/null || printf '%s' "$MH")")/.dr-forge/mirror/mproj/work/handoff/latest.md
+old_block 'session=- done=0 closed=0 subject=- at=1700001160' "$MOLD" > "$MH/.dr-forge/mirror/mproj/work/handoff/latest.md"
+HOME="$MH" migrate "$FM" "$MR" > /dev/null 2>&1
+check "renamed handoff names itself: a mirror path in an older home is rewritten" "$(grep -c 'latest\.md' "$MH/.dforge/mirror/mproj/work/handoff/adhoc-legacy-1700001160.md" 2>&1)" "0"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
