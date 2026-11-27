@@ -346,5 +346,14 @@ else
   printf 'skip - term_escalates_to_kill: setsid is not on PATH\n'
 fi
 
+# --- status_read_from_its_field: an out path holding " status=OK " is no list ---
+rm -rf "$TMP/o status=OK d"
+out=$(AGY_GATE_LINE='agy-gate usable=false reason=setting review=false resets_at=- claude=on claude_resets_at=- source=setting' \
+  CODEX_STATUS=FAILED bash "$PANEL" --cwd "$TMP/work" --out-dir "$TMP/o status=OK d" \
+  --kind task --tier heavy --prompt "$TMP/prompt.md" 2>"$TMP/err")
+check "status_read_from_its_field" "$(tail -1 <<<"$out")" "panel tier=heavy lists=0"
+check "status_read_from_its_field: the FAILED runner's out file is removed" \
+  "$([ -e "$TMP/o status=OK d/codex.json" ] && echo kept || echo removed)" "removed"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

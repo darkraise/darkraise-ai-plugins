@@ -93,6 +93,12 @@ seam() { # seam <id> <GATE|RUNNER>; prints the override path, if any
 }
 
 field() { sed -n "s/.* $1=\\([^ ]*\\).*/\\1/p" <<<" $2"; }
+# A status line is `<id>-judge <model>/<effort> status=<S> exit=<n> out=<path>
+# evidence=<e>[ reason=<r>][ until=<epoch>]`. The out path can hold spaces and
+# `key=` text, so the state is read from the third field and reason and until
+# only from the text after the last ` evidence=`.
+line_status() { local id model s rest; read -r id model s rest <<<"$1"; [[ $s == status=* ]] && printf '%s' "${s#status=}"; }
+line_field() { case "$2" in *" evidence="*) field "$1" "${2##* evidence=}" ;; esac; }
 
 # Ladder rows are `model effort seconds`; a run starts on the first row.
 first_secs() { # first_secs <block>
@@ -295,11 +301,11 @@ for i in "${!open_ids[@]}"; do
   fi
   # A runner can leave a partial or empty out file behind, and the judges read
   # any file that exists as that reviewer's list.
-  case "$line" in *" status=OK "*|*" status=FALLBACK "*) ;; *) rm -f "$out" ;; esac
-  if [ "$(field reason "$line")" = quota ]; then
+  case "$(line_status "$line")" in OK|FALLBACK) ;; *) rm -f "$out" ;; esac
+  if [ "$(line_field reason "$line")" = quota ]; then
     model=$(awk '{ print $2 }' <<<"$line")
     if [ "$id" != agy ] || [[ "${model%%/*}" != claude-* ]]; then
-      until=$(field until "$line")
+      until=$(line_field until "$line")
       [[ $until =~ ^[0-9]+$ ]] || until=""
       (cd "$cwd" && bash "$HERE/auto-run" review-skip "$id" ${until:+--until "$until"}) >/dev/null 2>&1 || true
     fi
@@ -313,8 +319,10 @@ for id in $ids; do
     [ "${entry%%|*}" = "$id" ] || continue
     line=${entry#*|}
     printf '%s\n' "$line"
-    case "$line" in *" status=OK "*|*" status=FALLBACK "*) lists=$((lists + 1)) ;; esac
-    case "$line" in *" status=FAILED "*|*" status=TIMEOUT "*) failures=$((failures + 1)) ;; esac
+    case "$(line_status "$line")" in
+      OK|FALLBACK) lists=$((lists + 1)) ;;
+      FAILED|TIMEOUT) failures=$((failures + 1)) ;;
+    esac
   done
 done
 if [ "$failures" -gt 0 ] && (cd "$cwd" && bash "$HERE/auto-run" pending) >/dev/null 2>&1; then
