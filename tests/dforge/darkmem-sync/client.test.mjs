@@ -152,3 +152,33 @@ test("failItem records any darkmem answer but a 401 as one item's failure and re
   }
   assert.equal(report.failures.length, 2);
 });
+
+test("a GET whose connection fails is retried once; a POST or a timeout is not", async () => {
+  const stub = await startStub();
+  try {
+    let calls = 0;
+    const failFirst = (...args) => {
+      calls += 1;
+      if (calls === 1) throw new TypeError("fetch failed");
+      return globalThis.fetch(...args);
+    };
+    const client = createClient({ url: stub.url, apiKey: STUB_KEY, runKey: "run-1", timeoutMs: 3000, fetchImpl: failFirst });
+    assert.deepEqual(await client.manifest("p", "dforge"), []);
+    assert.equal(calls, 2);
+    calls = 0;
+    await assert.rejects(client.putDocument({ project: "p", uri: "dforge/a.md", content: "a" }), TransportError);
+    assert.equal(calls, 1);
+    let timeouts = 0;
+    const timesOut = () => {
+      timeouts += 1;
+      const error = new Error("timed out");
+      error.name = "TimeoutError";
+      throw error;
+    };
+    const slow = createClient({ url: stub.url, apiKey: STUB_KEY, runKey: "run-1", timeoutMs: 3000, fetchImpl: timesOut });
+    await assert.rejects(slow.manifest("p", "dforge"), /no answer within/);
+    assert.equal(timeouts, 1);
+  } finally {
+    await stub.close();
+  }
+});

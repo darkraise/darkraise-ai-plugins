@@ -34,19 +34,29 @@ export function createClient({ url, apiKey, runKey, timeoutMs = 10000, fetchImpl
     if (body !== undefined) headers["Content-Type"] = "application/json";
     let response;
     let text;
-    try {
-      response = await fetchImpl(target, {
-        method,
-        headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      text = await response.text();
-    } catch (error) {
-      const reason = error?.name === "TimeoutError"
-        ? `no answer within ${timeoutMs} ms`
-        : (error?.cause?.message ?? error?.message ?? String(error));
-      throw new TransportError(`${method} ${route}: ${reason}`);
+    // A GET whose connection dropped is tried once more; a write could have
+    // landed, and a timeout already spent the call's bound.
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        response = await fetchImpl(target, {
+          method,
+          headers,
+          body: body === undefined ? undefined : JSON.stringify(body),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        text = await response.text();
+        break;
+      } catch (error) {
+        const timedOut = error?.name === "TimeoutError";
+        if (method === "GET" && !timedOut && attempt === 1) {
+          await new Promise(resolve => setTimeout(resolve, 250));
+          continue;
+        }
+        const reason = timedOut
+          ? `no answer within ${timeoutMs} ms`
+          : (error?.cause?.message ?? error?.message ?? String(error));
+        throw new TransportError(`${method} ${route}: ${reason}`);
+      }
     }
     let data = null;
     let notJson = false;
