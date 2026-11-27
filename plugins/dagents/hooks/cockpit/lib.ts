@@ -188,9 +188,26 @@ export function attributionIn(text: string, isAnywhere = false): string | undefi
   return undefined
 }
 
-/** Whether a shell command writes a commit or a pull request. */
+/** Whether a shell command writes a commit, a merge or a pull request. */
 export function writesGitText(command: string): boolean {
-  return /\bgit\b[^\n|;&]*\bcommit\b/.test(command) || /\bgh\s+pr\s+(create|edit)\b/.test(command)
+  return shellCommands(command).some(one => isGitWriteCommand(one.words))
+}
+
+// A program word by its last path segment, so `/usr/bin/git` is git.
+const isProgram = (word: string, name: string) => word.replace(/^.*[\\/]/, '').replace(/\.exe$/i, '') === name
+
+/**
+ * Whether a simple command's words write a commit, a merge or a pull request:
+ * `git` then `commit`, `merge` or `commit-tree`, or `gh` then `pr` then
+ * `create`, `edit` or `merge`, each at any distance.
+ */
+export function isGitWriteCommand(words: readonly string[]): boolean {
+  const git = words.findIndex(word => isProgram(word, 'git'))
+  if (git >= 0 && words.slice(git + 1).some(word => word === 'commit' || word === 'merge' || word === 'commit-tree')) return true
+  const gh = words.findIndex(word => isProgram(word, 'gh'))
+  if (gh < 0) return false
+  const pr = words.indexOf('pr', gh + 1)
+  return pr >= 0 && words.slice(pr + 1).some(word => word === 'create' || word === 'edit' || word === 'merge')
 }
 
 /** Every string inside a value, nested ones included: a tool call's text fields. */
@@ -354,8 +371,8 @@ export function shellCommands(src: string): { raw: string; words: string[] }[] {
 
 // The options whose next word is a commit's or pull request's text: git
 // commit's -m and --message (alone or ending a cluster such as -am), gh pr's
-// --title, -t, --body and -b.
-const MESSAGE_FLAG = /^(?:-[A-Za-z]*m|--message|-t|--title|-b|--body)$/
+// --title, -t, --body, -b and --subject.
+const MESSAGE_FLAG = /^(?:-[A-Za-z]*m|--message|-t|--title|-b|--body|--subject)$/
 // The names a message file can give stdin by.
 const STDIN_PATH = /^(?:-|\/dev\/stdin|\/dev\/fd\/0|\/proc\/self\/fd\/0)$/
 // A `$(cat <<'EOF' … EOF)` message: its text is the body as written when the
@@ -383,12 +400,12 @@ export function gitMessageTexts(command: string): { texts: string[]; isWhole: bo
   let isWhole = false
   const all = shellCommands(command)
   for (const one of all) {
-    if (!writesGitText(one.words.join(' '))) continue
+    if (!isGitWriteCommand(one.words)) continue
     one.words.forEach((word, at) => {
       const next = one.words[at + 1]
       const text = MESSAGE_FLAG.test(word) && next !== undefined
         ? next
-        : /^--(?:message|title|body)=/.test(word)
+        : /^--(?:message|title|body|subject)=/.test(word)
           ? word.slice(word.indexOf('=') + 1)
           : /^-m./.test(word)
             ? word.slice(2)
