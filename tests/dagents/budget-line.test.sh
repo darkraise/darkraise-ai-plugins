@@ -290,6 +290,42 @@ check "task-brief: the items come after the excerpt" \
   "$([ "$(grep -n '^## UI/UX contract items$' "$TMP/ui1.md" | cut -d: -f1)" -gt "$(grep -n '^## Plan header excerpt$' "$TMP/ui1.md" | cut -d: -f1)" ] && echo yes || echo no)" "yes"
 bash "$P/scripts/task-brief" docs/ui-plan.md 2 "$TMP/ui2.md" >/dev/null 2>&1
 check "task-brief: a task without a UI/UX line gets no items" "$(grep -c 'UI/UX contract items' "$TMP/ui2.md")" "0"
+cat > docs/ui-split.md <<'EOF'
+# Plan
+
+**Spec:** `docs/ui-spec.md`
+
+**Execution:** subagent — `claude --model sonnet --effort high` — x
+
+## Global Constraints
+
+- Bash only.
+
+## Contracts
+
+- None.
+
+## Task index
+
+1. Dialog
+
+### Task 1: Dialog
+
+#### Part A: layout
+
+**UI/UX:** UX-1
+
+Build the dialog.
+
+#### Part B: focus
+
+**UI/UX:** UX-2
+
+Trap focus.
+EOF
+bash "$P/scripts/task-brief" docs/ui-split.md 1 "$TMP/ui-split.md" >/dev/null 2>&1
+check "task-brief: a split task's brief carries Part B's item" \
+  "$(grep -c '^- \*\*UX-2\*\* — The dialog traps focus\.$' "$TMP/ui-split.md")" "1"
 
 # --- the package leaves out the branch's own design documents ---
 # The suite's MSYS_NO_PATHCONV would hide a pathspec Git Bash rewrites.

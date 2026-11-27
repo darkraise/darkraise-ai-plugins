@@ -783,7 +783,7 @@ if [ -n "${spec_path:-}" ]; then
     ui_cited=""
     for n in $nums; do
       ui_text=$(plan_task_text "$src" "$n")
-      ui_line=$(plan_lines 'UI/UX' <<<"$ui_text" | head -n 1)
+      ui_line=$(plan_lines 'UI/UX' <<<"$ui_text")
       ui_task_ids=$(grep -oE '(UI|UX|OP)-[0-9]+' <<<"$ui_line" || true)
       ui_cited="$ui_cited$ui_task_ids"$'\n'
       for id in $ui_task_ids; do
