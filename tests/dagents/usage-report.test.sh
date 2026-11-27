@@ -103,5 +103,32 @@ B=$(cd "$HERE/../../plugins/dagents/scripts/lib" && node --input-type=module -e 
 check "plan_files: every part's paths, without line ranges" "$(sed -n 1p <<<"$B")" '["src/a.sh","tests/a.test.sh","src/b.sh"]'
 check "plan_files: a backticked path with a space is kept whole" "$(sed -n 2p <<<"$B")" '["src/My View.tsx"]'
 
+# --- the report core, on fixtures built here: one assistant record per line ---
+REPORT="$HERE/../../plugins/dagents/scripts/lib/usage-report.mjs"
+if command -v cygpath >/dev/null 2>&1; then REPORT=$(cygpath -m "$REPORT"); fi
+q() { jq -c "$2" <<<"$1" 2>/dev/null | tr -d '\r'; }
+# say FILE ID TIME INPUT [MODEL] [BASH] — append a main-chain record, with a Bash call when BASH is given
+say() {
+  local content='[]'
+  [ -z "${6:-}" ] || content=$(jq -nc --arg c "$6" '[{type: "tool_use", id: ("t-" + $c | gsub("[^A-Za-z0-9]"; "")), name: "Bash", input: {command: $c}}]')
+  jq -nc --arg id "$2" --arg t "$3" --argjson n "$4" --arg m "${5:-claude-opus-5-5}" --argjson c "$content" \
+    '{type: "assistant", isSidechain: false, timestamp: $t, message: {id: $id, model: $m, content: $c,
+      usage: {input_tokens: $n, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 0}}}' >> "$1"
+}
+at() { wc -c < "$1" | tr -d ' '; } # at FILE — the byte offset the next record starts at
+mark() { # mark EVENT TIME PLAN TASK SESSION BYTES [RANGE]
+  printf '%s\t%s\tdagents\t5.1.1\t/plugin\t%s\t%s\t%s\t\t%s\t1\ttask-%s:%s\t%s\t\n' "$2" "$1" "$3" "$4" "$5" "$6" "$1" "$4" "${7:-}"
+}
+
+# --- unmarked_ledger_line: a complete task no transcript bounds ---
+UB="$TMP/ub"; mkdir -p "$UB/proj"
+say "$UB/proj/u1.jsonl" u1 2026-01-01T00:00:01Z 5
+{ mark open 2026-01-01T00:00:00Z docs/plans/p.md 1 u1 0; mark close 2026-01-01T00:00:02Z docs/plans/p.md 1 u1 "$(at "$UB/proj/u1.jsonl")" a..b; } > "$UB/markers.tsv"
+printf '# SDD ledger — plan: docs/plans/p.md\nTask 1: complete (commits a..b, unreviewed) — x\nTask 2: complete (commits b..c, unreviewed) — y\n' > "$UB/progress.md"
+J=$(node "$REPORT" --markers "$UB/markers.tsv" --transcripts "$UB/proj" --ledger "$UB/progress.md" --format json 2>/dev/null)
+check "unmarked_ledger_line: a complete task no transcript bounds is unresolved" \
+  "$(q "$J" '.plans[0] | [.completed, ([.tasks[] | [.tasks[0], .label]] | sort), (.excluded | map(select(test("no transcript bounds"))))]')" \
+  '[1,[[1,"marked"],[2,"unresolved"]],["Task 2: no transcript bounds its slice"]]'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
