@@ -494,6 +494,8 @@ async function sendCheckpoint({ cfg, client, roots, state, persist, report }, na
   recordCheckpointAt(state, workstream, answer.workstream.last_entry_at);
   persist();
   report.counts.checkpoints += 1;
+  // The append reopened a finished plan's workstream that closeFinished closed.
+  if (state.ledgers[workstream]?.closed) await client.updateWorkstream(answer.workstream.id, { state: "closed", retain: true });
 }
 
 export async function push(context) {
