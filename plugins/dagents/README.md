@@ -300,7 +300,10 @@ the highest tier among the tasks the findings touch, and with `codexReview` on g
 a fresh `judge-opus` dedupes and verifies them. No review route names `judge-fable`:
 on 2026-09-23 Opus 5.5 at high effort matched or beat Fable 5.1 on two replayed reviews with
 known defects, at about 40% of the cost, so Fable takes a review seat only
-when you ask for it. An auto run is the exception: it dispatches `judge-fable`
+when you ask for it. The `judge-opus` seat itself runs at medium effort
+(`agents/judge-opus.md` sets `effort: medium`, and a dispatch passes no
+effort), a setting that replay did not measure. An auto run is the exception:
+it dispatches `judge-fable`
 for the spec review and for each batch of rulings
 (`reference/auto-run.md`). With one list there is no third seat:
 the fixer triages each finding against the code and the scoped re-review rules
@@ -376,9 +379,10 @@ UI files.
 
 **The upstream workflow ships in-plugin.** The fork carries the full skill
 set — brainstorming through finishing-a-development-branch — frozen at upstream
-6.3.0, so no other plugin is required: every agent definition preloads
+6.3.0, so no other plugin is required: every implementer agent definition preloads
 `dagents:verification-before-completion` through its `skills:`
-frontmatter, and writing-plans and subagent-driven-development use the plugin's own
+frontmatter, while the three judges, which only read and write their report,
+carry no `skills:` key (`agents/judge-*.md`); writing-plans and subagent-driven-development use the plugin's own
 `scripts/sdd-workspace`, `task-brief`, `review-package`, `next-step`,
 `context-size`, `repo-audit`, `plan-lint`, and `plan-amend` — `next-step` ends every session with its next
 action and writes it into a handoff per piece of work,
@@ -536,6 +540,16 @@ carries the `## Next session` block `next-step` wrote this turn, and while
 background work the session started runs: none of those stops claims the UI
 work is done, so a handoff is not held for a proof the next session will run.
 
+A `SubagentStop` hook (matcher
+`^(dagents:)?impl-(haiku|(sonnet|opus|fable)-(low|medium|high|xhigh|max))$`,
+30 s timeout) runs `scripts/impl-stop-gate`. It blocks a `DONE` or
+`DONE_WITH_CONCERNS` stop whose reply has no `Report: <absolute path>` line,
+whose report file is missing, lacks `## Discovered issues (not fixed)` or
+`## Assumptions made`, or whose last `## Verified` section holds no command
+bullet. A report whose first non-empty line begins `# UI proof:` passes
+without those sections. Every other stop passes; after two blocks the next
+distinct failing stop passes, as does any stop after five fires.
+
 ### Fast mode
 
 Before the full flow starts for a request, `dagents:brainstorming` and
@@ -686,7 +700,7 @@ session is doing:
 ╰───────────────────────────────────────────────────╯
 ╭ Agents ───────────────────────── ● 1 running ✓ 2 ╮
 │ ● impl-sonnet-low Task 4 4m17s                    │
-│ ✓ reviewer-opus Review task 3                     │
+│ ✓ judge-opus Review task 3                        │
 │ Seats by input                                    │
 │   impl-sonnet-low ×1                              │
 │   ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰ 120k in · 80% cached · 7k out  │
