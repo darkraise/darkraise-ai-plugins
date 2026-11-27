@@ -8489,6 +8489,44 @@ describe('auto run', () => {
     expect(apiErrorPrompts(w)).toEqual([])
   })
 
+  test('an ended session sends no API-error prompt', async ($, on) => {
+    const files: NonNullable<World['files']> = { ...autoFiles({ pending: null }), ...byId() }
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], transcript: API_ERROR_TEXT }
+    const clock = world(on, w)
+    signedIn(on, files)
+    on('session.end', (_$, e) => e as never)
+    await $.session.start(START)
+    await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'error' })
+    await $.session.end({ reason: 'other', sessionId: 'sess-1' } as never)
+    await clock.advance(60_000)
+    expect(apiErrorPrompts(w)).toEqual([])
+  })
+
+  test('a clear end keeps the API-error retry', async ($, on) => {
+    const files: NonNullable<World['files']> = { ...autoFiles({ pending: null }), ...byId() }
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], transcript: API_ERROR_TEXT }
+    const clock = world(on, w)
+    signedIn(on, files)
+    on('session.end', (_$, e) => e as never)
+    await $.session.start(START)
+    await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'error' })
+    await $.session.end({ reason: 'clear', sessionId: 'sess-1' } as never)
+    await clock.advance(60_000)
+    expect(apiErrorPrompts(w)).not.toEqual([])
+  })
+
+  test('an answer inside the retry wait cancels the API-error prompt', async ($, on) => {
+    const files: NonNullable<World['files']> = { ...autoFiles({ pending: null }), ...byId() }
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], transcript: API_ERROR_TEXT }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'error' })
+    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    await clock.advance(60_000)
+    expect(apiErrorPrompts(w)).toEqual([])
+  })
+
   test('api-error retry skips a run stopped meanwhile', async ($, on) => {
     const files: NonNullable<World['files']> = { ...autoFiles({ pending: null }), ...byId() }
     const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], transcript: API_ERROR_TEXT }
