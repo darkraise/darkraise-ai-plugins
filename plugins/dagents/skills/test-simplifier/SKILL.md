@@ -1,6 +1,6 @@
 ---
 name: test-simplifier
-description: Use when a test sweep has become slow or heavy - long local runs, rising CI cost, or many tests added by a programme of plans - measures where the time goes, recovers it without deleting tests first, then merges or removes tests only where mutation evidence shows no fault goes uncaught
+description: Use when a test sweep has become slow or heavy - long local runs, rising CI cost, or many tests added by a programme of plans
 ---
 
 # Test Simplifier
