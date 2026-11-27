@@ -101,6 +101,11 @@ of them and say so: the plan is not completed.
 
 Keep the worktree — your human partner iterates on PR feedback there.
 
+A PR later closed unmerged undoes the record. In the kept worktree, remove the
+plan's `via PR` line from `completed.md` (commit it, or push it with the mirror while documents live in darkmem), set each row Step 5b
+resolved back to `open` with `--note "PR <url> closed unmerged"`, and run
+finishing again.
+
 Then wait for CI as `### Wait for CI` says, with `sha` being `git rev-parse HEAD` at the push.
 
 ### The review record
