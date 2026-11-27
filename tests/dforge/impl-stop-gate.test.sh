@@ -226,7 +226,7 @@ check "the matcher leaves a judge alone" "$(matches dforge:judge-opus)" "no"
 check "hooks.json runs the gate" "$(jq -r '.hooks.SubagentStop[0].hooks[0].command' "$HOOKS")" 'bash "${CLAUDE_PLUGIN_ROOT}/scripts/impl-stop-gate"'
 check "the gate hook is synchronous, bash, 30 s" \
   "$(jq -r '.hooks.SubagentStop[0].hooks[0] | [.type, .async, .shell, .timeout] | map(tostring) | join(",")' "$HOOKS")" "command,false,bash,30"
-check "the description mentions the gate" "$(jq -r .description "$HOOKS" | grep -c "implementer subagent's stop")" "1"
+check "the description mentions the gate" "$(jq -r .description "$HOOKS" | grep -c "Acceptance QA and UI walkthrough seat")" "1"
 gate "$(jq -c --arg c "$REPO" '.cwd = $c' "$FIXTURE")"
 check "the observed input drives the gate: it acts and finds no report" "$CODE|$(has "$ERR" 'does not exist')" "2|1"
 
