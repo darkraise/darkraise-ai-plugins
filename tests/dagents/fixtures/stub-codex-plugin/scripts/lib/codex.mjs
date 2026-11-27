@@ -91,6 +91,7 @@ async function turn(cwd, options, label) {
   const n = bumpCalls();
   if (process.env.STUB_PROMPT_LOG) fs.writeFileSync(process.env.STUB_PROMPT_LOG, options.prompt ?? "");
   log(`${label} ${options.model || "-"}/${options.effort || "-"} sandbox=${options.sandbox ?? "-"} schema=${options.outputSchema ? "yes" : "no"} resume=${options.resumeThreadId ?? "-"} persist=${options.persistThread === true}`);
+  if (process.env.STUB_PID_FILE) fs.writeFileSync(process.env.STUB_PID_FILE, String(process.pid));
   let m = mode();
   if (n > 1 && process.env.STUB_SECOND_MODE) m = process.env.STUB_SECOND_MODE;
   if (process.env.STUB_REFUSE_ONCE === "1") {

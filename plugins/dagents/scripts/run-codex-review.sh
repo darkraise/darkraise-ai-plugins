@@ -218,11 +218,31 @@ plugin_root=${plugin_line#*root=}
 # --rawfile, not --arg "$(cat ...)": a reviewer prompt carries a whole branch
 # diff and passing it as an argument blows the 32,767-character Windows
 # CreateProcess limit.
-run_seat() { # run_seat <model> <effort> <seconds> <log-prefix>; echoes the result JSON
+run_seat() { # run_seat <model> <effort> <seconds> <log-prefix>; the result JSON goes to <log-prefix>.result
   local request
   request=$(request_json "$1" "$2" "$3" yes)
-  printf '%s' "$request" | "$DAGENTS_TIMEOUT" $(( $3 + 60 )) node "$(dr_native_path "$HERE/lib/codex-client.mjs")" "$plugin_root" 2>"$4.stderr"
+  # In the background, so a TERM to this script reaches its trap, which stops
+  # the client's group: GNU timeout leads its own process group, out of reach
+  # of a signal sent to this script's.
+  printf '%s' "$request" | "$DAGENTS_TIMEOUT" -k 10 $(( $3 + 60 )) node "$(dr_native_path "$HERE/lib/codex-client.mjs")" "$plugin_root" \
+    > "$4.result" 2>"$4.stderr" &
+  client_pid=$!
+  wait "$client_pid"; seat_rc=$?
+  client_pid=""
 }
+
+client_pid="" seat_rc=0
+cleanup() { # stop a running client's group: TERM, up to 8 s, then KILL
+  local i=0
+  [ -n "$client_pid" ] || return 0
+  kill -TERM -- "-$client_pid" 2>/dev/null || kill -TERM "$client_pid" 2>/dev/null
+  while [ "$i" -lt 80 ] && kill -0 "$client_pid" 2>/dev/null; do sleep 0.1; i=$((i + 1)); done
+  kill -KILL -- "-$client_pid" 2>/dev/null || kill -KILL "$client_pid" 2>/dev/null
+  return 0
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
 
 # --kind final ships no --prompt of its own: the round is defined by the branch.
 # Its criteria and its diff are composed here, because the plugin call that would
@@ -270,7 +290,8 @@ if [ "$kind" = final ]; then
   fi
 fi
 
-result=$(run_seat "$model" "$effort" "$secs" "$out")
+run_seat "$model" "$effort" "$secs" "$out"
+result=$(cat "$out.result" 2>/dev/null)
 write_out "$result"
 rc=0
 [ "$(jq -r '.ok' <<<"$result")" = true ] || rc=1
@@ -298,7 +319,8 @@ if [ "$(jq -r '.refusal' <<<"$result")" = true ] \
     "$model" "$effort" "$(jq -r '.stderr' <<<"$result" | head -1)" \
     "$back_model" "$back_effort" >&2
   back_secs=$(secs_of "$back_model" "$back_effort")
-  result=$(run_seat "$back_model" "$back_effort" "$back_secs" "$out.fallback")
+  run_seat "$back_model" "$back_effort" "$back_secs" "$out.fallback"
+  result=$(cat "$out.fallback.result" 2>/dev/null)
   write_out "$result"
   rc=0
   [ "$(jq -r '.ok' <<<"$result")" = true ] || rc=1

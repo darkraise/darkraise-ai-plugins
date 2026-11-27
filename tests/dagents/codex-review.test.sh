@@ -90,6 +90,25 @@ run() { # run <args...>; STUB_* variables in the environment script the stub
 
 check "script exists" "$([ -f "$SCRIPT" ] && echo yes || echo no)" "yes"
 
+# --- term_reaps_group: a TERM to the runner's group reaps the client too ---
+if command -v setsid >/dev/null 2>&1; then
+  { printf '%scodex-judge\n' "$fence"; printf 'gpt-6-astra high 120\ngpt-6.1-sol high 120\n'; printf '%s\n' "$fence"; } > "$TMP/ladder-long.md"
+  : > "$TMP/stub.pid"; printf '0' > "$TMP/calls"; printf 'review this\n' > "$TMP/tp.txt"
+  PATH="$TMP/bin:$PATH" CODEX_REVIEW_GATE="$TMP/gate-stub" CODEX_REVIEW_LADDER="$TMP/ladder-long.md" \
+    CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR" CLAUDE_PROJECT_DIR= DAGENTS_CODEX_POLICY="$DAGENTS_CODEX_POLICY" \
+    STUB_MODE=hang STUB_PID_FILE="$TMP/stub.pid" STUB_CALL_FILE="$TMP/calls" STUB_EVENT_LOG="$TMP/term.log" \
+    setsid "$BASH_BIN" "$SCRIPT" --kind task --cwd "$TMP/work" --out "$TMP/term.json" --prompt "$TMP/tp.txt" >/dev/null 2>&1 &
+  rpid=$!
+  for _ in $(seq 1 100); do [ -s "$TMP/stub.pid" ] && break; sleep 0.1; done
+  npid=$(cat "$TMP/stub.pid"); tpid=$(ps -o ppid= -p "$npid" 2>/dev/null | tr -d ' ')
+  kill -TERM -- "-$rpid" 2>/dev/null
+  for _ in $(seq 1 100); do { kill -0 "$npid" || kill -0 "$tpid"; } 2>/dev/null || break; sleep 0.1; done
+  check "term_reaps_group" "$(kill -0 "$npid" 2>/dev/null && echo alive || echo gone):$(kill -0 "$tpid" 2>/dev/null && echo alive || echo gone)" "gone:gone"
+  kill -KILL "$npid" "$tpid" 2>/dev/null; wait "$rpid" 2>/dev/null
+else
+  printf 'skip - term_reaps_group\n'
+fi
+
 # --- native_request_paths: cwd and schemaPath in the form cygpath -m gives ---
 mkdir -p "$TMP/cyg"
 printf '#!/usr/bin/env bash\n[ "$1" = -m ] && shift\nprintf "C:/stub%%s\\n" "$1"\n' > "$TMP/cyg/cygpath"
