@@ -23,7 +23,8 @@
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/turn-start.sh\"",
             "shell": "bash",
-            "async": false
+            "async": false,
+            "timeout": 30
           }
         ]
       }

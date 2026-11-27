@@ -324,6 +324,8 @@ check "hooks.json registers Stop" \
   "$(jq -r '.hooks.Stop[0].hooks[0].command' "$HOOKS")" 'bash "${CLAUDE_PLUGIN_ROOT}/scripts/turn-end.sh"'
 check "both hooks force bash" \
   "$(jq -r '[.hooks.UserPromptSubmit[0].hooks[0].shell, .hooks.Stop[0].hooks[0].shell] | join(",")' "$HOOKS")" "bash,bash"
+check "hooks.json: the turn-start hook is bounded at 30 s" \
+  "$(jq -r '.hooks.UserPromptSubmit[0].hooks[0].timeout' "$HOOKS")" "30"
 
 # --- an auto run bound to the session ends its turns only on the sentinel ---
 AR="$HERE/../../plugins/dagents/scripts/auto-run"
