@@ -13,7 +13,8 @@
 #              holds no review line, 4 no ledger names the plan, 1 the
 #              record could not be written
 #       ratio  0 printed, 2 usage, an unknown revision, or a test-quality
-#              lens with no paths clause
+#              lens with no paths clause, 1 git could not read the diff or
+#              the head's attributes
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -159,6 +160,12 @@ ratio() {
   docs=$(dagents_docs_root)
   case $docs in "$top"/*) docs_rel=${docs#"$top"/}/ ;; esac
 
+  RATIO_TMP=$(mktemp -d) || exit 1
+  trap 'rm -rf "$RATIO_TMP"' EXIT
+  if ! git -C "$top" -c core.quotepath=off diff --numstat -z -M "$1" "$2" > "$RATIO_TMP/numstat"; then
+    printf 'review-record: could not read the diff %s..%s\n' "$b7" "$h7" >&2
+    exit 1
+  fi
   while IFS= read -r -d '' rec; do
     added=${rec%%$'\t'*}
     rest=${rec#*$'\t'}
@@ -169,11 +176,21 @@ ratio() {
     fi
     paths+=("$path")
     counts+=("$added")
-  done < <(git -C "$top" -c core.quotepath=off diff --numstat -z -M "$1" "$2")
+  done < "$RATIO_TMP/numstat"
   if [ ${#paths[@]} -gt 0 ]; then
+    # Attributes come from the measured head, not the work tree: its tree is
+    # read into a scratch index and check-attr reads that (no --source, which
+    # older git lacks).
+    if ! GIT_INDEX_FILE=$(dr_native_path "$RATIO_TMP/index") git -C "$top" read-tree "$2" \
+      || ! printf '%s\0' "${paths[@]}" \
+        | GIT_INDEX_FILE=$(dr_native_path "$RATIO_TMP/index") git -C "$top" check-attr --cached -z --stdin linguist-generated \
+          > "$RATIO_TMP/attrs"; then
+      printf 'review-record: could not read attributes at %s\n' "$h7" >&2
+      exit 1
+    fi
     while IFS= read -r -d '' path && IFS= read -r -d '' _ && IFS= read -r -d '' info; do
       case $info in set|true) gen+=$'\n'"$path" ;; esac
-    done < <(printf '%s\0' "${paths[@]}" | git -C "$top" check-attr -z --stdin linguist-generated)
+    done < "$RATIO_TMP/attrs"
   fi
   gen+=$'\n'
 

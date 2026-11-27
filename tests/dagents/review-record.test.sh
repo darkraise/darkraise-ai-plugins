@@ -152,6 +152,11 @@ H1=$(git -C "$R" rev-parse HEAD)
 out=$(cd "$R" && bash "$P/scripts/review-record" ratio "$B" "$H1"); rc=$?
 check "A1-A4: tests, code, Markdown and .gitattributes counted; fixtures, both snapshot dirs, testdata, generated, docs, lock and binary left out" \
   "$rc:$out" "0:Test ratio: 3 test / 8 code lines ($(short "$B")..$(short "$H1"))"
+cp "$R/.gitattributes" "$TMP/attrs-saved"; : > "$R/.gitattributes"
+out=$(cd "$R" && bash "$P/scripts/review-record" ratio "$B" "$H1"); rc=$?
+cp "$TMP/attrs-saved" "$R/.gitattributes"
+check "ratio: generated attributes come from the measured head" \
+  "$rc:$out" "0:Test ratio: 3 test / 8 code lines ($(short "$B")..$(short "$H1"))"
 
 git -C "$R" mv src/app.js tests/app.test.js
 echo 'line 6' >> "$R/tests/app.test.js"
@@ -191,6 +196,21 @@ check "A14: a lens with no paths clause: exit 2, no line, the reason" \
 out=$(cd "$R" && bash "$P/scripts/review-record" ratio "$B" no-such-rev 2>"$TMP/err"); rc=$?
 check "ratio: an unknown revision: exit 2, no line, the reason" \
   "$rc:$out:$(grep -c 'unknown revision no-such-rev' "$TMP/err")" "2::1"
+
+# A diff git cannot read is a failure, never a zero count.
+L="$TMP/lost"
+git init -q -b main "$L"
+printf 'base\n' > "$L/README"
+git -C "$L" add -A && git -C "$L" commit -q -m base
+LB=$(git -C "$L" rev-parse HEAD)
+mkdir -p "$L/src" && printf 'gone one\ngone two\n' > "$L/src/lost.js"
+git -C "$L" add -A && git -C "$L" commit -q -m lost
+LH=$(git -C "$L" rev-parse HEAD)
+blob=$(git -C "$L" rev-parse HEAD:src/lost.js)
+rm -f "$L/.git/objects/${blob:0:2}/${blob:2}"
+out=$(cd "$L" && bash "$P/scripts/review-record" ratio "$LB" "$LH" 2>"$TMP/err"); rc=$?
+check "ratio: an unreadable diff exits 1" \
+  "$rc:$out:$(grep -c '^review-record: could not read the diff' "$TMP/err")" "1::1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
