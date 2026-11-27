@@ -2770,7 +2770,9 @@ const SEND_LIMIT_MS = 8000
  */
 async function notify($: EngineInterface, event: NotifyEvent, editId?: string, onSent?: (id: string) => Promise<void>): Promise<void> {
   if (!S.kinds.includes(event.kind)) return
-  const job = S.outbox.then(() => deliver($, event, editId, onSent)).catch(() => undefined)
+  // Where the event happened, read now: a /resume while messages wait must not relabel them.
+  const queued = await queuedPlace($).catch(() => ({ repo: null, branch: null, account: null }))
+  const job = S.outbox.then(() => deliver($, event, queued, editId, onSent)).catch(() => undefined)
   S.outbox = job
   let timer = null as Timer | null
   const late = new Promise<void>(resolve => {
@@ -2781,20 +2783,29 @@ async function notify($: EngineInterface, event: NotifyEvent, editId?: string, o
 }
 
 // Sends one queued event; the message id goes to `onSent` when Discord took it.
-async function deliver($: EngineInterface, event: NotifyEvent, editId?: string, onSent?: (id: string) => Promise<void>) {
-  const state = await read($, notifier)
-  if (state.url === null) return
+// The repository, branch and account a message names, as they are when it is queued.
+async function queuedPlace($: EngineInterface): Promise<Pick<NotifyPlace, 'repo' | 'branch' | 'account'>> {
   const git = await read($, repo)
   const at = await read($, place)
   const who = await read($, account)
   const root = S.where.primary ?? at?.root ?? null
-  const placeNow: NotifyPlace = {
-    host: S.where.host,
+  return {
     repo: root === null ? null : (root.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? null),
     branch: git?.branch ?? null,
-    tmux: S.where.tmux,
     account: who?.key ?? null,
   }
+}
+
+async function deliver(
+  $: EngineInterface,
+  event: NotifyEvent,
+  queued: Pick<NotifyPlace, 'repo' | 'branch' | 'account'>,
+  editId?: string,
+  onSent?: (id: string) => Promise<void>,
+) {
+  const state = await read($, notifier)
+  if (state.url === null) return
+  const placeNow: NotifyPlace = { host: S.where.host, ...queued, tmux: S.where.tmux }
   const body = discordBody(event, placeNow, { mention: state.mention, isBrief: S.isBrief, now: await $.clock.now() })
   const sent = await sendDiscord($, state.url, body, editId)
   const stamp = await $.clock.now()
