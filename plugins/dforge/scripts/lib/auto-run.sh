@@ -932,6 +932,14 @@ ar_handoff() {
   fi
 }
 
+# ar_prompt_names_plan PLAN — AR_PROMPT names PLAN's file as a whole word:
+# `myplan.md` is not `plan.md`.
+ar_prompt_names_plan() {
+  local name
+  name=$(basename "$1")
+  [[ $AR_PROMPT =~ (^|[^A-Za-z0-9._-])"$name"($|[^A-Za-z0-9_-]) ]]
+}
+
 # ar_switch — at plan saved, the move to execution: the first prompt
 # and launch as ar_clear reads them. Refuses (return 4) without an attached
 # plan, or when the first prompt names another plan. Never a self-resume.
@@ -943,7 +951,7 @@ ar_switch() {
   plan=$(ar_get plan)
   [ -n "$plan" ] || { echo "auto-run: no plan is attached; run auto-run attach --plan first" >&2; return 4; }
   ar_handoff || return
-  [[ $AR_PROMPT == *"$(basename "$plan")"* ]] \
+  ar_prompt_names_plan "$plan" \
     || { echo "auto-run: the handoff's first prompt names another plan than $plan; run scripts/next-step $plan again" >&2; return 4; }
   ar_update '.pending = "switch" | .phase = "execute" | .setupDue = true | .compactionsSinceTask = 0 | .resumePrompt = $p
     | .launch = (if $m == "" then null else {model: $m, effort: $e} end)' \
@@ -961,10 +969,7 @@ ar_clear() {
   # The plan's checkout may hold a block another session left there for
   # another plan; storing its prompt would resume the wrong plan.
   plan=$(ar_get plan)
-  # The plan's file name as a whole word: `myplan.md` is not `plan.md`.
-  local name
-  name=$(basename "$plan")
-  if [ -n "$plan" ] && ! [[ $AR_PROMPT =~ (^|[^A-Za-z0-9._-])"$name"($|[^A-Za-z0-9_-]) ]]; then
+  if [ -n "$plan" ] && ! ar_prompt_names_plan "$plan"; then
     echo "auto-run: the handoff's first prompt names another plan than $plan; run scripts/next-step $plan again" >&2
     return 4
   fi
