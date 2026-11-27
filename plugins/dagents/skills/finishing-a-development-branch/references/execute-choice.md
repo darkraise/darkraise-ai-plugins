@@ -31,6 +31,10 @@ echo "$PRE_MERGE"
 bash <plugin-root>/scripts/suite-run -- bash -c '<full suite command>'
 ```
 
+The SHA on an Option 1 line is the base branch head after the merge, not the
+merge commit's own hash — a commit cannot contain its own hash, and the merge
+fast-forwards when it can, leaving no merge commit at all.
+
 `<full suite command>` is the `**Integration check:**` command of the plan
 being finished, else the project's test command. `bash -c` keeps the row's
 key the one writing-plans, task-step and ci-mirror look up; a single quote in
