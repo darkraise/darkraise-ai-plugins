@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # One command per mechanical step of a risk-3 task's session review loop
 # (reference/delegated-task.md §The session review loop): each writes the
-# filled prompt to a file in the plan workspace and prints a digest of at most
-# 15 lines. A task's state lives in <workspace>/task-<N>-step.json; review
+# filled prompt to a file in the plan workspace and prints a digest: review and
+# rereview print at most 15 lines; verdict prints at most 20 lines besides one
+# line per Critical or Important finding. A task's state lives in <workspace>/task-<N>-step.json; review
 # builds it from the task's open line, which task-brief --open writes.
 #
 # Usage: task-step review PLAN_FILE N [--suite COMMAND] [--suite-base SHA]
@@ -350,6 +351,7 @@ cmd_rereview() (
 
   plan=$(plan_locate "$plan_arg")
   [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
+  plan_require_same_project "$plan"
   dforge_stores_init "$(_plan_ctx "$plan")"
   tmp=$(mktemp -d)
   BASE_TMP=$tmp
@@ -365,7 +367,6 @@ cmd_rereview() (
     echo "task-step: a Host: codex plan runs the Codex loop; task-step does not apply" >&2
     exit 2
   fi
-  plan_require_same_project "$plan"
   plan_task_text "$src" "$first" >/dev/null || { echo "task $first not found in $plan" >&2; exit 3; }
 
   ws=$(dforge_workspace "$(basename "$plan" .md)" "$(_plan_ctx "$plan")")
