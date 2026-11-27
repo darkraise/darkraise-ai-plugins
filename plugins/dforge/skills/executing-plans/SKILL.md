@@ -142,14 +142,9 @@ block, and continue once your partner answers.
 
 **Every session ends with the next step.** Whenever this session ends before
 the plan is finished - a context-budget handoff, or your human partner asking
-you to stop - first
-reconcile live children exactly as dforge:handoff step 0 says: wait
-for them, or `TaskStop` them and record a Ruling. Tell your partner which you
-did. Then run `scripts/next-step PLAN_FILE` (see using-dforge §Session
-Budget) as your last action. The
-last thing in your final message is the block it prints, verbatim. It also
-rewrites that block in the plan's `<handoff>` in the next session's checkout; on
-exit 4, say it could not be written. When the plan finishes,
+you to stop - run dforge:handoff steps 0-5: they reconcile live children,
+write the State, Gotchas and Do-not notes, and end on the block
+`scripts/next-step --notes <notes> PLAN_FILE` prints. When the plan finishes,
 dforge:finishing-a-development-branch runs it instead.
 
 ## Setup
