@@ -450,6 +450,16 @@ ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
 rc=$( cd "$REPO" && . "$HERE/../../plugins/dagents/scripts/lib/context.sh" && . "$HERE/../../plugins/dagents/scripts/lib/auto-run.sh" && AR_SESSION=s-1 AR_RUN_SEEN=r-old ar_write "$STATE" '.x = 1' >/dev/null 2>&1; echo $? )
 check "under the lock: an update observed against a replaced run is refused" "$rc:$(field x)" "3:null"
 
+live s-1
+beat s-1
+beat s-9
+# The first look (unlocked) finds no live run, the second (under the lock) finds s-1's.
+rc=$( cd "$REPO" && . "$HERE/../../plugins/dagents/scripts/lib/context.sh" && . "$HERE/../../plugins/dagents/scripts/lib/auto-run.sh" && looks=0 \
+  && ar_busy() { looks=$((looks + 1)); [ "$looks" -gt 1 ]; } \
+  && AR_SESSION=s-9 ar_start docs/dagents/specs/2026-10-14-gadget-design.md "" 0 >/dev/null 2>&1; echo $? )
+check "start: a start refused under the lock leaves no register" \
+  "$rc:$([ -e "$REPO/docs/dagents/registers/$(date +%Y-%m-%d)-gadget-auto.md" ] && echo kept || echo none)" "4:none"
+
 # --- stop ---
 ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
 ar --session s-1 stop --reason "owner asked"

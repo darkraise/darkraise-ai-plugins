@@ -154,7 +154,7 @@ ar_create_unless_busy() {
 # register it creates goes in the checkout the run starts from, where its path
 # resolves. ISOLATION is worktree (the default) or in-place.
 ar_start() {
-  local spec=$1 register=$2 force=$3 iso=${4:-worktree} path top slug base regfile="" age
+  local spec=$1 register=$2 force=$3 iso=${4:-worktree} path top slug base regfile="" age made="" rc
   path=$(ar_path) || { echo "auto-run: not inside a git repository" >&2; return 2; }
   # Nothing would compact, switch or wake the run without the cockpit.
   age=$(ar_beat_age "$AR_SESSION") && [ "$age" -le "$AR_BEAT_SECONDS" ] \
@@ -173,6 +173,7 @@ ar_start() {
       mkdir -p "$(dirname "$regfile")" || return 1
       printf '# Auto run: %s\n\n**Source:** items the auto run for `%s` deferred\n**Covers:** %s\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n' \
         "$slug" "$spec" "$spec" > "$regfile" || return 1
+      made=1
     fi
   fi
   base=$(git symbolic-ref --short -q HEAD 2>/dev/null || true)
@@ -190,7 +191,13 @@ ar_start() {
     totals: {compactionSeconds: 0, holds: 0, stalls: 0, apiErrors: 0, reconcilePrompts: 0, panelFailures: 0},
     isolation: $iso, branch: null, branchBase: null, carried: null,
     version: $version, root: $root
-  }' --arg version "$(ar_plugin_version)" --arg root "$AR_PLUGIN_ROOT" --arg runId "$(date +%s)-$$-$RANDOM" || return $?
+  }' --arg version "$(ar_plugin_version)" --arg root "$AR_PLUGIN_ROOT" --arg runId "$(date +%s)-$$-$RANDOM"
+  rc=$?
+  # A register this start made goes with the refused start.
+  if [ "$rc" -ne 0 ]; then
+    [ -z "$made" ] || rm -f "$regfile"
+    return "$rc"
+  fi
   # A register opened at the spec review before the spec existed may still
   # cover nothing, and next-step finds a register only through its Covers.
   [ -z "$regfile" ] && [ -n "$register" ] && regfile=$(dagents_resolve "$register" "$top")
