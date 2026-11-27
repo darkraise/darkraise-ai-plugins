@@ -199,7 +199,7 @@ cmd_report() {
   [ $# -eq 0 ] || usage "report takes no arguments"
   log=$(decisions_log) || usage "no state directory"
   floor=$(dforge_setting decisionConfidence 85)
-  [[ $floor =~ ^[0-9]+$ ]] || floor=85
+  [[ $floor =~ ^[0-9]+(\.[0-9]+)?$ ]] || floor=85
   read_log "$log" | jq -rn --argjson floor "$floor" '
     [inputs] as $lines
     | ($lines | map(select(.kind == "record")) | group_by(.id) | map({key: .[0].id, value: (last | .ruling)}) | from_entries) as $rulings
