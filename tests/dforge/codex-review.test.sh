@@ -396,5 +396,12 @@ STUB_PROMPT_LOG="$TMP/sent-final" seat final --out "$TMP/o.md" --base main >/dev
 check "prompt_says_headless: a composed final prompt opens with it too" "$(head -n 1 "$TMP/sent-final" 2>/dev/null)" \
   "this sandbox is read-only: read each file this prompt names with a shell command such as cat; nothing can be written"
 
+# --- unwritable_out_fails: a report that cannot be written is no review ---
+rm -rf "$TMP"/odir.md*; mkdir -p "$TMP/odir.md"
+out=$(run --kind final --cwd "$TMP/work" --out "$TMP/odir.md" --base main)
+present "unwritable_out_fails" "$out" "status=FAILED exit=0 out=$TMP/odir.md evidence=none reason=error"
+present "unwritable_out_fails: the failed write is named" "$(cat "$TMP/err")" "cannot write the report: $TMP/odir.md"
+rm -rf "$TMP"/odir.md*
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

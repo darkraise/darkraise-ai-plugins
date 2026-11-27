@@ -386,6 +386,13 @@ classify() { # classify <model> <log-prefix>; sets result and reason (empty when
   reason=''
 }
 
+# A report that could not be written is no review, whatever agy answered.
+unwritten() { # unwritten <model> <effort>
+  status "$1" "$2" FAILED "$agy_rc" error
+  printf 'run-agy-review: cannot write the report: %s\n' "$out" >&2
+  exit 1
+}
+
 write_out() {
   if [ "$kind" = final ]; then
     jq -r '.structured_output.review' <<<"$result" > "$out"
@@ -403,7 +410,8 @@ if ! wrote_check; then
 fi
 classify "$model" "$out"
 if [ -z "$reason" ]; then
-  write_out; status "$model" "$effort" OK "$agy_rc"; exit 0
+  write_out || unwritten "$model" "$effort"
+  status "$model" "$effort" OK "$agy_rc"; exit 0
 fi
 if [ "$reason" = timeout ]; then
   status "$model" "$effort" TIMEOUT "$agy_rc" timeout; exit 1
@@ -425,7 +433,8 @@ if [ "$reason" = refused ] && { [ "$model" != "$back_model" ] || [ "$effort" != 
   fi
   classify "$model" "$out.fallback"
   if [ -z "$reason" ]; then
-    write_out; status "$model" "$effort" FALLBACK "$agy_rc" refused; exit 0
+    write_out || unwritten "$model" "$effort"
+    status "$model" "$effort" FALLBACK "$agy_rc" refused; exit 0
   fi
   [ "$reason" != timeout ] || { status "$model" "$effort" TIMEOUT "$agy_rc" timeout; exit 1; }
 fi

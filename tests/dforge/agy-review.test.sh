@@ -248,5 +248,13 @@ has "nested_answer_checked: a severity outside the enum" "$out" "reason=schema"
 STUB_AGY_FINDING='{"severity":"Minor","file":"a.sh","summary":"x"}' STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
 has "nested_answer_checked: a finding without line" "$out" "reason=schema"
 
+# --- unwritable_out_fails: a report that cannot be written is no review ---
+mkdir -p "$TMP/odir.json"
+STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md" --out "$TMP/odir.json"
+has "unwritable_out_fails" "$out" "status=FAILED"
+has "unwritable_out_fails: the reason is error" "$out" "reason=error"
+has "unwritable_out_fails: the failed write is named" "$(cat "$TMP/err")" "cannot write the report: $TMP/odir.json"
+rm -rf "$TMP"/odir.json*
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
