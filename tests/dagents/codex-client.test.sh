@@ -115,15 +115,20 @@ check "deadline: interrupt carried both ids" \
   "$(grep -c '^interruptAppServerTurn stub-thread stub-turn' "$STUB_EVENT_LOG")" "1"
 
 # --- sigterm_interrupts_turn: a stopped client interrupts its turn, then reports ---
-export STUB_EVENT_LOG="$TMP/signal.log"; : > "$STUB_EVENT_LOG"
-printf '%s' "$(req '{"deadlineMs":60000}')" | node "$CLIENT" "$STUB" > "$TMP/signal.out" 2>/dev/null &
-cpid=$!
-for _ in $(seq 1 100); do grep -q '^runAppServerTurn' "$STUB_EVENT_LOG" && break; sleep 0.1; done
-kill -TERM "$cpid" 2>/dev/null
-for _ in $(seq 1 100); do kill -0 "$cpid" 2>/dev/null || break; sleep 0.1; done
-kill -KILL "$cpid" 2>/dev/null; wait "$cpid" 2>/dev/null
-check "sigterm_interrupts_turn" \
-  "$(jq -c '[.reason, .timedOut]' "$TMP/signal.out" 2>/dev/null | tr -d '\r')|$(grep -c '^interruptAppServerTurn stub-thread stub-turn' "$STUB_EVENT_LOG")" '["signal",false]|1'
+case "$(uname -s)" in
+  MINGW* | MSYS* | CYGWIN*) printf 'skip - sigterm_interrupts_turn (the Git Bash kill ends a native node outright, so it never sees SIGTERM)\n' ;;
+  *)
+    export STUB_EVENT_LOG="$TMP/signal.log"; : > "$STUB_EVENT_LOG"
+    printf '%s' "$(req '{"deadlineMs":60000}')" | node "$CLIENT" "$STUB" > "$TMP/signal.out" 2>/dev/null &
+    cpid=$!
+    for _ in $(seq 1 100); do grep -q '^runAppServerTurn' "$STUB_EVENT_LOG" && break; sleep 0.1; done
+    kill -TERM "$cpid" 2>/dev/null
+    for _ in $(seq 1 100); do kill -0 "$cpid" 2>/dev/null || break; sleep 0.1; done
+    kill -KILL "$cpid" 2>/dev/null; wait "$cpid" 2>/dev/null
+    check "sigterm_interrupts_turn" \
+      "$(jq -c '[.reason, .timedOut]' "$TMP/signal.out" 2>/dev/null | tr -d '\r')|$(grep -c '^interruptAppServerTurn stub-thread stub-turn' "$STUB_EVENT_LOG")" '["signal",false]|1'
+    ;;
+esac
 unset STUB_EVENT_LOG
 export STUB_MODE=ok
 
