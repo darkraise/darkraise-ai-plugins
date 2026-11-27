@@ -281,7 +281,10 @@ check "strict: finishing is measured against hard (A12)" "$b|$(strict --finish)"
 mkdir -p "$HOME/.dforge"
 printf '{"handoffMode":"relaxed"}\n' > "$HOME/.dforge/config.json"
 check "relaxed: nothing changes (A12)" "$(strict --final)|$(strict --tail 1)|$(strict --plan)|$(strict --finish)" \
-  "0:budget (final): 375k of 680k (55%) — ok|0:budget (last task): 375k of 680k (55%) — ok|0:budget (plan): 375k of 450k (83%) — ok|0:budget (finishing): 375k of 680k (55%) — ok"
+  "0:budget (final): 375k of 680k (55%) — ok|0:budget (last task): 375k of 680k (55%) — ok|0:budget (plan): 375k of 680k (55%) — ok|0:budget (finishing): 375k of 680k (55%) — ok"
+printf '{"handoffMode":"relaxed","handoffTokens":100000}\n' > "$HOME/.dforge/config.json"
+run --plan
+check "relaxed: a pinned budget does not move the plan check" "$out" "budget (plan): 375k of 680k (55%) — ok — source: record"
 rm -f "$HOME/.dforge/config.json"
 run --finish extra
 check "finish: arguments: exit 2" "$status" "2"
