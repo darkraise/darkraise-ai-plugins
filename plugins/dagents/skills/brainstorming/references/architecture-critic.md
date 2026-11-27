@@ -6,10 +6,11 @@ phase. At `standard`, when Fable reviews the spec (under `autoRun=on`, or in an
 auto run) no separate critic runs and Fable's first round takes its job
 (Folded into Fable, below); when Fable does not review it (attended), the
 critic round below runs as written. At `full`, the separate critic round runs,
-then Fable for one or two rounds. The depth decides, not the trigger list: a
+then, when Fable reviews the spec (under `autoRun=on`, or in an auto run),
+Fable for one or two rounds; attended, the critic round alone. The depth decides, not the trigger list: a
 spec whose line reads `**Depth:** full — owner` and holds no risk trigger gets
 the separate critic. On a Codex host the spec phase runs as `full` at every
-depth.
+depth: the critic runs, and no Fable round does.
 
 After the self-review block, dispatch the critic once with
 [architecture-critic-prompt.md](architecture-critic-prompt.md): the

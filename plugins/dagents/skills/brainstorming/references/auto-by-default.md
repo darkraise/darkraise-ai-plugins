@@ -40,7 +40,9 @@ Then:
      a deferral runs
      `scripts/register add <register> "A<n>: <statement>" --state deferred --note "Q: <question>"`;
      with no register open, first open `<docs>/registers/<date>-<spec-slug>.md`
-     as Opening an item register says;
+     as Opening an item register says, and, since the spec is already written,
+     sets the new register's `**Covers:**` line to the spec's
+     repository-relative path at once;
    - every item Fable left undecided, and every critic Blocker it did not
      settle, with the recommended option first;
    - when the CI configuration has an uncovered platform, ask whether to run
@@ -49,7 +51,8 @@ Then:
      `Midway through the plan`; record the answer in `## Decisions` as
      `Early CI: none` or `Early CI: <first|midway> — consented <YYYY-MM-DD>`;
      the answer is the consent for the push and the workflow dispatch;
-   - when `finishAction` is `ask`: merge into `<current branch>`, open a pull
+   - when `scripts/dagents-config get finishAction` prints `ask` (the
+     settings line never carries this script-enforced key): merge into `<current branch>`, open a pull
      request, or keep the branch, recorded as its own paragraph (no list
      marker, nothing after the value) holding one
      `Finish: <merge|pr|keep>` line in `## Decisions`;
@@ -63,7 +66,8 @@ Then:
      **Changes needed**.
 
    At `light`, the **Approve, keep the normal stops** option adds "(depth
-   light: the plan is not a stop; execution follows in this session)". Your
+   light: a plan of 1-3 tasks is not a stop; execution follows in this
+   session)". Your
    human partner sets the depth by hand under **Changes needed**: write
    `**Depth:** <d> — owner` in the spec. The plan checkpoint can still raise
    it, and the ratchet never replaces an owner line.
