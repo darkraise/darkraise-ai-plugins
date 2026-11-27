@@ -4483,6 +4483,16 @@ describe('shells and remote', () => {
     expect(await ui.find({ type: 'Text', text: /^\$ npm run dev/ })).toBeUndefined()
   })
 
+  test("keeps a background shell's command redacted", async ($, on) => {
+    world(on, { ...SIGNED_IN, tools: { Bash: () => SHELL } })
+    signedIn(on)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'curl -H "Authorization: Bearer abcdefghijkl" https://x', run_in_background: true } as never)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Bearer \[token\]/ })).toBeDefined()
+    expect(JSON.stringify(await ui.drawn())).not.toContain('abcdefghijkl')
+  })
+
   test('show Remote Control in the account card and on the band', async ($, on) => {
     world(on, { ...SIGNED_IN, remoteControl: 'true', tools: { Bash: () => SHELL } })
     signedIn(on)
