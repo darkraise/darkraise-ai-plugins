@@ -1562,6 +1562,8 @@ printf 'judge edit\n' >> "$RR_REPO/app.txt"
 rr_run verdict docs/plan.md 1
 check "verdict: a tracked file changed during the review exits 6" "$rr_rc" "6"
 check "verdict: the changed file is named on its own line" "$(grep -cx 'app.txt' <<<"$rr_err")" "1"
+check "verdict: exit 6 restores only the review seat's change" \
+  "$rr_rc $(grep -c "run a file's restore command only when the review seat made the change, and keep any other writer's edit" <<<"$rr_err") $(grep -c 'restore each to its recorded state' <<<"$rr_err")" "6 1 0"
 check "verdict: a file clean at review time is restored from HEAD" \
   "$(grep -A1 -x 'app.txt' <<<"$rr_err" | sed -n 2p | grep -c '^  restore: git -C .* checkout -- app.txt$')" "1"
 rr_git checkout -- app.txt
