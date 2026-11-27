@@ -2853,9 +2853,9 @@ const S = {
   handoffMark: '',
   // The pane's Compact runs: it books its compaction itself.
   isPaneCompacting: false,
-  // Ledger events already seen, by the plan the ledger names; the first read
-  // of a plan's ledger only records them, so a reload, a re-read or a resumed
-  // plan sends nothing twice.
+  // Ledger events already seen, by the ledger's path; the first read of a
+  // ledger only records them, so a reload, a re-read or a resumed plan sends
+  // nothing twice.
   ledgerSeen: new Map<string, Set<string>>(),
   // When sendLedgerEvents last sent a task's waiting question: that turn's Done is the question.
   questionSentAt: null as number | null,
@@ -4341,7 +4341,7 @@ async function readRun($: EngineInterface, options?: { isOfferFull?: boolean }) 
     // a new session starts with no Run card.
     if (isOlder && (summary.isFinished || (summary.total > 0 && summary.done === summary.total))) return clear()
     if (JSON.stringify(await read($, run)) !== JSON.stringify(summary)) await update($, run, () => summary)
-    await sendLedgerEvents($, summary)
+    await sendLedgerEvents($, summary, newest.path)
   } catch {
     // No readable ledger: the Plan card stays as it is.
   }
@@ -4389,7 +4389,7 @@ async function readFinish($: EngineInterface, path: string) {
 }
 
 // A task that became blocked, waiting, deferred or complete since the last read, said once.
-async function sendLedgerEvents($: EngineInterface, summary: CockpitRun) {
+async function sendLedgerEvents($: EngineInterface, summary: CockpitRun, ledgerPath: string) {
   const keys = summary.tasks.flatMap(task =>
     task.state === 'blocked' ? [`blocked:${task.n}:${task.reason ?? ''}`]
     : task.state === 'waiting' ? [`waiting:${task.n}:${task.question ?? ''}`]
@@ -4398,9 +4398,10 @@ async function sendLedgerEvents($: EngineInterface, summary: CockpitRun) {
     : [],
   )
   if (summary.isFinished) keys.push('finished')
-  const seen = S.ledgerSeen.get(summary.plan ?? '')
+  // By the ledger's path: two checkouts can hold plans of one name.
+  const seen = S.ledgerSeen.get(ledgerPath)
   if (seen === undefined) {
-    S.ledgerSeen.set(summary.plan ?? '', new Set(keys))
+    S.ledgerSeen.set(ledgerPath, new Set(keys))
     return
   }
   for (const key of keys) {
