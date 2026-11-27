@@ -252,12 +252,12 @@ case $cmd in
       result=$(ar_settle "$tokens" "$budget" "$window") || exit $?
       regime=$(ar_get regime)
     else
-      regime=$(ar_after "$tokens" "$budget" "$window")
-      if [ "$regime" = handoff ] && ! ar_holds_session; then result=handoff regime=$(ar_get regime)
-      else
-        result=continue
-        [ "$regime" != handoff ] || regime=$(ar_get regime)
+      # The measured regime only decides a handoff: nothing records it, so
+      # the line names the run's own.
+      if [ "$(ar_after "$tokens" "$budget" "$window")" = handoff ] && ! ar_holds_session; then result=handoff
+      else result=continue
       fi
+      regime=$(ar_get regime)
     fi
     [ "$result" = continue ] || due=""
     echo "$result — $(( (tokens + 500) / 1000 ))k after compaction; regime $regime$due"
