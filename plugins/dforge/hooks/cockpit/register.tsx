@@ -4379,8 +4379,9 @@ async function readFinish($: EngineInterface, path: string) {
   const stat = await $.fs.stat(path).catch(() => null)
   const key = `${path}:${stat?.kind === 'file' ? stat.mtimeMs : ''}`
   if (key === S.finishKey) return
-  S.finishKey = key
   const text = await $.fs.read(path).catch(() => null)
+  // A read that failed is tried again at the next call.
+  if (text !== null || stat?.kind !== 'file') S.finishKey = key
   const next: CockpitFinish | null = text === null ? null : parseFinish(String(text))
   if (JSON.stringify(await read($, finish)) === JSON.stringify(next)) return
   await update($, finish, () => next)

@@ -5881,6 +5881,34 @@ describe('run card', () => {
     expect(drawn).not.toContain('⏱')
   })
 
+  test('reads finish.json again after a read that failed', async ($, on) => {
+    const reads: string[] = []
+    const finishAt = '/home/me/code/shop/.dforge/sdd/p/finish.json'
+    const files: NonNullable<World['files']> = {
+      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: '# SDD ledger — plan: docs/plans/p.md\nTask 1: implementer inline (assigned; base abc1234)\n', mtimeMs: 2_000_000 },
+      '/home/me/code/shop/docs/plans/p.md': { text: '# Plan\n\n### Task 1: Read the budget\n' },
+      [finishAt]: { text: '{"action":"merge","base":"main","chosenAt":900}', mtimeMs: 5 },
+    }
+    world(on, { ...SIGNED_IN, files })
+    let isFailing = true
+    // The first read of finish.json rejects, as a file caught mid-write can.
+    const readable = new Proxy(files, {
+      get: (target, key) => {
+        if (key === finishAt && isFailing) {
+          isFailing = false
+          throw new Error('EIO')
+        }
+        return target[key as string]
+      },
+    })
+    signedIn(on, readable, reads)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(reads.filter(path => path === finishAt)).toHaveLength(2)
+  })
+
   test('offers no Resume for a handoff left under the pre-3.0 .superpowers', async ($, on) => {
     const files: World['files'] = { '/home/me/code/shop/.superpowers/handoff/latest.md': { text: RESUMABLE, mtimeMs: 900_000 } }
     world(on, { ...SIGNED_IN, files })
