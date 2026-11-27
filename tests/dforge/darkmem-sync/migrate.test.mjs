@@ -544,3 +544,47 @@ test("migrateHome keeps the mode of a config.json it merges into", t => {
   assert.deepEqual(fs.readdirSync(path.join(failing, ".dforge")).filter(name => /^\.config\.json\..*\.tmp$/.test(name)), []);
 });
 
+test("migrateHome moves config.json and stores.json into an existing ~/.dforge holding the home lock", t => {
+  const home = scratch("dms-home-");
+  const forge = path.join(home, ".dr-forge");
+  const dforge = path.join(home, ".dforge");
+  write(path.join(dforge, "other.txt"), "other\n");
+  write(path.join(forge, "config.json"), JSON.stringify({ handoffTokens: 325000 }));
+  write(path.join(forge, "stores.json"), JSON.stringify({}));
+  const moved = [];
+  const rename = fs.renameSync;
+  t.mock.method(fs, "renameSync", (from, to) => {
+    const name = /^(config|stores)\.json$/.exec(path.basename(String(from)))?.[1];
+    if (name && path.dirname(String(from)) === forge) moved.push(`${name} ${fs.existsSync(path.join(dforge, ".lock", ".sync.lock")) ? "locked" : "unlocked"}`);
+    return rename(from, to);
+  });
+  const { lines, refused } = migrateHome({ HOME: home });
+  assert.equal(refused, 0, lines.join("\n"));
+  assert.deepEqual(moved.sort(), ["config locked", "stores locked"]);
+  assert.equal(JSON.parse(read(path.join(dforge, "config.json"))).handoffTokens, 325000);
+});
+
+test("migrateHome keeps a config.json another session writes before it holds the lock", t => {
+  const home = scratch("dms-home-");
+  const forge = path.join(home, ".dr-forge");
+  const dforge = path.join(home, ".dforge");
+  const config = path.join(dforge, "config.json");
+  write(path.join(dforge, "other.txt"), "other\n");
+  write(path.join(forge, "config.json"), JSON.stringify({ handoffTokens: 325000 }));
+  const exists = fs.existsSync;
+  let wrote = false;
+  t.mock.method(fs, "existsSync", file => {
+    if (String(file) !== config || exists(path.join(dforge, ".lock", ".sync.lock"))) return exists(file);
+    if (!wrote) {
+      fs.writeFileSync(config, JSON.stringify({ layout: "auto" }));
+      wrote = true;
+    }
+    return false;
+  });
+  const { lines, refused } = migrateHome({ HOME: home });
+  assert.equal(refused, 0, lines.join("\n"));
+  const final = JSON.parse(read(config));
+  assert.equal(final.handoffTokens, 325000);
+  if (wrote) assert.equal(final.layout, "auto");
+});
+

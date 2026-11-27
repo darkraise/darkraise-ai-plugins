@@ -220,34 +220,51 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
     did(`moved ${forgeHome} to ${newHome}`, `would move ${forgeHome} to ${newHome}`);
     moves.push([path.join(forgeHome, "mirror"), path.join(newHome, "mirror"), true]);
   } else if (fs.existsSync(forgeHome)) {
+    const mergeConfig = (from, to) => {
+      const old = readOrRefuse(from);
+      const next = readOrRefuse(to);
+      if (old === UNREADABLE || next === UNREADABLE) return;
+      const bad = [[from, old], [to, next]].find(([, value]) => notObject(value));
+      if (bad) {
+        badConfigs.add(bad[0]);
+        refuse(`${bad[0]} does not hold a JSON object; fix or delete it, then run dforge-migrate again`);
+        return;
+      }
+      const clash = Object.keys(old).filter(key => key in next && JSON.stringify(old[key]) !== JSON.stringify(next[key]));
+      if (clash.length) {
+        refuse(`${from} and ${to} set ${clash.join(", ")} differently; keep one value in ${to} and delete it from ${from}, then run dforge-migrate again`);
+        return;
+      }
+      const copied = Object.keys(old).filter(key => !(key in next));
+      merged = { ...next, ...old };
+      if (!dryRun) {
+        writeJson(to, merged);
+        fs.rmSync(from);
+      }
+      did(`merged ${from} into ${to} (${copied.length ? copied.join(", ") : "no new keys"})`,
+        `would merge ${from} into ${to} (${copied.length ? copied.join(", ") : "no new keys"})`);
+    };
+    // An entry the new home lacks moves; one it holds the same is dropped.
+    const place = (from, to, name) => {
+      if (!fs.existsSync(to)) {
+        if (dryRun) pending.push([to, from]);
+        else fs.renameSync(from, to);
+        did(`moved ${from} to ${to}`, `would move ${from} to ${to}`);
+        if (name === "mirror") moves.push([from, to, true]);
+      } else if (sameFile(from, to)) {
+        if (!dryRun) fs.rmSync(from);
+        did(`dropped ${from}, the same as ${to}`, `would drop ${from}, the same as ${to}`);
+      } else {
+        refuse(`${from} differs from ${to}; keep one by hand, then run dforge-migrate again`);
+      }
+    };
     for (const entry of fs.readdirSync(forgeHome, { withFileTypes: true })) {
       const from = path.join(forgeHome, entry.name);
       const to = path.join(newHome, entry.name);
-      if (entry.name === "config.json" && entry.isFile() && fs.existsSync(to)) {
-        locked(() => {
-          const old = readOrRefuse(from);
-          const next = readOrRefuse(to);
-          if (old === UNREADABLE || next === UNREADABLE) return;
-          const bad = [[from, old], [to, next]].find(([, value]) => notObject(value));
-          if (bad) {
-            badConfigs.add(bad[0]);
-            refuse(`${bad[0]} does not hold a JSON object; fix or delete it, then run dforge-migrate again`);
-            return;
-          }
-          const clash = Object.keys(old).filter(key => key in next && JSON.stringify(old[key]) !== JSON.stringify(next[key]));
-          if (clash.length) {
-            refuse(`${from} and ${to} set ${clash.join(", ")} differently; keep one value in ${to} and delete it from ${from}, then run dforge-migrate again`);
-            return;
-          }
-          const copied = Object.keys(old).filter(key => !(key in next));
-          merged = { ...next, ...old };
-          if (!dryRun) {
-            writeJson(to, merged);
-            fs.rmSync(from);
-          }
-          did(`merged ${from} into ${to} (${copied.length ? copied.join(", ") : "no new keys"})`,
-            `would merge ${from} into ${to} (${copied.length ? copied.join(", ") : "no new keys"})`);
-        });
+      // Tested and moved under the lock, so a file another session writes
+      // first is merged into or refused, never replaced.
+      if ((entry.name === "config.json" || entry.name === "stores.json") && entry.isFile()) {
+        locked(() => (entry.name === "config.json" && fs.existsSync(to) ? mergeConfig(from, to) : place(from, to, entry.name)));
         continue;
       }
       if (entry.name === "mirror" && entry.isDirectory() && fs.existsSync(to)) {
@@ -278,19 +295,7 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
         }
         continue;
       }
-      if (!fs.existsSync(to)) {
-        if (dryRun) pending.push([to, from]);
-        else fs.renameSync(from, to);
-        did(`moved ${from} to ${to}`, `would move ${from} to ${to}`);
-        if (entry.name === "mirror") moves.push([from, to, true]);
-        continue;
-      }
-      if (sameFile(from, to)) {
-        if (!dryRun) fs.rmSync(from);
-        did(`dropped ${from}, the same as ${to}`, `would drop ${from}, the same as ${to}`);
-        continue;
-      }
-      refuse(`${from} differs from ${to}; keep one by hand, then run dforge-migrate again`);
+      place(from, to, entry.name);
     }
     if (!dryRun) {
       for (const dir of [path.join(forgeHome, "mirror"), forgeHome]) {
