@@ -4637,6 +4637,15 @@ describe('discord', () => {
     expect((quiet.embeds as Record<string, unknown>[])[0]?.description).toBeUndefined()
   })
 
+  test('redacts the author, footer and field names', () => {
+    const place = { host: 'sk-abcdefghijklmnopqrst', repo: 'shop', branch: 'feat/x', tmux: 'ghp_abcdefghijklmnopqrstuvwxyz0123', account: '~/.claude' }
+    const body = discordBody({ kind: 'done', title: '✅ Done', fields: [{ name: 'GH=ghp_abcdefghijklmnopqrstuvwxyz0123', value: 'x' }] }, place, { mention: null, isBrief: false, now: 0 })
+    const embed = (body.embeds as Record<string, unknown>[])[0]
+    expect(embed?.author).toEqual({ name: '[token] · shop' })
+    expect(embed?.footer).toEqual({ text: 'dagents · ~/.claude · tmux [token]' })
+    expect((embed?.fields as { name: string }[])[1]?.name).toBe('GH=[token]')
+  })
+
   test('a message after a cd into another repository names that repository', async ($, on) => {
     const fetches: World['fetches'] = []
     const w: World = { tokens: 50_000, fetches, config: { notifyAfter: 60 } }
