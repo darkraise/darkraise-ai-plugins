@@ -23,6 +23,9 @@ PATH="$BIN" "$BASH" "$S/with-timeout" 5 true; rc=$?
 check "only gtimeout: a quick command exits 0" "$rc" "0"
 PATH="$BIN" "$BASH" "$S/with-timeout" 1 sleep 5; rc=$?
 check "only gtimeout: the bound exits 124" "$rc" "124"
+rcs=""
+for b in 0 0s 0.0; do PATH="$BIN" "$BASH" "$S/with-timeout" "$b" true 2>/dev/null; rcs+="$? "; done
+check "a zero bound is a usage error" "${rcs% }" "2 2 2"
 V=$(jq -r .min_version < "$HERE/../../plugins/dagents/reference/agy-policy.json" | tr -d '\r')
 printf '#!%s\necho "%s"\n' "$BASH" "$V" > "$BIN/agy"; chmod +x "$BIN/agy"
 out=$(timeout 30 env PATH="$BIN" "$BASH" "$S/agy-locate"); rc=$?
