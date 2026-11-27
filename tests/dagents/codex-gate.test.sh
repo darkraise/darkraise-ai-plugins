@@ -55,6 +55,8 @@ check "a plugin not named in enabledPlugins is off" "$out" "codex-plugin off rea
 check "off exits 1" "$rc" "1"
 enable false; locate
 check "a disabled plugin is off" "$out" "codex-plugin off reason=plugin-not-enabled"
+check "not_enabled_names_files" "$out|$(cat "$TMP/err")" \
+  "codex-plugin off reason=plugin-not-enabled|codex-plugin: codex@openai-codex is not enabled in: $CFG/settings.json"
 enable true; locate
 check "an enabled, installed, allowed plugin is ok" "$out" "codex-plugin ok version=1.0.3 root=$PLUG"
 check "ok exits 0" "$rc" "0"
