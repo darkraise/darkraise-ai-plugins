@@ -263,6 +263,31 @@ wait
 check "no flock: concurrent additions get distinct milestones" "$(roadmap_rows "$D2/roadmap.md" | cut -f1 | sort -u | tr '\n' ' ')" "M1 M2 M3 M4 M5 M6 M7 M8 M9 "
 check "no flock: the lock directory is gone" "$(find "$R2" -name '*.lockd' | grep -c .)" "0"
 
+# --- an epic whose spec file is gone still has its covering register read ---
+R3="$TMP/repo3"
+git init -q -b main "$R3"
+D3="$R3/docs/dforge"
+mkdir -p "$D3/registers" "$D3/specs"
+printf '# Product design\n' > "$D3/specs/2026-10-07-shop-design.md"
+register "$D3/registers/m1.md" "$PRODUCT" '| 1 | Epic | `docs/dforge/specs/gone.md` | x | done | - |'
+register "$D3/registers/gone-reqs.md" docs/dforge/specs/gone.md '| 1 | Requirement | - | - | open | - |'
+cat > "$D3/roadmap.md" <<EOF
+# Shop — roadmap
+
+**Product:** an online shop
+**Spec:** $PRODUCT
+
+| M | Name | Exit criteria | Register | State | Note |
+|---|---|---|---|---|---|
+| M1 | MVP | x | docs/dforge/registers/m1.md | open | - |
+EOF
+run bash "$RM" close --root "$R3" M1 --note x
+# The covering register names a spec that is gone, so register check refuses
+# it first; before the fix it was never read and close went through.
+check "missing spec: close refused while its register is open" \
+  "$RC:$(grep -c '^refused: docs/dforge/registers/gone-reqs.md fails register check:' <<<"$OUT"):$(roadmap_row "$D3/roadmap.md" M1 | cut -f5):$(roadmap_unresolved "$R3" docs/dforge/registers/m1.md | cut -f1,2 | tr '\t' '#')" \
+  "1:1:open:docs/dforge/registers/gone-reqs.md#1"
+
 run bash "$RM"
 check "usage: no verb" "$RC" "2"
 run bash "$RM" frobnicate --root "$ROOT"

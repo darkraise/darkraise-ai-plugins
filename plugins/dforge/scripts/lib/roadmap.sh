@@ -78,7 +78,6 @@ roadmap_unresolved() {
     a=${assigned#\`}
     a=${a%\`}
     case $a in ''|-) continue ;; esac
-    [ -f "$(dforge_resolve "$a" "$root")" ] || continue
     while IFS= read -r f; do
       [ -n "$f" ] || continue
       rel=$(dforge_name "$f" "$root")
@@ -108,7 +107,6 @@ roadmap_registers() {
     a=${assigned#\`}
     a=${a%\`}
     case $a in ''|-) continue ;; esac
-    [ -f "$(dforge_resolve "$a" "$root")" ] || continue
     register_for_spec "$root" "$a"
   done < <(register_rows "$path" | register_cells) | awk '!seen[$0]++'
   return 0
