@@ -17,13 +17,14 @@
 # or .../plan-header.md (per plan and per worktree; concurrent runs of the SAME
 # plan in the same working tree share it).
 # Exit: 0 ok; 2 usage, a TASK_NUMBER that is not digits (01 reads as 1), or
-# --open given a plan whose ledger (same basename) names another plan; 3 no
-# such task; 4 an amendment does not apply.
+# --open given a plan whose ledger (same basename) names another plan or whose
+# ledger lock it cannot take; 3 no such task; 4 an amendment does not apply.
 # Last output line: the session budget line from scripts/context-size.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
+. "$HERE/lib/lock.sh"
 
 header=0 open=0
 case "${1:-}" in
@@ -163,18 +164,23 @@ echo "wrote ${out}: $(wc -l < "$out" | tr -d ' ') lines"
 if [ "$open" -eq 1 ]; then
   slug=$(basename "$plan" .md)
   ledger="$(dforge_ledger_dir "$slug" "$ctx")/progress.md"
-  if [ ! -f "$ledger" ]; then
-    mkdir -p "$(dirname "$ledger")"
-    printf '# SDD ledger — plan: %s\n' "$(dforge_name "$plan" "$ctx")" > "$ledger"
-  fi
-  open_base=$(tr -d '\r' < "$ledger" | sed -n "s/^Task $n: implementer inline (assigned; base \([0-9a-f]*\)).*/\1/p" | tail -n 1)
-  if [ -n "$open_base" ]; then
-    echo "task $n: already open, base $open_base"
-  else
-    open_base=$(git rev-parse --short HEAD)
-    printf 'Task %s: implementer inline (assigned; base %s)\n' "$n" "$open_base" >> "$ledger"
-    echo "task $n: opened, base $open_base"
-  fi
+  mkdir -p "$(dirname "$ledger")"
+  # Held across the identity line, the read and the append, so two first
+  # opens never truncate each other's ledger.
+  open_ledger() {
+    local open_base
+    [ -f "$ledger" ] || printf '# SDD ledger — plan: %s\n' "$(dforge_name "$plan" "$ctx")" > "$ledger"
+    open_base=$(tr -d '\r' < "$ledger" | sed -n "s/^Task $n: implementer inline (assigned; base \([0-9a-f]*\)).*/\1/p" | tail -n 1)
+    if [ -n "$open_base" ]; then
+      echo "task $n: already open, base $open_base"
+    else
+      open_base=$(git rev-parse --short HEAD)
+      printf 'Task %s: implementer inline (assigned; base %s)\n' "$n" "$open_base" >> "$ledger"
+      echo "task $n: opened, base $open_base"
+    fi
+  }
+  lock=$(dr_lock_base "$ledger") || { echo "task-brief: cannot name the lock for $ledger" >&2; exit 2; }
+  dr_locked "$lock" open_ledger || exit 2
   # The session reads the brief here, so opening a task costs no Read call.
   echo "--- brief ---"
   cat "$out"
