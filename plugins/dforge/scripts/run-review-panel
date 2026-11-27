@@ -26,8 +26,9 @@
 #   upper-cased with each hyphen turned into _, PANEL_LADDER, and
 #   PANEL_BOUND_SECONDS, the seconds from panel start at which the watchdog
 #   fires, in place of the computed bound, PANEL_GATE_SECONDS, the bound on
-#   each gate call (90 by default; unbounded with no timeout on PATH), and
-#   PANEL_NO_SETSID, which runs the runners as on a host without setsid.
+#   each gate call (a whole number above 0, 90 by default; unbounded with no
+#   timeout on PATH), and PANEL_NO_SETSID, which runs the gates and the
+#   runners as on a host without setsid.
 # Exit: 0 answered, whatever the reviewers did; 2 usage error.
 set -uo pipefail
 
