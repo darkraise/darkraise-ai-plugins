@@ -965,9 +965,6 @@ rs_resume() { # rs_resume DIR — resume from s2 with a live beat; sets status, 
   out=$(cd "$1" && bash "$AR" --session s2 resume 2>"$TMP/err"); status=$?
 }
 reason() { [ -s "$TMP/err" ] && echo said || echo silent; }
-# rs_release — stop the run s2 is bound to: one session runs one auto run, so
-# a resume of another run waits for it.
-rs_release() { (cd "$TMP" && bash "$AR" --session s2 stop --reason released) >/dev/null 2>&1; }
 
 # --- resume_reactivates ---
 D="$TMP/rs1"; rs_repo "$D"; rs_state "$D" .
@@ -1025,14 +1022,12 @@ check "resume_refusals: a worktree run whose worktree is gone: exit 4 with the r
 check "resume_refusals: no live beat: exit 2" "$status" "2"
 
 # --- resume_early_phase ---
-rs_release
 D="$TMP/rs4"; rs_repo "$D"; git -C "$D" switch -q main
 rs_state "$D" '.active = false | .stopped = "x" | .isolation = "worktree" | .branch = null | .phase = "plan" | .plan = null'
 rs_resume "$D"
 check "resume_early_phase: a worktree run stopped in the plan phase resumes from the primary" "$status" "0"
 D="$TMP/rs5"; rs_repo "$D"
 rs_state "$D" '.active = false | .stopped = "x" | .phase = "spec" | .plan = null | .branch = "gone"'
-rs_release
 rs_resume "$D"
 check "resume_early_phase: an in-place run stopped in the spec phase resumes without its branch" "$status" "0"
 
@@ -1123,7 +1118,6 @@ rs "$D" --session s1 api-error >/dev/null 2>&1
 for t in holds reconcilePrompts panelFailures; do rs "$D" --session s1 total "$t" >/dev/null 2>&1; done
 rs "$D" --session s1 task-complete >/dev/null 2>&1
 rs "$D" --session s1 stop --reason x >/dev/null 2>&1
-rs_release
 rs_resume "$D"
 check "counters_after_events: resumed" "$status" "0"
 out=$(rs "$D" --session s2 counters 2>&1); status=$?

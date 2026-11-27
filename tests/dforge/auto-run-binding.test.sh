@@ -170,7 +170,6 @@ check "resolver: an active bound run goes before an ended local run" "$out|$stat
 a --session s-old start --spec docs/old.md --force >/dev/null 2>&1
 beat s-old && printf '%s\n' "$(( $(date +%s) - 1000 ))" > "$HOME/.claude/dforge/sessions/cockpit/s-old"
 ar --session s-x start --spec "$SPEC" --force >/dev/null 2>&1
-ar --session s-x stop >/dev/null 2>&1
 cp "$STATE" "$TMP/b.before"
 (cd "$A" && bash "$AR" --session s-x stop --stale >/dev/null 2>&1); s1=$?
 active1=$(jq -r .active "$ASTATE")
@@ -178,10 +177,6 @@ a --session s-x resume >/dev/null 2>&1; s2=$?
 check "resolver: stop --stale and resume act on this repository" \
   "$s1|$active1|$s2|$(jq -r '"\(.active) \(.session)"' "$ASTATE")|$(cmp -s "$STATE" "$TMP/b.before" && echo same)" \
   "0|false|0|true s-x|same"
-a --session s-x start --spec docs/old.md --force >/dev/null 2>&1
-cp "$STATE" "$TMP/b.before"
-err=$(ar --session s-x start --spec "$SPEC" 2>&1 >/dev/null); status=$?
-check "binding: one session runs one auto run" "$status|$(grep -cF "$A" <<<"$err")|$(cmp -s "$STATE" "$TMP/b.before" && echo same)" "4|1|same"
 
 # --- ack: a second HOME whose cockpit never echoes ---
 H2="$TMP/home2"

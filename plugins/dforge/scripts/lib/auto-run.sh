@@ -350,20 +350,6 @@ ar_log() {
   return 0
 }
 
-# ar_runs_elsewhere — true, with the refusal on stderr, when AR_SESSION's
-# binding names another checkout whose run is active, bound to AR_SESSION and
-# not stale: one session runs one auto run, --force or not.
-ar_runs_elsewhere() {
-  local bound here there
-  bound=$(ar_binding_get "$AR_SESSION" primary)
-  [ -n "$bound" ] || return 1
-  here=$(ar_primary_root 2>/dev/null) || here=""
-  [ "$(dr_native_path "$bound")" != "$(dr_native_path "$here")" ] || return 1
-  there="$(dforge_dir state "$bound")/sdd/auto-run.json"
-  _ar_active_for "$there" "$AR_SESSION" && ! session_gone "$AR_SESSION" || return 1
-  echo "auto-run: this session already runs an auto run in $bound; stop it there first" >&2
-}
-
 # ar_start SPEC REGISTER FORCE [ISOLATION] — prints the register path. A
 # register it creates goes in the checkout the run starts from, where its path
 # resolves. ISOLATION is worktree (the default) or in-place.
@@ -373,7 +359,6 @@ ar_start() {
   # Nothing would compact, switch or wake the run without the cockpit.
   age=$(ar_beat_age "$AR_SESSION") && [ "$age" -le "$AR_BEAT_SECONDS" ] \
     || { echo "auto-run: no live cockpit in this session" >&2; return 2; }
-  ! ar_runs_elsewhere || return 4
   if [ "$force" != 1 ] && ar_busy; then ar_busy_refusal; return; fi
   if [ "$force" != 1 ] && ar_stale_holds; then return 4; fi
   ar_binding_around "$AR_SESSION" "$(ar_primary_root)" _ar_start_bound "$spec" "$register" "$force" "$iso" "$path"
@@ -471,7 +456,6 @@ ar_resume() {
   age=$(ar_beat_age "$AR_SESSION") && [ "$age" -le "$AR_BEAT_SECONDS" ] \
     || { echo "auto-run: no live cockpit in this session" >&2; return 2; }
   [ -f "$path" ] || { echo "auto-run: there is no auto run to resume" >&2; return 4; }
-  ! ar_runs_elsewhere || return 4
   ar_binding_around "$AR_SESSION" "$(ar_primary_root)" dr_locked "$path" _ar_resume_locked "$path" || return $?
   ar_log resume
   ar_log bind "$(ar_primary_root)"
