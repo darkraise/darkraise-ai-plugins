@@ -110,7 +110,7 @@ ctx_reduce() {
        elif .type == "assistant" and (.message.model // "") != "<synthetic>"
             and ((.message.usage | type) == "object") then
          ((.message.usage.input_tokens // 0) + (.message.usage.cache_creation_input_tokens // 0)
-          + (.message.usage.cache_read_input_tokens // 0)) as $t
+          + (.message.usage.cache_read_input_tokens // 0) + (.message.usage.output_tokens // 0)) as $t
          | if $t > 0 then {a: $t} else empty end
        else empty end]
     | reduce .[] as $e ({}; if ($e | has("b")) then {b: $e.b} else . + {a: $e.a} end)
@@ -118,8 +118,9 @@ ctx_reduce() {
 }
 
 # ctx_measure FILE — the last main-chain assistant usage after the last
-# compaction boundary, else that boundary's postTokens. Reads the tail first:
-# transcripts reach tens of megabytes.
+# compaction boundary (its input, cache and output tokens: the next request
+# carries the last response), else that boundary's postTokens. Reads the tail
+# first: transcripts reach tens of megabytes.
 ctx_measure() {
   local out
   out=$(tail -n 400 "$1" | ctx_reduce)
