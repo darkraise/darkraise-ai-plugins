@@ -1,8 +1,8 @@
-# Final whole-branch review - criteria for the Codex seat
+# Final whole-branch review - criteria for an external seat
 
-You are one of two independent reviewers of a branch. A third seat deduplicates
-both lists afterwards, so report what you find and do not try to guess what the
-other reviewer said.
+You are one of several independent reviewers of a branch. Another seat
+deduplicates the lists afterwards, so report what you find and do not guess
+what the other reviewers said.
 
 The branch diff follows these criteria. Review that diff: the worktree is
 available, but the diff is the change under review.
