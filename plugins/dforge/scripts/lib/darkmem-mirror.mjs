@@ -786,19 +786,35 @@ export function ledgerEntries(text) {
   return entries;
 }
 
-// The checkout paths in `git worktree list --porcelain -z` output: its fields
-// end in NUL, so a path holding a newline stays whole.
-export function parseWorktreeList(stdout) {
-  return String(stdout).split("\0").filter(field => field.startsWith("worktree ")).map(field => field.slice("worktree ".length));
+// The checkout paths in `git worktree list --porcelain` output, its fields
+// split on NUL (-z) or on line ends.
+export function parseWorktreeList(stdout, separator = "\0") {
+  return String(stdout).split(separator).filter(field => field.startsWith("worktree ")).map(field => field.slice("worktree ".length));
+}
+
+// Every checkout `git worktree list` names, as { status, stderr, dirs }. -z
+// keeps a path holding a newline whole, but git before 2.36 refuses it, so
+// the newline form is read there instead.
+export function worktreeList(cwd, timeout = 10000) {
+  const list = extra => spawnSync("git", ["-C", cwd, "worktree", "list", "--porcelain", ...extra], { encoding: "utf8", timeout, maxBuffer: 64 * 1024 * 1024 });
+  let result = list(["-z"]);
+  let separator = "\0";
+  if (result.status !== 0) {
+    const plain = list([]);
+    if (plain.status === 0) [result, separator] = [plain, /\r?\n/];
+  }
+  return {
+    status: result.status,
+    stderr: result.stderr || result.error?.message || "",
+    dirs: result.status === 0 ? parseWorktreeList(result.stdout, separator) : [],
+  };
 }
 
 // Every worktree's docs directory, as `git worktree list` names the
 // checkouts; none when git cannot list them.
 function worktreeDocsRoots(worktreeRoot) {
   if (!worktreeRoot) return [];
-  const listed = spawnSync("git", ["-C", worktreeRoot, "worktree", "list", "--porcelain", "-z"], { encoding: "utf8", timeout: 10000 });
-  if (listed.status !== 0) return [];
-  return parseWorktreeList(listed.stdout).map(dir => path.join(dir, "docs", "dforge"));
+  return worktreeList(worktreeRoot).dirs.map(dir => path.join(dir, "docs", "dforge"));
 }
 
 // The darkmem uri a document's name or path stands for: a name under

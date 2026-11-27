@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
@@ -1595,4 +1596,19 @@ test("a handoff written in the primary checkout during the move keeps progress l
   assert.equal(s.stores().progress, "local");
   assert.equal(read(late), LATEST);
   assert.deepEqual(movedAside(s.repo), []);
+});
+
+test("a git that refuses worktree list -z still lists every checkout", { skip: process.platform === "win32" && "a POSIX git shim" }, t => {
+  const { repo, worktree } = repoWithWorktree();
+  write(path.join(worktree, ".dforge", "sdd", "p2", "progress.md"), LEDGER("p2"));
+  const bin = scratch("dms-oldgit-");
+  const real = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
+  fs.writeFileSync(path.join(bin, "git"), `#!/bin/sh\nfor a in "$@"; do [ "$a" = -z ] && [ "$3" = worktree ] && { echo "error: unknown switch \\\`z'" >&2; exit 129; }; done\nexec "${real}" "$@"\n`, { mode: 0o755 });
+  const saved = process.env.PATH;
+  process.env.PATH = `${bin}${path.delimiter}${saved}`;
+  t.after(() => { process.env.PATH = saved; });
+  const { problems, sources } = gatherLocalProgress({ repoRoot: repo });
+  assert.deepEqual(problems, []);
+  assert.ok(sources.some(item => item.rel === "sdd/p2/progress.md" && item.file.startsWith(worktree)), JSON.stringify(sources));
+  assert.equal(pathToUri({ docsRoot: scratch("dms-elsewhere-"), worktreeRoot: repo }, path.join(worktree, "docs", "dforge", "specs", "s.md")), "dforge/specs/s.md");
 });

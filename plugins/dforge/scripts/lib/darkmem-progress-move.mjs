@@ -3,7 +3,6 @@
 // handoffs, into darkmem; and the mirror's back into the primary checkout.
 // Nothing is deleted: a source is moved to a dated backup only after its
 // copy reads back identical.
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { HttpError, TransportError } from "./darkmem-client.mjs";
@@ -11,7 +10,7 @@ import { dforgeDir } from "./darkmem-config.mjs";
 import { importLedger } from "./darkmem-import.mjs";
 import {
   DOC_PREFIX, checkpointFiledSince, checkpointTarget, decodeUtf8, handoffKey, handoffMarker, ledgerPieces, listDocumentFiles, propertiesFor,
-  parseWorktreeList, recordCheckpointAt, sha256, unsupportedPlanDirs, uriFamily, utcStamp, validKey, writeFileAtomic,
+  recordCheckpointAt, sha256, unsupportedPlanDirs, uriFamily, utcStamp, validKey, worktreeList, writeFileAtomic,
 } from "./darkmem-mirror.mjs";
 import { pullCheckpoints, pullDocuments, pullLedgers, remoteLedger } from "./darkmem-pull.mjs";
 import { inProgressReason, planFinished } from "./darkmem-reconcile.mjs";
@@ -127,9 +126,9 @@ function ledgersIn(workRoot) {
 
 // The primary checkout first, then every linked worktree git lists.
 function checkouts(repoRoot) {
-  const result = spawnSync("git", ["-C", repoRoot, "worktree", "list", "--porcelain", "-z"], { encoding: "utf8", timeout: 10000 });
-  if (result.status !== 0) return { problem: `git worktree list failed in ${repoRoot}: ${(result.stderr || result.error?.message || "").trim()}` };
-  const listed = parseWorktreeList(result.stdout);
+  const result = worktreeList(repoRoot);
+  if (result.status !== 0) return { problem: `git worktree list failed in ${repoRoot}: ${result.stderr.trim()}` };
+  const listed = result.dirs;
   return { dirs: [repoRoot, ...listed.filter(dir => path.resolve(dir) !== path.resolve(repoRoot))] };
 }
 
