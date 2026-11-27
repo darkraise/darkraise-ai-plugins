@@ -519,9 +519,11 @@ RN="$TMP/rewrite-fails"
 repo "$RN"
 printf '.forge/\n' > "$RN/.gitignore"
 out=$(PATH="$AW:$PATH" migrate "$FM" --dry-run "$RN" 2>&1); code=$?
-check "a failing rewrite, dry: exit 0" "$code" "0"
+check "a failing rewrite, dry: exit 1" "$code" "1"
 check "a failing rewrite, dry: not listed" "$(grep -c 'would rewrite the older names' <<<"$out")" "0"
-out=$(PATH="$AW:$PATH" migrate "$FM" "$RN" 2>&1)
+check "a failing rewrite, dry: the refusal foretold" "$(grep -cxF "dforge-migrate: refused: could not rewrite the older names in $RN/.gitignore" <<<"$out")" "1"
+out=$(PATH="$AW:$PATH" migrate "$FM" "$RN" 2>&1); code=$?
+check "a failing rewrite: refused" "$code $(grep -cxF "dforge-migrate: refused: could not rewrite the older names in $RN/.gitignore" <<<"$out")" "1 1"
 check "a failing rewrite: not reported" "$(grep -c 'rewrote the older names' <<<"$out")" "0"
 check "a failing rewrite: the file kept" "$(cat "$RN/.gitignore")" ".forge/"
 

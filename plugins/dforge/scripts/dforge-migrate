@@ -238,25 +238,25 @@ temp_beside() {
 # rewrite_names FILE MODE — the ignore and attribute lines that name an
 # older directory. MODE replace renames them in place, dropping a renamed
 # line the file already holds; MODE add keeps each line and puts the renamed
-# one after it, skipping comments and lines already present.
+# one after it, skipping comments and lines already present. Status 1 when
+# there is nothing to rewrite, 2 when the rewrite failed.
 rewrite_names() {
   local file=$1 mode=$2 tmp
   [ -f "$file" ] && [ ! -L "$file" ] || return 1
   grep -qE '(^|[^A-Za-z0-9_-])\.(superpowers|forge)([/[:space:]*]|$)|docs/(superpowers|forge)([/[:space:]*]|$)' "$file" || return 1
   if [ "$dry" -eq 1 ]; then
     # Piped into cmp, a failed rewrite would read as a difference; the real
-    # run skips it, so the dry run lists nothing.
-    renamed_lines "$file" "$mode" > /dev/null || return 1
+    # run refuses it, so the dry run foretells that instead of listing it.
+    renamed_lines "$file" "$mode" > /dev/null || return 2
     ! renamed_lines "$file" "$mode" | cmp -s -- - "$file" || return 1
     printf 'would rewrite the older names in %s\n' "$file"
     moved=1
     return 0
   fi
-  tmp=$(temp_beside "$file") || return 1
-  renamed_lines "$file" "$mode" > "$tmp" \
-    && ! cmp -s -- "$tmp" "$file" \
-    && mv -f -- "$tmp" "$file" \
-    || { rm -f -- "$tmp"; return 1; }
+  tmp=$(temp_beside "$file") || return 2
+  if ! renamed_lines "$file" "$mode" > "$tmp"; then rm -f -- "$tmp"; return 2; fi
+  if cmp -s -- "$tmp" "$file"; then rm -f -- "$tmp"; return 1; fi
+  mv -f -- "$tmp" "$file" || { rm -f -- "$tmp"; return 2; }
   printf 'rewrote the older names in %s\n' "$file"
   moved=1
 }
@@ -515,14 +515,18 @@ for i in "${!checkouts[@]}"; do
   wt=${checkouts[$i]} mode=replace
   [ "${clean[$i]}" -eq 0 ] || mode=add
   for name in .gitignore .gitattributes; do
-    if rewrite_names "$wt/$name" "$mode" && g -C "$wt" ls-files --error-unmatch -- "$name" >/dev/null 2>&1; then
+    rewrite_names "$wt/$name" "$mode"; status=$?
+    if [ "$status" -eq 2 ]; then
+      refuse "could not rewrite the older names in $wt/$name"
+    elif [ "$status" -eq 0 ] && g -C "$wt" ls-files --error-unmatch -- "$name" >/dev/null 2>&1; then
       commit_notes+=("$wt: $name")
     fi
   done
 done
 mode=replace
 [ "$refused" -eq 0 ] || mode=add
-rewrite_names "$common/info/exclude" "$mode" || true
+rewrite_names "$common/info/exclude" "$mode"
+[ $? -ne 2 ] || refuse "could not rewrite the older names in $common/info/exclude"
 
 if [ -f "$HERE/lib/dforge-home-migrate.mjs" ]; then
   if ! command -v node >/dev/null 2>&1; then
