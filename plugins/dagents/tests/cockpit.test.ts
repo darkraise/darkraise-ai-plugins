@@ -4603,6 +4603,13 @@ describe('discord', () => {
     expect(excerpt('a'.repeat(20), 10)).toBe(`${'a'.repeat(9)}…`)
   })
 
+  test('masks private keys, JWTs and escaped JSON values', () => {
+    expect(redact('k -----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEA\n-----END OPENSSH PRIVATE KEY----- done')).toBe('k [private key] done')
+    expect(redact('t eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2ln x')).toBe('t [token] x')
+    expect(redact('{\\"password\\":\\"a b c\\"} x')).toBe('{\\"password\\":[hidden] x')
+    expect(redact('curl -d \'{\\"token\\":\\"abc\\"}\' x')).toBe('curl -d \'{\\"token\\":[hidden] x')
+  })
+
   test('picks kinds and keeps the default set as the empty setting', () => {
     expect(notifyKindsFrom('')).toEqual(['ask', 'question', 'done', 'error', 'blocked', 'budget', 'limit'])
     expect(notifyKindsFrom('done, nope, done')).toEqual(['done'])
