@@ -162,6 +162,8 @@ asst 285000 false claude-sonnet-5 > "$T"
 settings 650000
 DAGENTS_BUDGET=junk run
 check "invalid override is ignored" "$out" "budget: 285k of 465k (61%) — ok — source: record"
+DAGENTS_BUDGET=3000000 run
+check "an override above the setting's maximum is ignored" "$out" "budget: 285k of 465k (61%) — ok — source: record"
 run --plan docs/p.md
 check "arguments: exit 2" "$status" "2"
 
@@ -318,6 +320,8 @@ export DAGENTS_BUDGET=600000
 run
 check "DAGENTS_BUDGET wins over the setting" "$out" "budget: 285k of 600k (47%) — ok — source: record"
 unset DAGENTS_BUDGET
+DAGENTS_BUDGET=0 run
+check "a zero override follows the rule, not handoffTokens" "$out" "budget: 285k of 465k (61%) — ok — source: record"
 printf 'not json' > "$HOME/.dagents/config.json"
 run
 check "a broken settings file falls back to the rule" "$out" "budget: 285k of 465k (61%) — ok — source: record"

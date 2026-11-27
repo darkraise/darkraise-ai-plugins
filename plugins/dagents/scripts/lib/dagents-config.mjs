@@ -53,7 +53,7 @@ export const isValid = isValidValue;
 // A value as a command line or an environment variable spells it; undefined when it does not fit.
 export function fromText(spec, text) {
   const value = spec.type === "boolean" ? (text === "true" ? true : text === "false" ? false : undefined)
-    : spec.type === "number" ? (text.trim() === "" ? undefined : Number(text))
+    : spec.type === "number" ? (/^[0-9]+$/.test(text) ? Number(text) : undefined)
     : text;
   return value !== undefined && isValid(spec, value) ? value : undefined;
 }
