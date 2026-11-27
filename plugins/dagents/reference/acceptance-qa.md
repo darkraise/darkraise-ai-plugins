@@ -36,6 +36,9 @@ except the report you write. Before you write, create or delete any path,
 append that path, relative to the repository root, as one line to
 `[WORKSPACE]/qa-touched.txt`: when the session stops you, it removes your
 uncommitted work by that list, and a path missing from it stays behind.
+After each write, create or delete, run
+`bash <plugin-root>/scripts/qa-files mark [WORKSPACE] <path>`: a path changed
+after its mark is left for the session to name.
 Independence from the plan is the point of this
 seat: the plan's tests were written by the same author as its code.
 
