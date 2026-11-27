@@ -38,5 +38,21 @@ fresh; mkdir -p "$TMP/r/src" "$TMP/r/node_modules/pkg" "$TMP/r/.git/hooks"
 touch "$TMP/r/src/a.test.ts" "$TMP/r/node_modules/pkg/x.test.ts" "$TMP/r/.git/hooks/y.test.ts"
 out=$(cd "$TMP/r" && POLLUTER_ARGS="$TMP/args" bash "$SCRIPT" pollution '**/*.test.ts'); rc=$?
 check 'node_modules and .git tests are never run' "$(cat "$TMP/args" 2>/dev/null)" "./src/a.test.ts"
+fresh; mkdir -p "$TMP/r/src" "$TMP/failbin"; touch "$TMP/r/src/a.test.ts"
+printf '%s\n' '#!/usr/bin/env bash' 'exit 1' > "$TMP/failbin/npm"; chmod +x "$TMP/failbin/npm"
+out=$(cd "$TMP/r" && PATH="$TMP/failbin:$PATH" bash "$SCRIPT" pollution 'src/**/*.test.ts'); rc=$?
+check 'every failing run is inconclusive' "$rc|$(grep -c 'no diagnosis performed' <<<"$out")|$(grep -cF 'all tests clean' <<<"$out")" "2|1|0"
+fresh; mkdir -p "$TMP/r/src"; touch "$TMP/r/src/a.test.ts"
+cat > "$TMP/bin/runner" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$POLLUTER_ARGS"
+touch pollution
+STUB
+chmod +x "$TMP/bin/runner"
+before=$(wc -l < "$TMP/calls" | tr -d ' ')
+out=$(cd "$TMP/r" && POLLUTER_ARGS="$TMP/args" bash "$SCRIPT" pollution 'src/**/*.test.ts' "$TMP/bin/runner --flag"); rc=$?
+check 'the third argument names the test command' \
+  "$rc|$(grep -c 'Test: ./src/a.test.ts' <<<"$out")|$(cat "$TMP/args" 2>/dev/null)|$(( $(wc -l < "$TMP/calls" | tr -d ' ') - before ))" \
+  "1|1|--flag ./src/a.test.ts|0"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
