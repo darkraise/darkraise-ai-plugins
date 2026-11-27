@@ -82,6 +82,9 @@ check "cap 2: two lenses, the rest skipped in order" "$(short <<<"$out")" \
 out=$(bash "$ROUTE" plan.md --final "$BASE" "$HEAD2")
 check "default cap 4" "$(short <<<"$out")" \
   "lens security;lens silent-failures;lens test-quality;lens lang-bash;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
+out=$(DAGENTS_LENS_CAP=12 bash "$ROUTE" plan.md --final "$BASE" "$HEAD2")
+check "cap 12: every applying lens runs" "$(short <<<"$out")" \
+  "lens security;lens silent-failures;lens test-quality;lens lang-bash;lens lang-typescript;lens docs-comments;"
 out=$(DAGENTS_LENS_CAP=0 bash "$ROUTE" plan.md --final "$BASE" "$HEAD2")
 check "cap 0: lenses off" "$out" "lenses off"
 
