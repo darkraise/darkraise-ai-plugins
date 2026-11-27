@@ -263,7 +263,7 @@ quota_off() {
     if [[ $epoch =~ ^[0-9]{1,18}$ ]]; then echo "quota until=$epoch"; else echo quota; fi
     return 0
   fi
-  executor_session_mark_off codex quota
+  executor_session_mark_off codex quota || printf 'run-codex-review: the quota mark was not written\n' >&2
   echo quota
 }
 

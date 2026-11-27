@@ -107,15 +107,18 @@ if [ "$usable" = true ] && [ -n "$file" ]; then
   [ "$(trust calibration)" = true ] && review=true
 fi
 
-if [ -n "$file" ]; then
-  executor_session_write codex "$(jq -cn --arg sid "$(executor_session_id)" \
+# A file that was not written leaves the readers answering off, so the line
+# says off too rather than disagree with them.
+if [ -n "$file" ] && ! executor_session_write codex "$(jq -cn --arg sid "$(executor_session_id)" \
     --argjson usable "$usable" --argjson review "$review" \
     --arg reason "$reason" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --arg resets "$resets" --arg epoch "$epoch" --arg version "$version" \
     '{session_id: $sid, usable: $usable, review: $review, reason: $reason,
       checked_at: $at, resets_at: (if $resets == "" then null else $resets end),
       resets_at_epoch: (if $epoch == "" then null else ($epoch | tonumber) end),
-      plugin_version: (if $version == "" then null else $version end)}')"
+      plugin_version: (if $version == "" then null else $version end)}')"; then
+  review=false
+  printf 'codex-gate: the session file was not written\n' >&2
 fi
 
 printf 'codex-gate usable=%s reason=%s review=%s resets_at=%s source=%s\n' \

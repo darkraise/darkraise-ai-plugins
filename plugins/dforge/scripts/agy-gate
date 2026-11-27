@@ -152,8 +152,9 @@ if [ "$usable" = true ] && [ -n "$file" ] && [ "$trusted" = pass ]; then
   review=true
 fi
 
-if [ -n "$file" ]; then
-  executor_session_write agy "$(jq -cn --arg sid "$(executor_session_id)" \
+# A file that was not written leaves the readers answering off, so the line
+# says off too rather than disagree with them.
+if [ -n "$file" ] && ! executor_session_write agy "$(jq -cn --arg sid "$(executor_session_id)" \
     --argjson usable "$usable" --argjson review "$review" \
     --arg reason "$reason" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg version "$version" \
     --arg resets "$resets_at" --arg epoch "$resets_epoch" --argjson drop "$claude_expired" \
@@ -162,7 +163,9 @@ if [ -n "$file" ]; then
       resets_at: (if $resets == "" then null else $resets end),
       resets_at_epoch: (if $epoch == "" then null else ($epoch | tonumber) end),
       agy_version: (if $version == "" then null else $version end)}
-     + (if $drop then {fallback: null} else {} end)')"
+     + (if $drop then {fallback: null} else {} end)')"; then
+  review=false
+  printf 'agy-gate: the session file was not written\n' >&2
 fi
 
 printf 'agy-gate usable=%s reason=%s review=%s resets_at=%s claude=%s claude_resets_at=%s source=%s\n' \

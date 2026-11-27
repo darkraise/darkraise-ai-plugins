@@ -329,9 +329,9 @@ classify() { # classify <model> <log-prefix>; sets result and reason (empty when
     # Antigravity counts Claude and Gemini against separate limits, so a quota
     # marks only the family that hit it.
     if [[ "$1" == claude-* ]]; then
-      executor_session_mark_fallback_off agy "$epoch"
+      executor_session_mark_fallback_off agy "$epoch" || printf 'run-agy-review: the quota mark was not written\n' >&2
     else
-      executor_session_mark_off agy quota "$epoch"
+      executor_session_mark_off agy quota "$epoch" || printf 'run-agy-review: the quota mark was not written\n' >&2
     fi
     return
   fi
