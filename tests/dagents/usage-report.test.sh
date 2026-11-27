@@ -103,6 +103,14 @@ B=$(cd "$HERE/../../plugins/dagents/scripts/lib" && node --input-type=module -e 
 check "plan_files: every part's paths, without line ranges" "$(sed -n 1p <<<"$B")" '["src/a.sh","tests/a.test.sh","src/b.sh"]'
 check "plan_files: a backticked path with a space is kept whole" "$(sed -n 2p <<<"$B")" '["src/My View.tsx"]'
 
+# --- saved_report_reused: a report holding no plan ---
+WE="$TMP/we"; git init -q "$WE"; mkdir -p "$WE/docs/dagents/plans" "$WE/.dagents/sdd"
+printf '# P\n\n### Task 1: one\n\nBody.\n' > "$WE/docs/dagents/plans/p.md"
+printf '{"plans":[{"plan":"keep"}]}\n' > "$WE/.dagents/sdd/usage-report-p.json"
+(cd "$WE" && bash "$WRAP" --plan docs/dagents/plans/p.md --from-archive "$TMP/no-archive" --save) 2>"$TMP/eerr"; rc=$?
+check "saved_report_reused: --save of a report holding no plan keeps the saved one" \
+  "$rc:$(cat "$TMP/eerr")|$(cat "$WE/.dagents/sdd/usage-report-p.json")" '0:usage summary missing: no plan in the report|{"plans":[{"plan":"keep"}]}'
+
 # --- the report core, on fixtures built here: one assistant record per line ---
 REPORT="$HERE/../../plugins/dagents/scripts/lib/usage-report.mjs"
 if command -v cygpath >/dev/null 2>&1; then REPORT=$(cygpath -m "$REPORT"); fi

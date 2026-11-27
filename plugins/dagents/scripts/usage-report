@@ -8,9 +8,10 @@
 # markers. --save writes the --format json report of --plan to
 # <primary>/<state>/sdd/usage-report-<plan>.json and prints nothing.
 # When the report cannot be made (no node; for --plan without --from-archive,
-# no marker row for the plan, or no transcript its rows resolve to) it prints
-# `usage summary missing: <reason>` on stderr, nothing on stdout, saves
-# nothing and exits 0.
+# no marker row for the plan, or no transcript its rows resolve to; for
+# --save, a report holding no plan) it prints `usage summary missing:
+# <reason>` on stderr, nothing on stdout, saves nothing (a report saved
+# earlier stays) and exits 0.
 # Exit: 0 printed, saved or missing, 2 usage, else the core's status (1 when
 # --save got no report).
 set -uo pipefail
@@ -129,6 +130,11 @@ dagents_self_ignore "$dir"
 tmp=$(mktemp "$dir/.usage-report-$slug.json.XXXXXX") || exit 1
 "${core[@]}" --format json > "$tmp"
 rc=$?
+# A report holding no plan would replace the one finishing saved.
+if [ "$rc" -eq 0 ] && grep -Eq '^  "plans": \[\],?$' "$tmp"; then
+  rm -f "$tmp"
+  missing "no plan in the report"
+fi
 if [ "$rc" -eq 0 ] && [ -s "$tmp" ] && mv -f "$tmp" "$saved"; then exit 0; fi
 rm -f "$tmp"
 [ "$rc" -ne 0 ] || rc=1
