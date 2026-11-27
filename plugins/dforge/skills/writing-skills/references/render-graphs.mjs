@@ -4,8 +4,8 @@
  * Render graphviz diagrams from a skill's SKILL.md to SVG files.
  *
  * Usage:
- *   ./render-graphs.js <skill-directory>           # Render each diagram separately
- *   ./render-graphs.js <skill-directory> --combine # Combine all into one diagram
+ *   node render-graphs.mjs <skill-directory>           # Render each diagram separately
+ *   node render-graphs.mjs <skill-directory> --combine # Combine all into one diagram
  *
  * Extracts all ```dot blocks from SKILL.md and renders to SVG.
  * Useful for helping your human partner visualize the process flows.
@@ -19,7 +19,7 @@ import { execFileSync } from 'child_process';
 
 function extractDotBlocks(markdown) {
   const blocks = [];
-  const regex = /```dot\n([\s\S]*?)```/g;
+  const regex = /```dot\r?\n([\s\S]*?)```/g;
   let match;
 
   while ((match = regex.exec(markdown)) !== null) {
@@ -87,14 +87,14 @@ function main() {
   const skillDirArg = args.find(a => !a.startsWith('--'));
 
   if (!skillDirArg) {
-    console.error('Usage: render-graphs.js <skill-directory> [--combine]');
+    console.error('Usage: node render-graphs.mjs <skill-directory> [--combine]');
     console.error('');
     console.error('Options:');
     console.error('  --combine    Combine all diagrams into one SVG');
     console.error('');
     console.error('Example:');
-    console.error('  ./render-graphs.js ../executing-plans');
-    console.error('  ./render-graphs.js ../executing-plans --combine');
+    console.error('  node render-graphs.mjs ../executing-plans');
+    console.error('  node render-graphs.mjs ../executing-plans --combine');
     process.exit(1);
   }
 
@@ -148,6 +148,7 @@ function main() {
       console.log(`  Source: ${skillName}_combined.dot`);
     } else {
       console.error('  Failed to render combined diagram');
+      process.exitCode = 1;
     }
   } else {
     // Render each separately
@@ -159,6 +160,7 @@ function main() {
         console.log(`  Rendered: ${block.name}.svg`);
       } else {
         console.error(`  Failed: ${block.name}`);
+        process.exitCode = 1;
       }
     }
   }
