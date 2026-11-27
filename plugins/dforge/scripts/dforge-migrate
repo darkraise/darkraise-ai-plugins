@@ -181,7 +181,7 @@ docs_trees() {
 # when it refused, and docs_at to where the plans are once it is done: the new
 # tree, or in a dry run the tree that would move.
 migrate_docs() {
-  local wt=$1 trees name old new="$1/docs/dforge"
+  local wt=$1 trees name old new="$1/docs/dforge" listed changes
   docs_ok=1 docs_at=""
   trees=$(docs_trees "$wt")
   [ -n "$trees" ] || return 0
@@ -194,8 +194,16 @@ migrate_docs() {
   [ "$trees" != "$new" ] || return 0
   old=$trees name=${trees##*/}
   [ "$dry" -eq 0 ] || docs_at=$old
-  if [ -z "$(g -C "$wt" ls-files -- "docs/$name" | head -n 1)" ]; then mv_plain "$old" "$new" || docs_ok=0; return 0; fi
-  if [ -n "$(g --no-optional-locks -C "$wt" status --porcelain --untracked-files=all -- "docs/$name")" ]; then
+  # Read whole and checked: an empty answer from a git that failed would
+  # read as untracked, or as clean.
+  if ! listed=$(g -C "$wt" ls-files -- "docs/$name") \
+    || ! changes=$(g --no-optional-locks -C "$wt" status --porcelain --untracked-files=all -- "docs/$name"); then
+    refuse "could not read the git status of docs/$name in $wt"
+    docs_ok=0
+    return 0
+  fi
+  if [ -z "$listed" ]; then mv_plain "$old" "$new" || docs_ok=0; return 0; fi
+  if [ -n "$changes" ]; then
     refuse "$old has uncommitted changes; commit or stash them, then run dforge-migrate again"
     docs_ok=0
     return 0

@@ -755,5 +755,17 @@ else
   printf 'skip - a dangling .dforge or .forge link: this system makes no dangling links\n'
 fi
 
+# --- a git status that cannot be read is no clean tree ---
+GS="$TMP/status-fails"; repo "$GS"
+mkdir -p "$GS/docs/forge/specs"
+echo s > "$GS/docs/forge/specs/s.md"
+git -C "$GS" add docs
+git -C "$GS" commit -q -m docs
+GB="$TMP/status-git"; mkdir -p "$GB"
+printf '#!/bin/sh\nst=0 po=0\nfor a in "$@"; do case $a in status) st=1 ;; --porcelain) po=1 ;; esac; done\n[ "$st$po" = 11 ] && { echo "fatal: status refused by the test" >&2; exit 128; }\nexec "%s" "$@"\n' "$(command -v git)" > "$GB/git"
+chmod +x "$GB/git"
+out=$(PATH="$GB:$PATH" migrate "$FM" "$GS" 2>&1); code=$?
+check "a git status that fails: the docs move is refused" "$code $(grep -c 'could not read the git status of docs/forge' <<<"$out") $(exists "$GS/docs/forge/specs/s.md")" "1 1 yes"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
