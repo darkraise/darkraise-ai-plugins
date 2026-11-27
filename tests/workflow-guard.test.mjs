@@ -87,6 +87,17 @@ test('a hook run that cannot read its inputs clears the session marker and stays
   assert.equal(existsSync(marker), false, 'the failed check leaves no stand-down behind');
 });
 
+test('a hook run whose marker cannot be removed still fails open', t => {
+  const w = world(t);
+  w.installs({ ...w.userInstall('dforge'), ...w.userInstall('dagents') });
+  mkdirSync(join(w.data, 'workflow-guard', 's-3'), { recursive: true });
+  writeFileSync(join(w.claude, 'settings.json'), '{ not json');
+  const out = w.run(['--host', 'claude', '--self', 'dagents', '--hook', 'session-start'], JSON.stringify({ session_id: 's-3' }));
+  assert.deepEqual([out.status, out.stdout], [0, '']);
+  assert.equal(out.stderr.trim().split('\n').length, 1);
+  assert.match(out.stderr, /^workflow-guard: /);
+});
+
 test('the conflict block tells a managed self how to disable it', t => {
   const w = world(t);
   w.installs({ ...w.userInstall('dforge'), ...w.userInstall('dagents') });
