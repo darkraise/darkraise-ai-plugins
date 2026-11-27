@@ -15,6 +15,8 @@ check() { # check <name> <got> <want>
 
 TMP="$(mktemp -d)"
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
+# A PATH entry takes the POSIX form: Git Bash splits a C:/ path at its colon.
+path_entry() { if command -v cygpath >/dev/null 2>&1; then cygpath -u "$1"; else printf '%s' "$1"; fi; }
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
@@ -843,7 +845,7 @@ printf '# Register\n\n**Source:** a review\n**Covers:** -\n' > "$REPO/docs/r-stu
 mkdir -p "$TMP/failawk"
 printf '#!/usr/bin/env bash\n[ -z "${COVERS:-}" ] || exit 1\nexec %s "$@"\n' "$(command -v awk)" > "$TMP/failawk/awk"
 chmod +x "$TMP/failawk/awk"
-err=$(PATH="$TMP/failawk:$PATH" ar --session s-1 start --spec "$SPEC" --register docs/r-stuck.md --force 2>&1 >/dev/null)
+err=$(PATH="$(path_entry "$TMP/failawk"):$PATH" ar --session s-1 start --spec "$SPEC" --register docs/r-stuck.md --force 2>&1 >/dev/null)
 check "start --register says when it cannot fill Covers" "$(grep -c 'could not set \*\*Covers:\*\*' <<<"$err"):$(grep -c '^\*\*Covers:\*\* -$' "$REPO/docs/r-stuck.md")" "1:1"
 # --- clear checks whose prompt it stores (row 32) ---
 ar --session s-1 attach --plan docs/plan.md
