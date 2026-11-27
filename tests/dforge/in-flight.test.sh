@@ -87,6 +87,15 @@ result toolu_stop '{"message":"Successfully stopped task: b9 (Run the suite)","t
 out=$(cd "$REPO" && bash "$NEXT" docs/superpowers/plans/2026-10-10-example.md 2>/dev/null); code=$?
 check "everything stopped or finished: next-step exit 0" "$code" "0"
 check "everything stopped or finished: the block prints" "$(grep -c '## Next session' <<<"$out")" "1"
+# A transcript in-flight could not scan is not "nothing running".
+mkdir -p "$TMP/badjq"
+printf '#!/usr/bin/env bash\ncase "$*" in *"Async agent launched"*) exit 5 ;; esac\nexec "%s" "$@"\n' "$(command -v jq)" > "$TMP/badjq/jq"
+chmod +x "$TMP/badjq/jq"
+find "$REPO" -type d -name handoff -prune -exec rm -rf {} +
+printf '## State\n\nx\n' > "$TMP/notes-84.md"
+out=$(cd "$REPO" && PATH="$TMP/badjq:$PATH" bash "$NEXT" --notes "$TMP/notes-84.md" docs/superpowers/plans/2026-10-10-example.md 2>/dev/null); code=$?
+check "next-step: a scan failure is not nothing running" \
+  "$code:$(grep -c '^in-flight: unknown — the transcript could not be scanned; list your background shells and agents by hand$' <<<"$out"):$(find "$REPO" -path '*/handoff/*.md' | grep -c .)" "5:1:0"
 
 # A long session's tool calls outgrow what one environment string can carry.
 fjq -nc 'range(2000) | {type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:("toolu_bulk_" + tostring),name:"Bash",input:{description:("routine step " + tostring + " " + ("x" * 60))}}]}}' >> "$TP"

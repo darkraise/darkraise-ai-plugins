@@ -776,10 +776,18 @@ elif running=$(bash "$(cd "$(dirname "$0")" && pwd)/in-flight" 2>/dev/null); the
   services=$(sed -n 's/^- \([a-z]*\) \([^ ]*\) [^ ]* idle [^ ]* \(.*\) (service)$/\1 \2 (\3)/p' <<<"$running" | awk 'NR > 1 { printf ", " } { printf "%s", $0 }')
   [ -z "$services" ] || services_line="Still running services: $services — stop them with TaskStop before you end the session."
 else
-  if [ $? -eq 1 ]; then
-    printf '%s\n' "$running"
-    fail 5 "not printing the next-step block while background work runs; resolve the list above, then run next-step again"
-  fi
+  case $? in
+    1)
+      printf '%s\n' "$running"
+      fail 5 "not printing the next-step block while background work runs; resolve the list above, then run next-step again" ;;
+    3)
+      # No transcript (Codex, tests) passes; one that could not be scanned
+      # says nothing about what still runs.
+      if grep -q '^in-flight: unknown — the transcript could not be scanned' <<<"$running"; then
+        printf '%s\n' "$running"
+        fail 5 "not printing the next-step block: in-flight could not scan this session's transcript; check your background work by hand, then run next-step again"
+      fi ;;
+  esac
 fi
 
 block=$(
