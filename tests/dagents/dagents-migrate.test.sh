@@ -832,8 +832,8 @@ check "legacy handoffs: a subject that is not a plain .md path is withheld" "$(s
 # latest.md and claimed nothing, and a stored block is replayed as it stands.
 R="$TMP/rrepo"; repo "$R"; RT=$(git -C "$R" rev-parse --show-toplevel)
 mkdir -p "$R/.dagents/handoff" "$TMP/rh-home"
-old_block() { # old_block MARKER-WORDS — an unplanned handoff as the older next-step wrote it in R
-  local old="$RT/.dagents/handoff/latest.md"
+old_block() { # old_block MARKER-WORDS [PATH] — an unplanned handoff as the older next-step wrote it in R, naming itself PATH
+  local old=${2:-$RT/.dagents/handoff/latest.md}
   printf '# Handoff\n\n## Next session\n\n**Status:** Unplanned work: the notes in `%s` are the authority.\n\n```\nStart in `%s` (branch main); its handoff is `%s`. If your working directory is not `%s`, enter it first. Continue the unplanned work recorded in `%s`: Fix the band.\n```\n<!-- next-step: kind=adhoc %s -->\n' "$old" "$RT" "$old" "$RT" "$old" "$1"
 }
 old_block 'session=- done=0 closed=0 subject=- at=1700001000' > "$R/.dagents/handoff/latest.md"
@@ -926,6 +926,13 @@ printf '#!/bin/sh\nst=0 po=0\nfor a in "$@"; do case $a in status) st=1 ;; --por
 chmod +x "$GB/git"
 out=$(HOME="$TMP/kp-home" PATH="$GB:$PATH" migrate "$FM" "$GS" 2>&1); code=$?
 check "a git status that fails: the docs move is refused" "$code $(grep -c 'could not read the git status of docs/forge' <<<"$out") $(exists "$GS/docs/forge/specs/s.md")" "1 1 yes"
+
+# A renamed handoff an older layout wrote names itself under that layout's path.
+RO="$TMP/orepo"; repo "$RO"; ROT=$(git -C "$RO" rev-parse --show-toplevel)
+mkdir -p "$RO/.forge/handoff"
+old_block 'session=- done=0 closed=0 subject=- at=1700001150' "$ROT/.forge/handoff/latest.md" > "$RO/.forge/handoff/latest.md"
+HOME="$TMP/rh-home" migrate "$FM" "$RO" > /dev/null 2>&1
+check "renamed handoff names itself: an older state directory's path is rewritten" "$(grep -c 'latest\.md' "$RO/.dagents/handoff/adhoc-legacy-1700001150.md" 2>&1)" "0"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

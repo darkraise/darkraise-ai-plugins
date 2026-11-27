@@ -503,11 +503,25 @@ legacy_handoffs() {
 marker_of() { grep -a '^<!-- next-step: ' -- "$1" 2>/dev/null | tr -d '\r' | grep ' -->$' | tail -n 1; }
 subject_of() { sed -n 's/.* subject=\(.*\) at=-\{0,1\}[0-9][0-9]* -->$/\1/p' <<<"$1"; }
 
-# rewrite_moved FILE OLD — FILE, a handoff just renamed from OLD, made to name
-# itself: its text's OLD becomes FILE, and a first prompt without a claim step
-# gets the one next-step writes now. A draft, adhoc or kept handoff's stored
-# block is replayed as it stands, so its prompt would otherwise send the next
-# session to OLD with nothing to claim.
+# older_spellings FILE — FILE, a latest.md, then the path it had under each
+# older state directory, one per line: an older plugin wrote the handoff
+# there, naming itself by that path.
+older_spellings() {
+  local f=$1 base
+  printf '%s\n' "$f"
+  case $f in
+    */.dagents/handoff/latest.md)
+      base=${f%/.dagents/handoff/latest.md}
+      printf '%s\n' "$base/.dforge/handoff/latest.md" "$base/.forge/handoff/latest.md" "$base/.superpowers/handoff/latest.md" ;;
+  esac
+}
+
+# rewrite_moved FILE OLD — FILE, a handoff just renamed from OLD (paths, one
+# per line), made to name itself: each OLD in its text becomes FILE, and a
+# first prompt without a claim step gets the one next-step writes now. A
+# draft, adhoc or kept handoff's stored block is replayed as it stands, so
+# its prompt would otherwise send the next session to OLD with nothing to
+# claim.
 rewrite_moved() {
   local file=$1 old=$2 key clause="" tmp
   key=${file##*/}; key=${key%.md}
@@ -517,10 +531,14 @@ rewrite_moved() {
   esac
   tmp=$(mktemp "$file.dagents-migrate.XXXXXX") || return 1
   OLD=$old NEW=$file CLAUSE=$clause awk '
+    BEGIN { n = split(ENVIRON["OLD"], olds, "\n") }
     {
-      out = ""; s = $0
-      while ((i = index(s, ENVIRON["OLD"])) > 0) { out = out substr(s, 1, i - 1) ENVIRON["NEW"]; s = substr(s, i + length(ENVIRON["OLD"])) }
-      $0 = out s
+      for (k = 1; k <= n; k++) {
+        if (olds[k] == "") continue
+        out = ""; s = $0
+        while ((i = index(s, olds[k])) > 0) { out = out substr(s, 1, i - 1) ENVIRON["NEW"]; s = substr(s, i + length(olds[k])) }
+        $0 = out s
+      }
     }
     /^Start in `/ && ENVIRON["CLAUSE"] != "" && index($0, "scripts/handoff claim") == 0 && index($0, "--key ") == 0 {
       i = index($0, "enter it first. ")
@@ -568,7 +586,7 @@ migrate_latest() {
     refuse "$as is the handoff for $key, and $target already exists; keep one by hand, then run dagents-migrate again"
   elif [ "$dry" -eq 1 ] || mv -- "$f" "$target"; then
     done_move "$as" "$target"
-    [ "$dry" -eq 1 ] || rewrite_moved "$target" "$f" \
+    [ "$dry" -eq 1 ] || rewrite_moved "$target" "$(older_spellings "$f")" \
       || printf 'dagents-migrate: %s could not be rewritten to name itself; its first prompt still names %s\n' "$target" "$f"
   else
     refuse "could not move $f to $target"
