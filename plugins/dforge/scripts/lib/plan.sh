@@ -549,12 +549,14 @@ plan_require_same_project() {
 # commit touches code); `rewritten <head>` (<head> is no commit, or no
 # ancestor of HEAD). <from> is <head>, or, when <head> reached HEAD through a
 # merge, off its first-parent chain, that merge: only what came after it is
-# unreviewed. A clean line with no commits clause, or a DIR where HEAD does not
+# unreviewed. A merge that resolved a conflict in a code path (a combined-diff
+# `@@@` hunk) made edits of its own, so <from> is then its first parent. A
+# clean line with no commits clause, or a DIR where HEAD does not
 # resolve, reads `current`: git cannot judge it. A failed walk of the history
 # after <head> reads `stale <head>`. The ledger records no branch, so the
 # first-parent chain is the only base-branch test.
 plan_final_review_state() {
-  local dir line head full now top docs path changed from desc
+  local dir line head full now changed from desc resolved
   dir=$(dr_native_path "${2:-$PWD}")
   line=$(tr -d '\r' < "$1" 2>/dev/null | grep '^Final review: clean' | tail -n 1)
   if [ -z "$line" ]; then echo none; return 0; fi
@@ -578,18 +580,34 @@ plan_final_review_state() {
     from=$(printf '%s\n--\n%s\n' "$desc" "$chain" | tr -d '\r' |
       awk '$0 == "--" { past = 1; next } !past { s[$0] = 1; next } $0 in s { m = $0 } END { print m }')
     [ -n "$from" ] || { echo "stale $head"; return 0; }
+    resolved=$(git -C "$dir" -c core.quotepath=off diff-tree --cc -p --no-commit-id "$from" 2>/dev/null |
+      awk '/^diff --cc / { f = substr($0, 11); next } /^@@@ / && f != "" && !seen[f]++ { print f }') \
+      || { echo "stale $head"; return 0; }
+    resolved=${resolved//$'\r'/}
+    if [ -n "$resolved" ] && _plan_touches_code "$dir" "$resolved"; then
+      from=$(git -C "$dir" rev-parse --verify -q "$from^1" 2>/dev/null | tr -d '\r')
+      [ -n "$from" ] || { echo "stale $head"; return 0; }
+    fi
     head=$(git -C "$dir" rev-parse --short "$from" 2>/dev/null | tr -d '\r')
     [ -n "$head" ] || head=$from
   fi
   changed=$(git -C "$dir" log --format= --name-only "$from..$now" 2>/dev/null) || { echo "stale $head"; return 0; }
   changed=$(tr -d '\r' <<<"$changed" | sed '/^$/d')
   if [ -z "$changed" ]; then echo current; return 0; fi
-  # Under darkmem documents no committed path is a docs path.
-  if [ "$(dforge_docs_store "$dir")" != local ]; then echo "stale $head"; return 0; fi
-  top=$(dr_native_path "$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null | tr -d '\r')")
-  docs=$(dr_native_path "$(dforge_docs_root "$dir")")
+  if _plan_touches_code "$dir" "$changed"; then echo "stale $head"; else echo current; fi
+}
+
+# _plan_touches_code DIR PATHS — true when a path of the newline-separated
+# PATHS, relative to DIR's top level, lies outside the docs root. Under darkmem
+# documents no committed path is a docs path, so any path is code.
+_plan_touches_code() {
+  local top docs path
+  [ "$(dforge_docs_store "$1")" = local ] || return 0
+  top=$(dr_native_path "$(git -C "$1" rev-parse --show-toplevel 2>/dev/null | tr -d '\r')")
+  docs=$(dr_native_path "$(dforge_docs_root "$1")")
   while IFS= read -r path; do
-    case "$top/$path" in "${docs%/}"/*) ;; *) echo "stale $head"; return 0 ;; esac
-  done <<<"$changed"
-  echo current
+    [ -n "$path" ] || continue
+    case "$top/$path" in "${docs%/}"/*) ;; *) return 0 ;; esac
+  done <<<"$2"
+  return 1
 }

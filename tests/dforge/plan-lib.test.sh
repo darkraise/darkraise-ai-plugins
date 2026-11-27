@@ -374,5 +374,26 @@ check "plan_primary_root: a submodule is its own primary" \
 check "plan_task_paths: a comma line range is dropped" \
   "$(printf '%s\n' '- Modify: `src/view.tsx:10-20,30-40`' | plan_task_paths)" "src/view.tsx"
 
+# --- plan_final_review_state: a merge's own conflict resolution ---
+FR="$TMP/fr"
+gq init -q "$FR" && printf 'old\n' > "$FR/a.sh" && printf 'b\n' > "$FR/b.sh"
+gq -C "$FR" add a.sh b.sh && gq -C "$FR" commit -q -m base
+frbase=$(git -C "$FR" rev-parse --short HEAD)
+gq -C "$FR" checkout -q -b feat && printf 'feat\n' > "$FR/a.sh" && gq -C "$FR" commit -q -am feat
+frhead=$(git -C "$FR" rev-parse --short HEAD)
+gq -C "$FR" checkout -q main && printf 'main\n' > "$FR/a.sh" && gq -C "$FR" commit -q -am main
+gq -C "$FR" merge -q feat >/dev/null 2>&1
+printf 'new code\n' > "$FR/a.sh" && gq -C "$FR" commit -q -am "merge feat"
+printf 'Final review: clean (commits %s..%s)\n' "$frbase" "$frhead" > "$TMP/fr-ledger.md"
+check "final review: a merge's own conflict resolution reads stale" \
+  "$(HOME="$TMP/fr-home" plan_final_review_state "$TMP/fr-ledger.md" "$FR")" "stale $(git -C "$FR" rev-parse --short HEAD^1)"
+gq -C "$FR" checkout -q -b feat2 HEAD && printf 'b2\n' > "$FR/b.sh" && gq -C "$FR" commit -q -am feat2
+fr2=$(git -C "$FR" rev-parse --short HEAD)
+gq -C "$FR" checkout -q main && printf 'c\n' > "$FR/c.sh" && gq -C "$FR" add c.sh && gq -C "$FR" commit -q -m c
+gq -C "$FR" merge -q --no-edit feat2 >/dev/null 2>&1
+printf 'Final review: clean (commits %s..%s)\n' "$frbase" "$fr2" > "$TMP/fr-ledger.md"
+check "final review: a clean merge of the reviewed head stays current" \
+  "$(HOME="$TMP/fr-home" plan_final_review_state "$TMP/fr-ledger.md" "$FR")" "current"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
