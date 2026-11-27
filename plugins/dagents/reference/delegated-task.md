@@ -932,8 +932,10 @@ writing nothing, when `lens-route` does. Then run the mechanics yourself:
   named after the brief. Write the assigned line
   `Task <N>: implementer <agent> (assigned; base <sha7>)`.
 - **§2.** On a DONE report, run
-  `bash <plugin-root>/scripts/suite-run -- <suite command>` yourself in the
-  background at the task's head and treat a non-baseline failure as §3's
+  `bash <plugin-root>/scripts/suite-run -- bash -c '<suite command>'`
+  yourself in the background at the task's head (suite-run takes
+  `COMMAND [ARG ...]`, so an unwrapped `a && b` runs `b` unbounded and
+  unrecorded) and treat a non-baseline failure as §3's
   Important finding. `<suite command>` is resolved as §1's Suite command
   says: the task check, and under a `none` task check the integration check
   on the tasks §1 schedules, and no suite on the others.
