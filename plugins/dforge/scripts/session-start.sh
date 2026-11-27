@@ -36,10 +36,10 @@ transcript_path="" cwd=""
 
 if command -v jq >/dev/null 2>&1 && [ -n "$stdin_json" ] \
    && jq -e . >/dev/null 2>&1 <<<"$stdin_json"; then
-  session_id=$(jq -r '.session_id // empty' <<<"$stdin_json")
-  transcript_path=$(jq -r '.transcript_path // empty' <<<"$stdin_json")
-  cwd=$(jq -r '.cwd // empty' <<<"$stdin_json")
-  source_event=$(jq -r '.source // empty' <<<"$stdin_json")
+  session_id=$(jq -r '.session_id // empty' <<<"$stdin_json" | tr -d '\r')
+  transcript_path=$(jq -r '.transcript_path // empty' <<<"$stdin_json" | tr -d '\r')
+  cwd=$(jq -r '.cwd // empty' <<<"$stdin_json" | tr -d '\r')
+  source_event=$(jq -r '.source // empty' <<<"$stdin_json" | tr -d '\r')
   # Every record below lives under $HOME; with HOME empty its paths would start
   # at /.claude, so nothing is persisted.
   if [ -n "${HOME:-}" ] && [ -n "$transcript_path" ] && [ -n "$cwd" ]; then

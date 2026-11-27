@@ -65,6 +65,21 @@ check "shared cwd: the first session keeps its own record" \
 check "shared cwd: the second session has its own record" \
   "$(jq -r '.transcript_path' "$BYID/s-456.json" 2>/dev/null)" "/tmp/second-transcript.jsonl"
 
+# --- a native jq ends its output lines with CR (Git Bash): the hook strips it ---
+CRJQ="$TMP/crjq"; mkdir -p "$CRJQ"
+cat > "$CRJQ/jq" <<CRJQ_EOF
+#!/usr/bin/env bash
+"$(command -v jq)" "\$@" | sed 's/\$/\r/'
+exit "\${PIPESTATUS[0]}"
+CRJQ_EOF
+chmod +x "$CRJQ/jq"
+HOME_CR="$TMP/cr"; mkdir -p "$HOME_CR"
+MSYS_NO_PATHCONV=1 jq -n --arg tp /tmp/cr-transcript.jsonl --arg cwd "$TMP" \
+  '{hook_event_name:"SessionStart",session_id:"s-cr",transcript_path:$tp,cwd:$cwd,source:"startup"}' \
+  | PATH="$CRJQ:$PATH" HOME="$HOME_CR" bash "$SCRIPT" >/dev/null 2>&1
+check "a jq that ends lines with CR: session-start keys its records by the clean id" \
+  "$([ -f "$HOME_CR/.claude/dforge/sessions/by-id/s-cr.json" ] && echo yes || echo no)|$([ -f "$HOME_CR/.claude/dforge/sessions/turns/s-cr.since" ] && echo yes || echo no)" "yes|yes"
+
 # --- records a month old are pruned; the session's own and recent ones stay ---
 printf '{}\n' > "$BYID/s-old.json"
 printf '{}\n' > "$HOME_A/.claude/dforge/sessions/D--gone-worktree.json"

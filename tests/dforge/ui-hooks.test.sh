@@ -97,6 +97,18 @@ check "stop: the reason names the changed file" "$(jq -r .reason <<<"$out" | gre
 check "stop: the reason names the pending line" "$(jq -r .reason <<<"$out" | grep -c 'UI proof: pending')" "1"
 check "stop: tells the user what happens next" "$(jq -r .systemMessage <<<"$out")" "dforge: Claude is proving the UI changes before it stops; nothing is needed from you."
 check "stop: the reason opens with the action and ends with the failure" "$(jq -r .reason <<<"$out" | grep -cE '^Run the dforge:ui-ux Prove phase.*Failure: .*src/App.tsx')" "1"
+CRJQ="$TMP/crjq"; mkdir -p "$CRJQ"
+cat > "$CRJQ/jq" <<CRJQ_EOF
+#!/usr/bin/env bash
+"$(command -v jq)" "\$@" | sed 's/\$/\r/'
+exit "\${PIPESTATUS[0]}"
+CRJQ_EOF
+chmod +x "$CRJQ/jq"
+PATH="$CRJQ:$PATH" prompt s-cr9
+printf '// change cr\n' >> src/App.tsx
+out=$(PATH="$CRJQ:$PATH" stop s-cr9 'Done.')
+check "a jq that ends lines with CR: a UI change without proof is held" "$(decision "$(tr -d '\r' <<<"$out")")" "block"
+git checkout -q src/App.tsx
 check "stop: the retry passes" "$(stop s-2 'Done.' true)" ""
 check "stop: the pending line passes" "$(stop s-2 $'Done.\n\nUI proof: pending — no browser on this host')" ""
 check "stop: a hyphen, backticks and trailing blank lines pass" "$(stop s-2 $'Done.\n`UI proof: pending - no browser`\n\n')" ""

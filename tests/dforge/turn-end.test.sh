@@ -558,6 +558,7 @@ check "a turn in a removed worktree that edits the roadmap is not held" "$(stop_
 sleep 1; prompt s-tr5 "$TRP"
 check "nothing changed, nothing held" "$(stop_at s-tr5 "$TRP" 'Done.')" ""
 
+
 # A transition turn is released by the block next-step wrote, by finishing's
 # menu, and by nothing hand-typed; an uncommitted index edit counts as its own.
 TRL="$TRP/.dforge/handoff/stored.md"
@@ -730,6 +731,22 @@ write_ledger 'Task 1: complete (commits a..b, review clean)'
 out=$(stop s-hp 'Task 1 is done.')
 check "handoff due, a plan advanced: the plan's own reason stands" \
   "$(jq -r .reason <<<"$out" | grep -c 'advanced without a next step'):$(jq -r .reason <<<"$out" | grep -c 'budget note')" "1:0"
+
+# --- a native jq ends its output lines with CR (Git Bash): the hooks strip it ---
+CRJQ="$TMP/crjq"; mkdir -p "$CRJQ"
+cat > "$CRJQ/jq" <<CRJQ_EOF
+#!/usr/bin/env bash
+"$(command -v jq)" "\$@" | sed 's/\$/\r/'
+exit "\${PIPESTATUS[0]}"
+CRJQ_EOF
+chmod +x "$CRJQ/jq"
+sleep 1; PATH="$CRJQ:$PATH" prompt s-cr
+check "a jq that ends lines with CR: turn-start stamps the clean id" \
+  "$([ -f "$HOME/.claude/dforge/sessions/turns/s-cr" ] && echo yes || echo no)" "yes"
+write_ledger 'Task 1: complete (commits a..b, review clean)'
+out=$(PATH="$CRJQ:$PATH" stop s-cr 'Task 1 is done.')
+check "a jq that ends lines with CR: a mid-plan summary is still held" "$(decision "$(tr -d '\r' <<<"$out")")" "block"
+
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
