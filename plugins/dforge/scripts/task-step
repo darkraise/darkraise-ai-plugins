@@ -893,8 +893,8 @@ restore_hints() {
     elif ! [[ $h =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]; then
       printf '  restore: none: the recorded content hash is no object id; restore it by hand\n'
     elif git -C "$root" cat-file -e "$h" 2>/dev/null; then
-      printf '  restore: git -C %q cat-file --filters --path=%q %q > %q && mv -f -- %q %q\n' \
-        "$root" "$p" "$h" "$root/$p.dforge-restore" "$root/$p.dforge-restore" "$root/$p"
+      printf '  restore: rm -f -- %q && git -C %q cat-file --filters --path=%q %q > %q && mv -f -- %q %q\n' \
+        "$root/$p.dforge-restore" "$root" "$p" "$h" "$root/$p.dforge-restore" "$root/$p.dforge-restore" "$root/$p"
     else
       printf '  restore: none: its content at review time (%s) was not stored; restore it by hand\n' "$h"
     fi
