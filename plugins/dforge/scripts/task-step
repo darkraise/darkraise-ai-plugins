@@ -1029,7 +1029,7 @@ settle_item() {
       code=$(run_at_base "$base" "$cmd" "$log") || return 1
       # Only an exit the command itself produced answers pass or fail: a
       # timeout, a command that cannot run and one that is not found go to the seat.
-      case $code in 124 | 126 | 127) return 1 ;; esac
+      ! suite_unfinished "$code" || return 1
       got=fail; [ "$code" != 0 ] || got=pass
       res=mismatch; [ "$got" != "$want" ] || res=match
       printf 'baseline\texit %s, log %s\t%s\tbaseline %s, expect %s\n' "$code" "$log" "$res" "$cmd" "$want" ;;
