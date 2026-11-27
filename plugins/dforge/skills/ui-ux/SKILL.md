@@ -102,7 +102,8 @@ platform guide, seed the worst-case data, walk every flow by pointer and by
 keyboard at every viewport and theme, force every state, run the automated
 checks, screenshot each item, write the proof report, stamp it with
 `ui-proof stamp`, and have the judge seat review it. Run the walkthrough in
-the session or an implementer seat: judge seats have no browser.
+the session: a seat cannot dispatch the judge or hear your human partner
+accept an `unverifiable` row, and judge seats have no browser.
 
 ## The gate
 

@@ -1,7 +1,8 @@
 # The walkthrough
 
-The Prove phase. Run it in the session or in an implementer seat: judge seats
-have no browser or device tools. Every step writes evidence the proof report
+The Prove phase. Run it in the session: a seat cannot dispatch the judge or
+hear your human partner accept an `unverifiable` row, and judge seats have no
+browser or device tools. Every step writes evidence the proof report
 cites. A step you cannot run becomes an `unverifiable` row with its reason,
 never a silent skip.
 
