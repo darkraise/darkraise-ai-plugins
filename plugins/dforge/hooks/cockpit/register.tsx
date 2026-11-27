@@ -5327,9 +5327,11 @@ function isDriveHost(): boolean {
 // A `..` segment is refused, not resolved: `<dir>/x/../f` is not `<dir>/f`
 // when x is a symbolic link, which the guard cannot see.
 function canonPath(path: string): string | null {
-  let rest = path.replace(/\\/g, '/')
+  // Only a drive host separates with a backslash; on POSIX it is part of a name.
+  const isDrive = isDriveHost()
+  let rest = isDrive ? path.replace(/\\/g, '/') : path
   let drive = ''
-  const letter = isDriveHost() ? (/^\/([A-Za-z])\//.exec(rest) ?? /^([A-Za-z]):\//.exec(rest)) : null
+  const letter = isDrive ? (/^\/([A-Za-z])\//.exec(rest) ?? /^([A-Za-z]):\//.exec(rest)) : null
   if (letter !== null) {
     drive = `${(letter[1] ?? '').toLowerCase()}:`
     rest = rest.slice(2)
