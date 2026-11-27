@@ -908,7 +908,7 @@ restore_hints() {
 # check_tracked: the check line, after comparing the snapshot the review step
 # recorded with its checkout now. Exits 6 on a change, naming it.
 check_tracked() {
-  local vstate=$1 snap dir old new changed
+  local vstate=$1 snap dir old new changed recorded now
   snap=$(jq -c '.reviewCheck // empty' "$vstate" | tr -d '\r') || die "cannot read $vstate"
   # A task's state may come from a review step that predates the check.
   if [ -z "$snap" ]; then
@@ -930,7 +930,10 @@ check_tracked() {
   jq -c '.dirty' <<<"$snap" > "$TMP/recorded" || die "cannot read $vstate"
   dirty_list "$dir" > "$TMP/now" || die "cannot list the tracked changes in $dir"
   # An entry an older step file recorded without a mode compares on its hash.
-  changed=$(jq -r -n --slurpfile r "$TMP/recorded" --slurpfile n "$TMP/now" '
+  recorded=$TMP/recorded now=$TMP/now
+  # jq.exe cannot open the POSIX form of a temporary path.
+  if command -v cygpath >/dev/null 2>&1; then recorded=$(cygpath -m "$recorded"); now=$(cygpath -m "$now"); fi
+  changed=$(jq -r -n --slurpfile r "$recorded" --slurpfile n "$now" '
     ($r[0] | map({key: .path, value: .}) | from_entries) as $R
     | ($n[0] | map({key: .path, value: .}) | from_entries) as $N
     | ([$R, $N | keys[]] | unique)[] as $p
