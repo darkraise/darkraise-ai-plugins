@@ -27,6 +27,8 @@ lacks() { # lacks <name> <text> <needle>
 
 TMP=$(mktemp -d)
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
+# A PATH entry takes the POSIX form: Git Bash splits a C:/ path at its colon.
+path_entry() { if command -v cygpath >/dev/null 2>&1; then cygpath -u "$1"; else printf '%s' "$1"; fi; }
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
@@ -270,7 +272,7 @@ exec "$(command -v git)" "\$@"
 SHIM
 chmod +x "$TMP/shim/git"
 before=$(runs)
-out=$(cd "$REPO" && PATH="$TMP/shim:$PATH" bash "$SUITE" -- bash "$TMP/probe.sh" 0 "$TMP/out-tap-pass" 2>&1); rc=$?
+out=$(cd "$REPO" && PATH="$(path_entry "$TMP/shim"):$PATH" bash "$SUITE" -- bash "$TMP/probe.sh" 0 "$TMP/out-tap-pass" 2>&1); rc=$?
 check "a HEAD switch during the clean check runs the command" "$(runs)" "$((before + 1))"
 lacks "a HEAD switch during the clean check: no reuse" "$out" "suite: reused pass"
 

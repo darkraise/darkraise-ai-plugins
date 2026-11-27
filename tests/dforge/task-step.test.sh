@@ -29,6 +29,8 @@ check() { # check <name> <got> <want>
 
 TMP=$(mktemp -d)
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
+# A PATH entry takes the POSIX form: Git Bash splits a C:/ path at its colon.
+path_entry() { if command -v cygpath >/dev/null 2>&1; then cygpath -u "$1"; else printf '%s' "$1"; fi; }
 # sdd-workspace and task-step print the form git gives, which native jq.exe can
 # open.
 winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
@@ -1184,11 +1186,11 @@ if want start; then
   mkdir -p "$TMP/shim"
   printf '%s\n' '#!/usr/bin/env bash' 'case "$*" in *.task-5-step.json.*) exit 1 ;; esac' "exec $(command -v mktemp) \"\$@\"" > "$TMP/shim/mktemp"
   chmod +x "$TMP/shim/mktemp"
-  out=$(PATH="$TMP/shim:$PATH" bash "$STEP" review docs/plan.md 5 2>"$TMP/err"); rc=$?
+  out=$(PATH="$(path_entry "$TMP/shim"):$PATH" bash "$STEP" review docs/plan.md 5 2>"$TMP/err"); rc=$?
   check "review: a step state that cannot be written fails" "$rc:$(grep -c 'cannot update' "$TMP/err")" "2:1"
   step review docs/plan.md 5
   echo w > w5.txt && git add w5.txt && git commit -qm "feat: add w5"
-  out=$(PATH="$TMP/shim:$PATH" bash "$STEP" review docs/plan.md 5 2>"$TMP/err"); rc=$?
+  out=$(PATH="$(path_entry "$TMP/shim"):$PATH" bash "$STEP" review docs/plan.md 5 2>"$TMP/err"); rc=$?
   check "review: a review head that cannot be recorded fails" "$rc:$(grep -c 'cannot update' "$TMP/err")" "2:1"
 fi
 

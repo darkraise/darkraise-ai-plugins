@@ -22,6 +22,8 @@ has() { # has <name> <text> <needle>
 
 TMP=$(mktemp -d)
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
+# A PATH entry takes the POSIX form: Git Bash splits a C:/ path at its colon.
+path_entry() { if command -v cygpath >/dev/null 2>&1; then cygpath -u "$1"; else printf '%s' "$1"; fi; }
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
@@ -63,7 +65,7 @@ printf '%s\n' "$TMP/fixed"
 EOF
 chmod +x "$TMP/shim/mktemp"
 printf 'keep\n' > "$TMP/fixed.err"
-PATH="$TMP/shim:$PATH" mirror "$TMP/none.md"
+PATH="$(path_entry "$TMP/shim"):$PATH" mirror "$TMP/none.md"
 check "a planted sibling of the temp file is not written" "$rc:$(cat "$TMP/fixed.err" 2>/dev/null)" "0:keep"
 rm -f "$TMP/fixed" "$TMP/fixed.err"
 
