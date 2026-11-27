@@ -58,6 +58,9 @@ agree "the default globs match as uiux_is_ui does"
 printf '# UI profile\n\n**UI paths:** `src/ui/*` `app/?.ts` `[ab]x/*.c` `[!z]y.go` `*\\(1\\).html` `w [[]x].scss`\n' > docs/dagents/ui-ux/profile.md
 agree "?, [..], [!..] and escapes match as uiux_is_ui does"
 rm docs/dagents/ui-ux/profile.md
+printf '# UI profile\n\n**UI paths:** `*[[:alpha:]].tsx` `[[:lower:]]*.vue` `src/[![:digit:]]*`\n' > docs/dagents/ui-ux/profile.md
+agree "POSIX classes match as uiux_is_ui does"
+rm docs/dagents/ui-ux/profile.md
 big=$(awk 'BEGIN { for (i = 0; i < 50000; i++) printf "src/m%d/f%d.%s\n", i % 500, i, (i % 10 ? "ts" : "tsx") }')
 start=$SECONDS
 n=$( (. "$HERE/../../plugins/dagents/scripts/lib/ui-ux.sh"; uiux_filter "$REPO" <<<"$big") | grep -c .)
