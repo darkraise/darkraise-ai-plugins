@@ -787,9 +787,12 @@ export function reportPlan(plan, rows, opts, prices, foreign = new Map()) {
 
 export function report(opts) {
   const prices = loadPrices();
-  const archived = archiveRows(opts.fromArchive);
+  const marked = readMarkers(opts.markers);
+  // A task the markers record is measured from them, not inferred again.
+  const held = new Set(marked.map((r) => `${path.basename(r.plan)}\t${r.task}`));
+  const archived = archiveRows(opts.fromArchive).filter((r) => !held.has(`${r.plan}\t${r.task}`));
   archived.forEach((r, i) => { r.order = 1e15 + i; });
-  const rows = [...readMarkers(opts.markers), ...archived]
+  const rows = [...marked, ...archived]
     .sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : a.order - b.order));
   const byPlan = new Map();
   for (const r of rows) {

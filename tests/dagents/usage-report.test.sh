@@ -192,5 +192,18 @@ jq -nc '{type: "assistant", isSidechain: true, timestamp: "2026-01-01T00:00:12Z"
 J=$(node "$REPORT" --markers "$DS/markers.tsv" --transcripts "$DS/proj" --format json 2>/dev/null)
 check "outside_subagents: one inside a deferred task's slice is not outside" "$(q "$J" '.plans[0].outside | [.turns, .input]')" "[0,0]"
 
+# --- archive_inferred: a task the markers record ---
+AR="$TMP/arch"; mkdir -p "$AR/-r-x"; f="$AR/-r-x/a1.jsonl"
+printf 'session\tproject\na1\t/r/x\n' > "$AR/manifest.tsv"
+for t in 1 2; do
+  say "$f" "o$t" "2026-11-01T10:0${t}:00Z" 1 "" "bash /p/scripts/task-brief --open docs/dforge/plans/2026-11-01-alpha.md $t"
+  say "$f" "c$t" "2026-11-01T10:0${t}:30Z" 1 "" "bash /p/scripts/task-close docs/dforge/plans/2026-11-01-alpha.md $t x"
+done
+{ mark open 2026-11-01T10:01:00Z docs/dforge/plans/2026-11-01-alpha.md 1 a1 0
+  mark close 2026-11-01T10:02:40Z docs/dforge/plans/2026-11-01-alpha.md 1 a1 "$(at "$f")"; } > "$AR/markers.tsv"
+J=$(node "$REPORT" --markers "$AR/markers.tsv" --transcripts "$AR" --from-archive "$AR" --format json 2>/dev/null)
+check "archive_inferred: a task the markers record is not inferred again" \
+  "$(q "$J" '[.plans[] | select(.plan == "2026-11-01-alpha.md") | .tasks[].tasks[]]')" "[2]"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
