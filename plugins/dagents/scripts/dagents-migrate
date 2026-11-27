@@ -222,13 +222,15 @@ migrate_docs() {
   fi
 }
 
-OLDER_NAMES_RE='(^|[^A-Za-z0-9_-])\.(superpowers|forge)([/[:space:]*]|$)|docs/(superpowers|forge)([/[:space:]*]|$)'
-DFORGE_NAMES_RE='(^|[^A-Za-z0-9_-])\.dforge([/[:space:]*]|$)|docs/dforge([/[:space:]*]|$)'
+OLDER_NAMES_RE='(^|[/![:space:]])\.(superpowers|forge)([/[:space:]*]|$)|docs/(superpowers|forge)([/[:space:]*]|$)'
+DFORGE_NAMES_RE='(^|[/![:space:]])\.dforge([/[:space:]*]|$)|docs/dforge([/[:space:]*]|$)'
 
 # renamed_lines FILE MODE — what rewrite_names would leave in FILE. A line
-# naming .dforge or docs/dforge always takes MODE add.
+# naming .dforge or docs/dforge always takes MODE add. A directory name starts
+# a line or follows /, ! or whitespace: *.forge names files by extension and
+# stays.
 renamed_lines() {
-  sed -E -e 's#(^|[^A-Za-z0-9_-])\.(superpowers|forge)([/[:space:]*]|$)#\1.dagents\3#g' \
+  sed -E -e 's#(^|[/![:space:]])\.(superpowers|forge)([/[:space:]*]|$)#\1.dagents\3#g' \
          -e 's#docs/(superpowers|forge)([/[:space:]*]|$)#docs/dagents\2#g' "$1" \
     | awk -v mode="$2" '
       FILENAME == ARGV[1] { old[FNR] = $0; have[$0] = 1; n = FNR; next }
@@ -246,7 +248,7 @@ renamed_lines() {
             if (old[i] !~ /^[[:space:]]*#/ && !(new[i] in have)) { print new[i]; have[new[i]] = 1 }
           } else if (!(new[i] in have)) { print new[i]; have[new[i]] = 1 }
         }
-      }' "$1" <(sed -E -e 's#(^|[^A-Za-z0-9_-])\.dforge([/[:space:]*]|$)#\1.dagents\2#g' \
+      }' "$1" <(sed -E -e 's#(^|[/![:space:]])\.dforge([/[:space:]*]|$)#\1.dagents\2#g' \
                        -e 's#docs/dforge([/[:space:]*]|$)#docs/dagents\1#g' "$1") -
 }
 
