@@ -2997,7 +2997,22 @@ const SEND_LIMIT_MS = 8000
  */
 async function notify($: EngineInterface, event: NotifyEvent, editId?: string, onSent?: (id: string) => Promise<void>, isDue?: () => boolean): Promise<void> {
   if (!S.kinds.includes(event.kind)) return
-  S.outbox = S.outbox.then(() => (isDue?.() === false ? undefined : deliver($, event, editId, onSent))).catch(() => undefined)
+  // Where the event happened, read now: a /resume while messages wait must not relabel them.
+  const queued = await queuedPlace($).catch(() => ({ repo: null, branch: null, account: null }))
+  S.outbox = S.outbox.then(() => (isDue?.() === false ? undefined : deliver($, event, queued, editId, onSent))).catch(() => undefined)
+}
+
+// The repository, branch and account a message names, as they are when it is queued.
+async function queuedPlace($: EngineInterface): Promise<Pick<NotifyPlace, 'repo' | 'branch' | 'account'>> {
+  const git = await read($, repo)
+  const at = await read($, place)
+  const who = await read($, account)
+  const root = S.where.primary ?? at?.root ?? null
+  return {
+    repo: root === null ? null : (root.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? null),
+    branch: git?.branch ?? null,
+    account: who?.key ?? null,
+  }
 }
 
 // Waits no longer than NOTIFY_WAIT_MS for the messages queued so far.
@@ -3011,21 +3026,17 @@ async function flushOutbox($: EngineInterface) {
 }
 
 // Sends one queued event; the message id goes to `onSent` when Discord took it.
-async function deliver($: EngineInterface, event: NotifyEvent, editId?: string, onSent?: (id: string) => Promise<void>) {
+async function deliver(
+  $: EngineInterface,
+  event: NotifyEvent,
+  queued: Pick<NotifyPlace, 'repo' | 'branch' | 'account'>,
+  editId?: string,
+  onSent?: (id: string) => Promise<void>,
+) {
   const state = await read($, notifier)
   if (state.url === null) return
   await readSender($)
-  const git = await read($, repo)
-  const at = await read($, place)
-  const who = await read($, account)
-  const root = S.where.primary ?? at?.root ?? null
-  const placeNow: NotifyPlace = {
-    host: S.where.host,
-    repo: root === null ? null : (root.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? null),
-    branch: git?.branch ?? null,
-    tmux: S.where.tmux,
-    account: who?.key ?? null,
-  }
+  const placeNow: NotifyPlace = { host: S.where.host, ...queued, tmux: S.where.tmux }
   const body = discordBody(event, placeNow, { mention: state.mention, isBrief: S.isBrief, now: await $.clock.now() })
   const sent = await sendDiscord($, state.url, body, editId)
   const stamp = await $.clock.now()
