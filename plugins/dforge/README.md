@@ -1030,6 +1030,18 @@ before implementation.
 /plugin install dforge@darkraise
 ```
 
+On Codex:
+
+```text
+codex plugin marketplace add https://github.com/darkraise/darkraise-ai-plugins.git
+codex plugin add dforge@darkraise
+```
+
+Register the repository root (its Git URL or a checkout's absolute path), not
+the catalog file, so root discovery selects `.agents/plugins/marketplace.json`.
+The Codex manifest declares no hooks, so the cockpit and the Stop hooks do not
+run there; see [native-codex.md](reference/native-codex.md).
+
 An installed copy stays at the version it was installed at. To take a new
 release, run `claude plugin update dforge@darkraise` and start a new session
 (or run `/reload-plugins`).
@@ -1413,10 +1425,15 @@ frozen at 6.3.0 with no upstream sync, and
 ## Tests
 
 ```bash
-for t in tests/dforge/*.test.sh; do bash "$t"; done
+node scripts/test-all.mjs
 ```
 
-Requires `jq` and `git`. No model calls: the reviewer suites run against a stub
+Run it from the repository root. It runs every `tests/dforge/*.test.sh` and
+`*.acceptance.sh` suite, the root and dflow `node:test` suites,
+`scripts/validate-repository.mjs`, and, when the `claude` CLI is on PATH,
+`claude plugin test plugins/dforge` for `plugins/dforge/tests/*.test.ts`.
+
+Requires `node`, `jq` and `git`, plus the `claude` CLI for the cockpit tests. No model calls: the reviewer suites run against a stub
 `codex` plugin, a stub `agy` and a synthetic roster, never the real CLIs.
 `gates-manifest.test.sh` checks that the running-gates skill and its template
 exist and validates the template against the documented format.
