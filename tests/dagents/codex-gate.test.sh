@@ -85,6 +85,13 @@ printf '{"version":2,"plugins":{"codex@openai-codex":[{"scope":"project","instal
 locate
 check "the user-scope install is chosen over a project one" "$out" "codex-plugin ok version=1.0.3 root=$PLUG"
 install_plugin 1.0.3 1.0.3
+# A project-scope install serves only the project Claude Code names.
+printf '{"version":2,"plugins":{"codex@openai-codex":[{"scope":"project","projectPath":"%s","installPath":"%s","version":"1.0.3"}]}}\n' \
+  "$TMP/elsewhere" "$PLUG" > "$CFG/plugins/installed_plugins.json"
+locate; a=$out
+b=$(cd "$TMP/work" && CLAUDE_CONFIG_DIR="$CFG" CLAUDE_PROJECT_DIR="$TMP/elsewhere" bash "$P/scripts/codex-plugin" 2>/dev/null)
+check "foreign_project_install_ignored" "$a|$b" "codex-plugin off reason=plugin-not-installed|codex-plugin ok version=1.0.3 root=$PLUG"
+install_plugin 1.0.3 1.0.3
 
 # Project settings are read only through CLAUDE_PROJECT_DIR, and local wins.
 mkdir -p "$TMP/project/.claude"
