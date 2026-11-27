@@ -30,16 +30,21 @@ config="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 # User, then project, then local settings; the last file that defines the key
 # wins. Project settings are read only when Claude Code names the project
 # directory, never guessed from the working directory.
-enabled=""
+enabled="" read_files=""
 for f in "$config/settings.json" \
          ${CLAUDE_PROJECT_DIR:+"$CLAUDE_PROJECT_DIR/.claude/settings.json" "$CLAUDE_PROJECT_DIR/.claude/settings.local.json"}; do
   [ -r "$f" ] || continue
+  read_files="${read_files:+$read_files }$f"
   v=$(jq -r --arg id "$id" \
     '.enabledPlugins | if type == "object" and has($id) then .[$id] | tostring else empty end' \
     "$f" 2>/dev/null | tr -d '\r')
   [ -z "$v" ] || enabled=$v
 done
-[ "$enabled" = true ] || off plugin-not-enabled
+if [ "$enabled" != true ]; then
+  # Off with no word of where it looked reads as a broken locator.
+  printf 'codex-plugin: %s is not enabled in: %s\n' "$id" "${read_files:-no readable settings file}" >&2
+  off plugin-not-enabled
+fi
 
 # Registry format 2 holds an array of installs per plugin; the user-scope
 # install is the one a profile-wide enablement refers to.
