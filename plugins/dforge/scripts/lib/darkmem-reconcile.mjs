@@ -345,11 +345,12 @@ export function carriedDocuments(repoRoot, docsDir, rel) {
     problems.push(`${group.map(uri => fileOf.get(uri)).join(", ")}: differ only in case, which a case-insensitive file system holds as one file`);
   }
   // The mirror walks the filesystem, so it would carry an ignored file, and
-  // git rm -r would leave it behind.
+  // git rm -r would leave it, or an untracked one, behind.
   const ignored = runGit(repoRoot, ["status", "--porcelain", "-z", "--ignored=matching", "--untracked-files=all", "--", rel]);
   if (ignored.status !== 0) return { failed: `git status failed: ${ignored.stderr.trim()}`, problems: [], documents: [], uncarriable };
   for (const item of ignored.stdout.split("\0")) {
     if (item.startsWith("!! ")) problems.push(`${item.slice(3)}: ignored by git, so the mirror would carry it and git rm would leave it behind`);
+    if (item.startsWith("?? ")) problems.push(`${item.slice(3)}: untracked, so git rm would leave it behind`);
   }
   return { problems, documents, uncarriable };
 }

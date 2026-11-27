@@ -1301,3 +1301,21 @@ test("a document another client files during the documents move refuses it and i
   assert.equal(git(s.repo, "diff", "--cached", "--name-only"), "");
   assert.equal(s.stores().documents, "local");
 });
+
+test("a file created untracked in docs/dforge during the move keeps the repository copy and is named", async t => {
+  const s = await docsRepo(t);
+  const late = path.join(s.repo, "docs", "dforge", "specs", "new.md");
+  s.stub.db.onRequest = (method, route) => {
+    if (method !== "POST" || route !== "/api/v1/documents") return;
+    s.stub.db.onRequest = null;
+    write(late, "# New\n");
+  };
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents stay local \(configured darkmem\): docs\/dforge changed during the move; the repository copy stays$/m);
+  assert.ok(result.stdout.includes("  docs/dforge/specs/new.md: untracked, so git rm would leave it behind\n"), result.stdout);
+  assert.equal(git(s.repo, "diff", "--cached", "--name-only"), "");
+  assert.equal(read(late), "# New\n");
+  assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
+});
+
