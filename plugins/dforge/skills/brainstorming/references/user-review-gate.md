@@ -10,7 +10,8 @@ written spec before proceeding:
 
 > "Spec written and committed to `<path>`. Depth: <d> — <reasons>. Critic: <b> Blocker, <h> High (<f> fixed, <a> answered), <m> Medium. Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
 
-At depth light, `Critic: skipped (depth light)` replaces the counts. Your human
+At depth light, `Critic: skipped (depth light)` replaces the counts, except
+on a Codex host, where the critic ran and its counts are given. Your human
 partner may set the depth in the reply; write `**Depth:** <d> — owner` in the
 spec.
 
