@@ -5,7 +5,10 @@
 # Usage: review-record retain PLAN_FILE [--from CHECKOUT]
 #        review-record ratio MERGE_BASE HEAD
 # retain copies the ledger's review lines and, under "## Amendments", the
-# plan's amendments.md verbatim when it is non-empty.
+# plan's amendments.md verbatim when it is non-empty. The record is
+# reviews/<slug>.md, or the first of <slug>-2.md, <slug>-3.md … free or naming
+# this plan when another plan with the same basename holds <slug>.md;
+# usage-report reads <slug>.md only.
 # Exit: retain 0 written (prints the record's path), 2 usage, 3 the ledger
 #              holds no review line, 4 no ledger names the plan, 1 the
 #              record could not be written
@@ -28,7 +31,7 @@ USAGE
 REVIEW_LINES='^(Review depth:|Acceptance QA: complete|Acceptance QA: skipped|final review lens|Final review:|Test ratio:)'
 
 retain() {
-  local plan="" from="" have_from=0 slug ctx name key top wt dir file c seen named lines="" ledger="" docs target tmp amend
+  local plan="" from="" have_from=0 slug ctx name key top wt dir file c seen named lines="" ledger="" docs target tmp amend held n
   local -a dirs=() candidates=()
   while [ $# -gt 0 ]; do
     case $1 in
@@ -69,7 +72,11 @@ retain() {
     if command -v cygpath >/dev/null 2>&1; then
       named=$(cygpath -m "$named" 2>/dev/null || printf '%s' "$named")
     fi
-    if [ "$(dagents_name_key "$(cd "$dir" && dagents_name "$named")")" = "$key" ]; then
+    case $named in
+      /* | [A-Za-z]:/*) named=$(dagents_name "$named" "$(_plan_ctx "$named")") ;;
+      *) named=$(cd "$dir" && dagents_name "$named") ;;
+    esac
+    if [ "$(dagents_name_key "$named")" = "$key" ]; then
       ledger=$file
       break
     fi
@@ -93,7 +100,14 @@ retain() {
 
   dagents_stores_init
   docs=$(dagents_docs_root)
-  target="$docs/reviews/$slug.md"
+  # A record naming another plan of the same basename is never replaced.
+  target="$docs/reviews/$slug.md" n=1
+  while [ -e "$target" ]; do
+    held=$(tr -d '\r' < "$target" | sed -n 's/^Plan: //p' | head -n 1)
+    [ -z "$held" ] || [ "$(dagents_name_key "$held")" = "$key" ] && break
+    n=$((n + 1))
+    target="$docs/reviews/$slug-$n.md"
+  done
   mkdir -p "$docs/reviews" || exit 1
   tmp=$(mktemp "$docs/reviews/.$slug.md.XXXXXX") || exit 1
   if ! { printf '# Review record: %s\n\nPlan: %s\nRetained: %s\n\n%s\n' \

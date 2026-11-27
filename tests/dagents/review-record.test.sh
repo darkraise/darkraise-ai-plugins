@@ -105,6 +105,24 @@ check "A8: no ledger: no record" "$(exists "$TOP/docs/dagents/reviews/2026-01-01
 (cd "$TOP" && bash "$P/scripts/review-record" retain >/dev/null 2>&1); rc=$?
 check "retain: no plan is a usage error" "$rc" 2
 
+# A record another plan with the same basename left is kept; this plan's goes
+# to the next free name, and a rerun finds it there.
+printf '# Review record: 2026-01-01-p\n\nPlan: docs/dagents/plans/old/2026-01-01-p.md\n' > "$REVIEW"
+cp "$REVIEW" "$TMP/other-record"
+out=$(cd "$TOP" && bash "$P/scripts/review-record" retain "$PLAN" --from "$WT"); rc=$?
+out2=$(cd "$TOP" && bash "$P/scripts/review-record" retain "$PLAN" --from "$WT")
+check "retain: a record naming another plan is kept" \
+  "$rc:$out:$(cmp -s "$REVIEW" "$TMP/other-record" && echo same):$(sed -n 's/^Plan: //p' "${REVIEW%.md}-2.md"):$out2:$(ls "$TOP/docs/dagents/reviews" | wc -l | tr -d ' ')" \
+  "0:${REVIEW%.md}-2.md:same:docs/dagents/plans/2026-01-01-p.md:${REVIEW%.md}-2.md:2"
+rm -f "$REVIEW" "${REVIEW%.md}-2.md"
+
+# An absolute identity line into the primary checkout names the same plan
+# when the ledger is read from a worktree.
+printf '# S\n' > "$TOP/docs/dagents/plans/2026-01-02-s.md"
+ledger "$WT" 2026-01-02-s "$TOP/docs/dagents/plans/2026-01-02-s.md" 'Final review: clean (commits abc1234..def5678)'
+out=$(cd "$TOP" && bash "$P/scripts/review-record" retain "$TOP/docs/dagents/plans/2026-01-02-s.md" --from "$WT" 2>&1); rc=$?
+check "retain: an absolute Plan line into the primary matches from a worktree" "$rc:$out" "0:$TOP/docs/dagents/reviews/2026-01-02-s.md"
+
 # --- ratio ---
 R="$TMP/ratio"
 git init -q -b main "$R"
