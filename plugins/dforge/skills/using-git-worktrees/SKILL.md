@@ -85,9 +85,13 @@ does not:
 ```bash
 # Node.js
 pm=$(sed -n 's/.*"packageManager"[[:space:]]*:[[:space:]]*"\([a-z]*\)@.*/\1/p' package.json 2>/dev/null)
+ver=$(sed -n 's/.*"packageManager"[[:space:]]*:[[:space:]]*"[a-z]*@\([^+"]*\).*/\1/p' package.json 2>/dev/null)
 if [ -n "$pm" ]; then
-  case "$pm" in pnpm|yarn) corepack enable ;; esac
-  "$pm" install
+  case "$pm" in
+    pnpm|yarn) corepack enable; "$pm" install ;;
+    *) if [ "$("$pm" --version 2>/dev/null)" = "$ver" ]; then "$pm" install
+       else npx --yes "$pm@$ver" install; fi ;;
+  esac
 elif [ -f pnpm-lock.yaml ]; then pnpm install
 elif [ -f yarn.lock ]; then yarn install
 elif [ -f bun.lock ] || [ -f bun.lockb ]; then bun install
