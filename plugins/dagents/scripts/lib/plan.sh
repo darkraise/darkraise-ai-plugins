@@ -426,11 +426,12 @@ ledger_left_inline() {
 }
 
 # plan_apply_amendments PLAN AMEND — the plan with every amendments.md entry
-# applied in file order; the plan unchanged when AMEND is missing or empty.
-# Exit 1, naming the entry on stderr, when an entry does not apply: its Old
-# lines must match a contiguous run of whole lines of its target exactly once.
+# applied in file order; the plan unchanged when AMEND is missing or empty,
+# with the read's own status. Exit 1, naming the entry on stderr, when an entry
+# does not apply: its Old lines must match a contiguous run of whole lines of
+# its target exactly once.
 plan_apply_amendments() {
-  if [ ! -s "${2:-}" ]; then tr -d '\r' < "$1"; return 0; fi
+  if [ ! -s "${2:-}" ]; then tr -d '\r' < "$1"; return; fi
   awk "$_PLAN_AWK"'
     function bounds(ent,   i, k) {
       FENCE = ""; S = 0; E = 0
