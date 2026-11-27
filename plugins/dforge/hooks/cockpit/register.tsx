@@ -255,11 +255,13 @@ const pathShape = (suffix: string) => ({
 })
 const REPORT_PATH = pathShape('-report\\.md')
 const PROMPT_PATH = pathShape('-prompt\\.md')
-// Every judge prompt template names its report on this line; a prompt also
-// names reports the judge only reads.
-const REPORT_LINE = /^\s*Write your full report to /
-// The same line in a prompt, its phrase free to wrap: the text after it, to the line's end.
-const REPORT_LINES = /(?:^|\n)[ \t]*Write\s+your\s+full\s+report\s+to\s+(\S[^\n]*)/g
+// Every judge prompt names its report on a report line; a prompt also names
+// reports the judge only reads. The line opens a line (after a list dash, a
+// quote mark or bold) or a sentence, with "Write your full report to", "Write
+// your report to" or "Report file:", its phrase free to wrap: the text after
+// it, to its sentence's or line's end.
+const REPORT_LINES =
+  /(?:^|\n|[.!?][ \t]+)[ \t]*(?:[->][ \t]*)?(?:\*\*)?(?:Write\s+your\s+(?:full\s+)?report\s+to|Report\s+file:)(?:\*\*)?[ \t]+(\S[^\n]*?)(?=\.(?:\s|$)|\n|$)/g
 // How many main-turn context readings the forecast keeps.
 const TURN_READINGS = 12
 const STORE_URL = 'notifyUrl'
@@ -5418,8 +5420,8 @@ async function judgeReports($: EngineInterface, prompt: string): Promise<{ repor
   const reports = new Set<string>()
   for (const file of pathsIn(prompt, dirs, PROMPT_PATH)) {
     const text = await $.fs.read(canonPath(file) ?? file).catch(() => '')
-    for (const line of text.split('\n').filter(one => REPORT_LINE.test(one))) {
-      for (const path of reportPathsIn(line, dirs)) reports.add(path)
+    for (const match of text.matchAll(REPORT_LINES)) {
+      for (const path of reportPathsIn(match[1] ?? '', dirs)) reports.add(path)
     }
   }
   return { reports: [...reports], reportRoots }

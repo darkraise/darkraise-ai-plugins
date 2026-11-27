@@ -951,6 +951,11 @@ describe('attribution guard', () => {
     expect(ran.deny).toBe(`dforge: this project keeps AI attribution out of git. Remove "${A6_GENERATED}" and try again.`)
   })
 
+
+
+
+
+
   test('finds AI attribution and leaves human co-authors alone', () => {
     expect(attributionIn('fix\n\nCo-Authored-By: Claude Opus <noreply@anthropic.com>')).toMatch(/Co-Authored-By/)
     expect(attributionIn('body\n🤖 Generated with [Claude Code](https://claude.com/claude-code)')).toMatch(/Generated/)
@@ -1259,6 +1264,17 @@ describe('review seat write guard', () => {
     const target = `${WS}\\task-1-review-report.md`
     expect((await write($, 'judge-1', target)).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (${REVIEW}); ${target} is not one.`)
     expect((await write($, 'judge-1', REVIEW)).deny).toBeUndefined()
+  })
+
+  test('reads a "Report file:" line as the report line', async ($, on) => {
+    const M1 = `${STATE}/milestone-M1-audit-report.md`
+    const M2 = `${STATE}/milestone-M2-audit-report.md`
+    world(on, { tokens: 10_000, agentIds: ['judge-1'] })
+    on('agent.list', () => ({ value: [] }) as never)
+    await $.session.start(START)
+    await $.agent.spawn(dispatch(`Audit milestone 2. Report file: ${M2}. Read ${M1} first.`, 'dforge:judge-opus', 1))
+    expect((await write($, 'judge-1', M1)).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (${M2}); ${M1} is not one.`)
+    expect((await write($, 'judge-1', M2)).deny).toBeUndefined()
   })
   test('refuses a judge write to anything but the report its dispatch names, and allows that report', async ($, on) => {
     await started($, on)
