@@ -48,6 +48,7 @@ import {
   levelOf,
   limitForecast,
   modelName,
+  namedPlan,
   nowLine,
   parseFinish,
   parseLedger,
@@ -4931,6 +4932,13 @@ describe('discord', () => {
 })
 
 describe('run card', () => {
+  test("namedPlan reads the plan operand of each script", () => {
+    expect(namedPlan('scripts/task-brief "docs/dagents/plans/my plan.md" 3')).toBe('docs/dagents/plans/my plan.md')
+    expect(namedPlan('bash scripts/next-step --notes /tmp/notes.md docs/dagents/plans/p.md')).toBe('docs/dagents/plans/p.md')
+    expect(namedPlan('scripts/next-step --draft docs/dagents/specs/s-design.md --next brainstorm')).toBeNull()
+    expect(namedPlan('scripts/task-brief docs/dagents/plans/p.md 3 /tmp/brief.md')).toBe('docs/dagents/plans/p.md')
+  })
+
   const LEDGER = [
     '# SDD ledger — plan: docs/plans/p.md',
     'Task 1: implementer dagents:impl-sonnet-low (assigned; base abc1234)',

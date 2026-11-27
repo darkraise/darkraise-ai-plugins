@@ -1925,16 +1925,25 @@ export function activeRunOwner(text: string): string | null {
 /** The plan file the last task-brief, task-step or next-step call in a shell command names; null when none names one. */
 export function namedPlan(command: string): string | null {
   let found: string | null = null
-  for (const match of command.matchAll(/scripts[\\/](?:task-brief|task-step|next-step)["']?((?:[ \t]+[^\s;&|]+)*)/g)) {
-    const word = (match[1] ?? '')
-      .trim()
-      .split(/\s+/)
-      .map(one => one.replace(/^["']|["']$/g, ''))
-      .find(one => one.endsWith('.md'))
-    if (word !== undefined) found = word
+  for (const { words } of shellCommands(command)) {
+    const at = words.findIndex(word => PLAN_SCRIPT.test(word))
+    if (at < 0) continue
+    for (let i = at + 1; i < words.length; i++) {
+      const word = words[i] ?? ''
+      if (VALUED_OPTIONS.has(word)) i++
+      else if (word.startsWith('--')) continue
+      else if (word.endsWith('.md')) {
+        found = word
+        break
+      }
+    }
   }
   return found
 }
+
+const PLAN_SCRIPT = /scripts[\\/](?:task-brief|task-step|next-step)$/
+// The options of those scripts whose value is a separate word, a .md path among them.
+const VALUED_OPTIONS = new Set(['--notes', '--draft', '--handoff', '--key', '--host', '--next', '--phase', '--suite', '--suite-base', '--rereview', '--review'])
 
 /** The line an auto run's turn ends on, by the pending action it answers. */
 export const AUTO_SENTINELS: Readonly<Record<string, string>> = { compact: 'Auto run: compacting', clear: 'Auto run: clearing', switch: 'Auto run: switching' }
