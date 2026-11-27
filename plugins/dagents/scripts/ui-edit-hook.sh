@@ -37,10 +37,14 @@ lint_status=$?
 remind=""
 if [ -n "$session_id" ]; then
   marker="${HOME:-}/.claude/dagents/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-').ui-ux"
+  # The marker is written once the reminder is printed, so a hook that dies
+  # first leaves the reminder for the next edit.
+  mark() { { mkdir -p "$(dirname "$marker")" && : > "$marker"; } 2>/dev/null; }
   if [ ! -f "$marker" ]; then
-    { mkdir -p "$(dirname "$marker")" && : > "$marker"; } 2>/dev/null
-    uiux_ran_skill "$transcript_path" ||
+    if uiux_ran_skill "$transcript_path"; then mark
+    else
       remind="This edit changes a UI file (${rel}). Load dagents:ui-ux with the Skill tool: it owns UI/UX work, and the work is not done until it is proven in the running UI."
+    fi
   fi
 fi
 
@@ -54,5 +58,6 @@ if [ -n "$remind" ]; then text="${text:+$text
 
 }$remind"; fi
 [ -n "$text" ] || exit 0
-jq -n --arg t "$text" '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $t}}'
+jq -n --arg t "$text" '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $t}}' || exit 0
+[ -z "$remind" ] || mark
 exit 0
