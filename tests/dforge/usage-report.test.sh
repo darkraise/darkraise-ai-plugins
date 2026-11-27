@@ -461,6 +461,19 @@ J=$(node "$REPORT" --markers "$AR/markers.tsv" --transcripts "$AR" --from-archiv
 check "archive_inferred: a task the markers record is not inferred again" \
   "$(q "$J" '[.plans[] | select(.plan == "2026-11-01-alpha.md") | .tasks[].tasks[]]')" "[2]"
 
+# --- splits_and_all_plans: one plan path in two repositories ---
+TR="$TMP/tr"
+for r in ra rb; do
+  mkdir -p "$TR/$r/.dforge/sdd" "$TR/proj-$r"
+  say "$TR/proj-$r/$r-s.jsonl" "$r-m" 2026-01-01T00:00:01Z 5
+  { mark open 2026-01-01T00:00:00Z docs/plans/p.md 1 "$r-s" 0
+    mark close 2026-01-01T00:00:02Z docs/plans/p.md 1 "$r-s" "$(at "$TR/proj-$r/$r-s.jsonl")" a..b; } > "$TR/$r/.dforge/sdd/usage-markers.tsv"
+done
+J=$(node "$REPORT" --markers "$TR/ra/.dforge/sdd/usage-markers.tsv" "$TR/rb/.dforge/sdd/usage-markers.tsv" \
+  --transcripts "$TR/proj-ra" "$TR/proj-rb" --format json 2>/dev/null)
+check "splits_and_all_plans: one plan path in two repositories stays two plans" \
+  "$(q "$J" '[.plans[] | [.plan, (.repo | gsub("\\\\"; "/") | sub(".*/"; ""))]] | sort')" '[["docs/plans/p.md","ra"],["docs/plans/p.md","rb"]]'
+
 # --- prices_unreadable ---
 mkdir -p "$TMP/noprices/lib"
 cp "$REPORT" "$TMP/noprices/lib/"

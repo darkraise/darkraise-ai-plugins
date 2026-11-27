@@ -785,6 +785,10 @@ export function reportPlan(plan, rows, opts, prices, foreign = new Map()) {
   };
 }
 
+// The repository a row belongs to: an archive row's manifest project, a
+// marker row's checkout three above its sdd/usage-markers.tsv, else none.
+const repoOf = (r) => r.repo || (r.file && /[\\/]sdd[\\/]usage-markers\.tsv$/.test(r.file) ? path.resolve(r.file, '..', '..', '..') : '');
+
 export function report(opts) {
   const prices = loadPrices();
   const marked = readMarkers(opts.markers);
@@ -794,20 +798,22 @@ export function report(opts) {
   archived.forEach((r, i) => { r.order = 1e15 + i; });
   const rows = [...marked, ...archived]
     .sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : a.order - b.order));
+  // One plan path in two repositories is two plans.
   const byPlan = new Map();
   for (const r of rows) {
-    const list = byPlan.get(r.plan) || [];
-    list.push(r);
-    byPlan.set(r.plan, list);
+    const key = `${repoOf(r)}\t${r.plan}`;
+    const g = byPlan.get(key) || { plan: r.plan, list: [] };
+    g.list.push(r);
+    byPlan.set(key, g);
   }
-  const spans = new Map([...byPlan].map(([plan, list]) => [plan, taskSpans(list, opts.transcripts)]));
+  const spans = new Map([...byPlan].map(([key, g]) => [key, taskSpans(g.list, opts.transcripts)]));
   const wanted = (plan) => !opts.plan || plan === opts.plan || path.basename(plan) === path.basename(opts.plan);
   const saved = savedPlans(opts);
   return {
-    plans: [...byPlan].filter(([plan]) => wanted(plan)).map(([plan, list]) => {
+    plans: [...byPlan].filter(([, g]) => wanted(g.plan)).map(([key, { plan, list }]) => {
       const foreign = new Map();
       for (const [other, m] of spans) {
-        if (other === plan) continue;
+        if (other === key) continue;
         for (const [f, l] of m) foreign.set(f, [...(foreign.get(f) || []), ...l]);
       }
       const rep = reportPlan(plan, list, opts, prices, foreign);
