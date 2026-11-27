@@ -288,7 +288,10 @@ case "$1" in
       die "plan round $r is past the cap ($cap) and its one cap-critical round"
     elif [ "$native" -eq 1 ]; then
       # Every round takes the judge floor's pair; there is no external Codex round.
-      judge=native:$(native_pair "$(jq '.role_floors.judge' < "$ROUTING" | tr -d '\r')")
+      floor=$(jq -r '.role_floors.judge' < "$ROUTING" | tr -d '\r') && [[ "$floor" =~ ^[0-9]+$ ]] \
+        && pair=$(native_pair "$floor") && [[ "$pair" =~ ^[^/[:space:]]+/[^/[:space:]]+$ ]] \
+        || die "cannot read the judge pair from reference/codex-routing.json"
+      judge=native:$pair
       reason=round
       [ "$r" -le "$cap" ] || reason=cap-critical
       printf 'review-seat plan-round=%s primary=%s fallback=- reason=%s cap=%s\n' "$r" "$judge" "$reason" "$cap"
