@@ -1244,5 +1244,10 @@ printf '## A1 — Task 1\nReason: r\nCost if wrong: c\n### Old\n````text\n### Ta
 CLAUDE_CODE_SESSION_ID=s-term run "$TR" --print "$PLAN_REL"
 has "amendments: routing reads the amended task title" "$out" "**Next:** Start at Task 1 (Renamed thing)."
 rm -f "$AMD/amendments.md"
+printf '## State\n\ns1\n\n## Next session\n\nold block\n' > "$TMP/notes-85.md"
+CLAUDE_CODE_SESSION_ID=s-term run "$TR" --notes "$TMP/notes-85.md" "$PLAN_REL"
+TH=$(cd "$TR" && CLAUDE_CODE_SESSION_ID=s-term bash "$SCRIPT" --target "$PLAN_REL")
+check "notes: a Next session section in the notes is dropped" \
+  "$status:$(grep -c '^## Next session' "$TH"):$(grep -c '^s1$' "$TH"):$(grep -c 'old block' "$TH")" "0:1:1:0"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

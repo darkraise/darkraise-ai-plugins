@@ -828,9 +828,16 @@ write_handoff() {
   tmp=$(mktemp) || return 1
   if [ ! -f "$handoff" ] || [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ]; then wholesale=1; fi
   if [ -n "$notes_file" ]; then
-    # The notes as given, without their trailing blank lines, then the block.
+    # The notes as given, without their trailing blank lines, a Next session
+    # section of their own or a marker line, then the block: the handoff has
+    # one Next session, the one just computed.
     { printf '# Handoff — %s\n\n' "$today"
-      tr -d '\r' < "$notes_file" | awk 'NF { last = NR } { line[NR] = $0 } END { for (i = 1; i <= last; i++) print line[i]; if (last) print "" }'
+      tr -d '\r' < "$notes_file" | awk '
+        /^## Next session[ \t]*$/ { skip = 1; next }
+        skip && /^## / { skip = 0 }
+        skip || /^<!-- next-step: / { next }
+        { line[++n] = $0; if (NF) last = n }
+        END { for (i = 1; i <= last; i++) print line[i]; if (last) print "" }'
       printf '%s\n%s\n' "$block" "$marker"
     } > "$tmp" || status=1
   elif [ "$wholesale" -eq 1 ]; then
