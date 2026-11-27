@@ -378,9 +378,14 @@ ts start docs/plan.md 10 --suite 'bash suite.sh'
 printf 'impl 10\n' >> "$REPO/app.txt"
 commit "work 10"
 sr
-ts review docs/plan.md 10
+# tsu: ts with BASHPID unset, as bash 3.2 has none.
+tsu() {
+  out=$(cd "$REPO" && bash -c 'unset BASHPID; . "$0" "$@"' "$S/task-step" "$@" 2>"$TMP/err"); rc=$?
+  err=$(cat "$TMP/err")
+}
+tsu review docs/plan.md 10
 clean_report 10
-ts verdict docs/plan.md 10
+tsu verdict docs/plan.md 10
 check "task 10: an unnamed failure at base and head counts as new" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 0 baseline)"
 
 # Task 11: the same, when the suite has to run at the base.
@@ -390,11 +395,14 @@ ts start docs/plan.md 11 --suite 'bash suite.sh'
 printf 'impl 11\n' >> "$REPO/app.txt"
 commit "work 11"
 sr
-ts review docs/plan.md 11
+tsu review docs/plan.md 11
+review_err=$err
 clean_report 11
-ts verdict docs/plan.md 11
+tsu verdict docs/plan.md 11
 check "task 11: an unnamed failure at base and head counts as new" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 0 baseline)"
 check "task 11: the base failures hold the exit code, marked unnamed" "$(grep -cE '^command exit 1 \(unnamed [0-9]+-[0-9]+\)$' "$WS/task-11-base-failures.txt")" "1"
+check "bash 3.2: an unnamed failure is marked without BASHPID" \
+  "$(grep -cE '^command exit 1 \(unnamed [0-9]+-[0-9]+\)$' "$WS/task-11-base-failures.txt"):$(grep -c 'unbound variable' <<<"$review_err$err")" "1:0"
 
 # Task 12: a base run that times out is not paid again.
 set_failing $'not ok 1 - alpha\n'
