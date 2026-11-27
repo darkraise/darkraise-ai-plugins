@@ -230,10 +230,10 @@ plan_heavy() {
 
 # plan_task_paths [--detail] — the repository paths the task text on stdin
 # names in its `- Create:`, `- Modify:`, `- Test:` and `- Delete:` lines
-# outside fences, in every part, one per line, unique. A `:123-145` line range
-# is dropped. With --detail, one `<kind>\t<path>\t<range>` line per such line,
-# in order and not deduplicated, the range without its colon (`12`, `3-9`,
-# `35-44,66-72`) or empty.
+# outside fences, in every part, one per line, unique. A `:123-145` or
+# `:12,30-40` line range is dropped. With --detail, one
+# `<kind>\t<path>\t<range>` line per such line, in order and not deduplicated,
+# the range without its colon (`12`, `3-9`, `35-44,66-72`) or empty.
 plan_task_paths() {
   local detail=0
   [ "${1:-}" = --detail ] && detail=1
@@ -246,7 +246,7 @@ plan_task_paths() {
       if (detail && match(p, /:[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*$/)) {
         range = substr(p, RSTART + 1); p = substr(p, 1, RSTART - 1)
       }
-      sub(/:[0-9]+(-[0-9]+)?$/, "", p)
+      sub(/:[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*$/, "", p)
       sub(/^\.\//, "", p)
       if (detail) { if (p != "") print kind "\t" p "\t" range }
       else if (p != "" && !seen[p]++) print p
