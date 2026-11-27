@@ -470,7 +470,9 @@ ar_guard() {
 # ar_carried_hit — prints the first path committed since branchBase that the
 # run carried, the user's own uncommitted change; returns 1 when there is
 # none, and 2 when git cannot tell, which callers treat as a hit rather than
-# as clean. --no-renames lists a renamed carried path under its old name too.
+# as clean. Each commit's paths count, so a change committed and then
+# reverted is still a hit. --no-renames lists a renamed carried path under
+# its old name too.
 ar_carried_hit() {
   local bb carried path tmp
   bb=$(ar_get branchBase)
@@ -478,11 +480,12 @@ ar_carried_hit() {
   carried=$(ar_carried) || return 2
   [ -n "$carried" ] || return 1
   tmp=$(mktemp) || return 2
-  if ! git diff --no-renames --name-only -z "$bb..HEAD" >"$tmp"; then
+  if ! git log --no-renames --name-only -z --format= "$bb..HEAD" >"$tmp"; then
     rm -f "$tmp"
     return 2
   fi
   while IFS= read -r -d '' path; do
+    [ -n "$path" ] || continue
     if grep -Fxq -- "$path" <<<"$carried"; then
       rm -f "$tmp"
       printf '%s\n' "$path"

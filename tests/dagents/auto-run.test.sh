@@ -1017,6 +1017,9 @@ jq --arg bb "$(git -C "$D" rev-parse HEAD)" '.branchBase = $bb' "$D/.dagents/sdd
 printf 'c\n' > "$D/c.txt"; git -C "$D" add c.txt; git -C "$D" commit -q -m c
 rs_resume "$D"
 check "resume_refusals: a carried path committed since the stop: exit 4 with the reason" "$status:$(reason)" "4:said"
+git -C "$D" rm -q c.txt; git -C "$D" commit -q -m 'revert c'
+rs_resume "$D"
+check "resume_refusals: a carried path committed then reverted: exit 4 with the reason" "$status:$(reason)" "4:said"
 D="$TMP/rs3"; rs_repo "$D"; git -C "$D" switch -q main
 git -C "$D" worktree add -q "$TMP/rs3-wt" -b w
 rs_state "$D" '.active = false | .stopped = "x" | .isolation = "worktree" | .branch = null'
