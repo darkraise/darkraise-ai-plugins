@@ -99,15 +99,18 @@ write_header() {
 }
 
 # check_command LABEL: the command in the first code span of the header's
-# `**LABEL:**` line, `none` when the value begins with none, else nothing.
+# `**LABEL:**` line, `none` when the value begins with none, else the trimmed
+# value, as task-step's header_command reads it.
 check_command() {
   local line v
   line=$(plan_header_line "$src" "$1")
   [ -n "$line" ] || return 0
   v=${line#"**$1:**"}
   v=${v#"${v%%[![:space:]]*}"}
+  v=${v%"${v##*[![:space:]]}"}
   if [[ $v == none* ]]; then printf 'none'
   elif [[ $v =~ \`([^\`]+)\` ]]; then printf '%s' "${BASH_REMATCH[1]}"
+  else printf '%s' "$v"
   fi
 }
 

@@ -131,6 +131,9 @@ for t in 1 2 3; do
     *) has "none: task $t says it is not due" "$out" "task check: none; the integration check is not due" ;;
   esac
 done
+sed 's/^\*\*Integration check:\*\* .*/**Integration check:** bash all.sh/' docs/none.md > docs/bare.md
+run bash "$BRIEF" docs/bare.md 3
+has "none: a bare Integration check names its command" "$out" "task check: none; the integration check is due: bash all.sh"
 sed '/^\*\*Task check:\*\*/d' docs/plan.md > docs/unset.md
 run bash "$BRIEF" docs/unset.md 1
 has "unset: no Task check line says to run the full suite" "$out" "task check: no **Task check:** line; run the full suite once before committing"
