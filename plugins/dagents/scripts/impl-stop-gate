@@ -175,5 +175,5 @@ if [ -n "$via" ]; then
   exit 0
 fi
 if [ "$hash" != "$last" ]; then count=$((count + 1)) last=$hash; fi
-printf '%s\n%s\nawaiting\n%s\n' "$count" "$last" "$fires" > "$counter"
+printf '%s\n%s\nawaiting\n%s\n' "$count" "$last" "$fires" 2>/dev/null > "$counter" || unkept "cannot write the block counter"
 block
