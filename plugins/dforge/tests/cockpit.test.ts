@@ -996,6 +996,19 @@ describe('attribution guard', () => {
     expect(dirty.deny).toBe(A6_DENY)
   })
 
+  test('A6: reads the file a $(cat …) message names', async ($, on) => {
+    const files: NonNullable<World['files']> = { '/tmp/msg': { text: `fix\n\n${A6_AI}\n` } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    const commands = ['git commit -m "$(cat /tmp/msg)"', 'git commit -m "$(< /tmp/msg)"']
+    const denials: (string | undefined)[] = []
+    for (const command of commands) denials.push((await $.tool.call({ tool: 'Bash', command })).deny)
+    expect(denials).toEqual([A6_DENY, A6_DENY])
+    files['/tmp/msg'] = { text: 'fix\n' }
+    const clean: (string | undefined)[] = []
+    for (const command of commands) clean.push((await $.tool.call({ tool: 'Bash', command })).deny)
+    expect(clean).toEqual([undefined, undefined])
+  })
 
 
   test('finds AI attribution and leaves human co-authors alone', () => {
