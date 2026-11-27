@@ -894,16 +894,17 @@ handoff_unfinished() {
 
 # consume_claims — the handoffs this session claimed under other keys: with
 # --notes the new handoff carries their open items, so they go, unless they
-# name unfinished work; without --notes they stay. Either way the claim goes.
-consume_claims() {
-  local c k f keep paths
+# name unfinished work; without --notes, or with `keep` (a terminal block,
+# which writes no handoff to carry them), they stay. Either way the claim goes.
+consume_claims() { # consume_claims [keep]
+  local c k f keep paths force=${1:-}
   [ -n "$session_id" ] || return 0
   for c in "$claims"/*; do
     [ -f "$c" ] || continue
     k=${c##*/}
     [ "$k" != "$key" ] && [ "$(claim_field "$c" session)" = "$session_id" ] || continue
     keep=1 paths=()
-    [ -z "$notes_file" ] || keep=0
+    [ -z "$notes_file" ] || [ "$force" = keep ] || keep=0
     while IFS= read -r f; do
       paths+=("$f")
       [ "$keep" -eq 1 ] || ! handoff_unfinished "$f" || keep=1
@@ -948,6 +949,7 @@ hand_off() {
       done < <(copies_of "$key")
     fi
     release_claim "$key"
+    consume_claims keep
     if [ -n "$notes_file" ] && rm -f "$notes_file"; then
       printf 'next-step: deleted notes %s (terminal block)\n' "$notes_file" >&2
     fi
