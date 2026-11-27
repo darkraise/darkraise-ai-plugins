@@ -588,3 +588,33 @@ test("migrateHome keeps a config.json another session writes before it holds the
   if (wrote) assert.equal(final.layout, "auto");
 });
 
+test("migrateHome merges a directory both homes hold file by file", () => {
+  const home = scratch("dms-home-");
+  const forge = path.join(home, ".dr-forge");
+  const dforge = path.join(home, ".dforge");
+  fs.mkdirSync(path.join(forge, ".lock"), { recursive: true });
+  fs.mkdirSync(path.join(dforge, ".lock"), { recursive: true });
+  write(path.join(forge, "notes", "a.txt"), "a\n");
+  write(path.join(forge, "notes", "same.txt"), "same\n");
+  write(path.join(dforge, "notes", "b.txt"), "b\n");
+  write(path.join(dforge, "notes", "same.txt"), "same\n");
+  const dry = migrateHome({ HOME: home }, { dryRun: true });
+  assert.equal(dry.refused, 0, dry.lines.join("\n"));
+  assert.ok(dry.lines.includes(`would move ${path.join(forge, "notes", "a.txt")} to ${path.join(dforge, "notes", "a.txt")}`), dry.lines.join("\n"));
+  const { lines, refused } = migrateHome({ HOME: home });
+  assert.equal(refused, 0, lines.join("\n"));
+  assert.deepEqual(fs.readdirSync(path.join(dforge, "notes")).sort(), ["a.txt", "b.txt", "same.txt"]);
+  assert.equal(read(path.join(dforge, "notes", "a.txt")), "a\n");
+  assert.equal(fs.existsSync(forge), false);
+  const other = scratch("dms-home-");
+  const from = path.join(other, ".dr-forge", "notes", "c.txt");
+  const to = path.join(other, ".dforge", "notes", "c.txt");
+  write(from, "old\n");
+  write(to, "new\n");
+  const second = migrateHome({ HOME: other });
+  assert.equal(second.refused, 1, second.lines.join("\n"));
+  assert.ok(second.lines.includes(`refused: ${from} differs from ${to}; keep one by hand, then run dforge-migrate again`), second.lines.join("\n"));
+  assert.equal(read(from), "old\n");
+  assert.equal(read(to), "new\n");
+});
+

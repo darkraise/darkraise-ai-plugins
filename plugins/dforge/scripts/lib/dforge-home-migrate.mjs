@@ -158,6 +158,16 @@ function writeJson(file, data) {
   }
 }
 
+// A directory itself, not a link to one: a merge never follows a link out of
+// the home.
+function isDirectory(file) {
+  try {
+    return fs.lstatSync(file).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 function sameFile(a, b) {
   try {
     return fs.statSync(a).isFile() && fs.statSync(b).isFile() && fs.readFileSync(a).equals(fs.readFileSync(b));
@@ -244,13 +254,24 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
       did(`merged ${from} into ${to} (${copied.length ? copied.join(", ") : "no new keys"})`,
         `would merge ${from} into ${to} (${copied.length ? copied.join(", ") : "no new keys"})`);
     };
-    // An entry the new home lacks moves; one it holds the same is dropped.
+    // An entry the new home lacks moves; one it holds the same is dropped; a
+    // directory both hold is merged entry by entry, then removed once empty.
     const place = (from, to, name) => {
       if (!fs.existsSync(to)) {
         if (dryRun) pending.push([to, from]);
         else fs.renameSync(from, to);
         did(`moved ${from} to ${to}`, `would move ${from} to ${to}`);
         if (name === "mirror") moves.push([from, to, true]);
+      } else if (isDirectory(from) && isDirectory(to)) {
+        for (const child of fs.readdirSync(from)) place(path.join(from, child), path.join(to, child));
+        if (!dryRun) {
+          try {
+            fs.rmdirSync(from);
+          } catch (error) {
+            // Still holds something refused.
+            if (!["ENOTEMPTY", "EEXIST"].includes(error.code)) refuse(`${from} could not be removed: ${error.message}`);
+          }
+        }
       } else if (sameFile(from, to)) {
         if (!dryRun) fs.rmSync(from);
         did(`dropped ${from}, the same as ${to}`, `would drop ${from}, the same as ${to}`);
