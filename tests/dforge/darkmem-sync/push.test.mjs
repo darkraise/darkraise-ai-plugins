@@ -914,3 +914,19 @@ test("--handoff with --workstream files an already-synced note on the named work
   assert.equal(other().length, 1, "a note the named workstream already holds is not filed again");
 });
 
+test("a lost checkpoint answer retried behind another handoff of its workstream is not filed twice", async t => {
+  const s = await setup(t);
+  write(path.join(s.workRoot, "handoff", "b.md"), COMPLETE_NOTE);
+  s.stub.db.failures.push({ method: "POST", path: "/api/v1/worklog/entries", status: 502, commit: true });
+  assert.equal((await s.push()).code, 1);
+  const second = COMPLETE_NOTE.replace("is complete.", "is complete, and so is its follow-up.");
+  write(path.join(s.workRoot, "handoff", "a.md"), second);
+  const result = await s.push();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, / 1 checkpoints;/);
+  const project = s.stub.db.workstreams.find(w => w.key === "project");
+  const bodies = project.entries.filter(e => e.kind === "checkpoint").map(e => e.body);
+  assert.equal(bodies.filter(body => body === COMPLETE_NOTE).length, 1);
+  assert.equal(bodies.filter(body => body === second).length, 1);
+});
+

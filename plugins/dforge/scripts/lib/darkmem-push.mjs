@@ -8,8 +8,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { HttpError, failItem } from "./darkmem-client.mjs";
 import {
-  DOC_PREFIX, EMPTY_SHA, MAX_ENTRIES_PER_APPEND, MAX_ENTRY_CHARS, UsageError, archiveUri, caseGroups, checkpointFiledSince, checkpointTarget, decodeUtf8, handoffKey, handoffMarker,
-  familiesOf, isArchiveUri, ledgerEntries, ledgerFiles, ledgerPlanPath, listDocumentFiles, pathToUri, propertiesFor, sha256, splitAtLimit,
+  DOC_PREFIX, EMPTY_SHA, MAX_ENTRIES_PER_APPEND, MAX_ENTRY_CHARS, UsageError, archiveUri, caseGroups, checkpointAtOf, checkpointFiledSince, checkpointTarget, decodeUtf8, handoffKey, handoffMarker,
+  familiesOf, isArchiveUri, isoMicros, ledgerEntries, ledgerFiles, ledgerPlanPath, listDocumentFiles, pathToUri, propertiesFor, sha256, splitAtLimit,
   recordCheckpointAt, unsupportedPlanDirs, uriFamily, uriProblem, uriToLocal, utcStamp, utf8Fault, validKey,
 } from "./darkmem-mirror.mjs";
 import { readRegular } from "./darkmem-progress-move.mjs";
@@ -409,9 +409,13 @@ async function pushCheckpoints(context, only, named) {
   if (own && own !== dir) {
     for (const name of handoffNames(own)) context.out(`worktree handoff stays local: ${path.join(own, name)}`);
   }
+  // Each handoff looks for its lost filing from where this run began: a
+  // filing earlier in the run moves its workstream's record past it.
+  const held = context.state.checkpointAt;
+  const runStart = { checkpointAt: held !== null && typeof held === "object" ? Object.assign(Object.create(null), held) : held };
   for (const name of only === undefined ? handoffNames(dir) : [path.basename(only)]) {
     try {
-      await sendCheckpoint(context, name, only !== undefined, named);
+      await sendCheckpoint(context, name, only !== undefined, named, runStart);
     } catch (error) {
       failItem(context.report, `handoff/${name}`, error);
     }
@@ -427,7 +431,7 @@ function handoffNames(dir) {
   }
 }
 
-async function sendCheckpoint({ cfg, client, roots, state, persist, report }, name, isNamed, named) {
+async function sendCheckpoint({ cfg, client, roots, state, persist, report }, name, isNamed, named, runStart) {
   const rel = `handoff/${name}`;
   const file = path.join(roots.workRoot, "handoff", name);
   if (!fs.existsSync(file)) return;
@@ -468,11 +472,12 @@ async function sendCheckpoint({ cfg, client, roots, state, persist, report }, na
   // checkpoint or this mirror's push to another workstream) is recorded, not
   // filed twice. The entry recorded at that time is already acknowledged, so
   // only a newer one can be a lost answer.
-  const filed = await checkpointFiledSince(client, resent ? { checkpointAt: null } : state, workstream, await client.resume(cfg.project, workstream), hash);
+  const filed = await checkpointFiledSince(client, resent ? { checkpointAt: null } : runStart, workstream, await client.resume(cfg.project, workstream), hash);
   if (filed) {
     if (resent) return;
     synced();
-    recordCheckpointAt(state, workstream, filed.created_at);
+    const recorded = checkpointAtOf(state, workstream);
+    if (!recorded || isoMicros(filed.created_at) > isoMicros(recorded)) recordCheckpointAt(state, workstream, filed.created_at);
     persist();
     return;
   }
