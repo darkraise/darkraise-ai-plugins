@@ -20,7 +20,7 @@ Test skills that:
 - Could be rationalized away ("just this once")
 - Contradict immediate goals (speed over quality)
 
-Don't test:
+Don't pressure-test (writing-skills §Reference Skills still asks a reference skill for a retrieval test):
 - Pure reference skills (API docs, syntax guides)
 - Skills without rules to violate
 - Skills agents have no incentive to bypass
@@ -351,7 +351,7 @@ Agents resist single pressure, break under multiple.
 
 **❌ Stopping after first pass**
 Tests pass once ≠ bulletproof.
-✅ Fix: Continue REFACTOR cycle until no new rationalizations.
+✅ Fix: Continue REFACTOR cycle until no new rationalizations, at most six rounds (the six iterations the example below took): if the sixth still finds a new rationalization, stop and show your human partner the ones left.
 
 ## Quick Reference (TDD Cycle)
 
