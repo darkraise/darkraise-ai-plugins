@@ -2228,7 +2228,7 @@ export const register: Register = on => {
             const label = `${change >= 0 ? '+' : '−'}${kTokens(Math.abs(change))}`
             lines.push({
               kind: 'picture',
-              svg: trendSvg(readings.slice(-24), width, 'cyan', 40, { top: `${label} · ${count} turns` }),
+              svg: trendSvg(readings.slice(-24), width, 'cyan', 40, { top: `${label} · ${count} readings` }),
               alt: `Context over the last ${count} readings, ${label} on the last`,
             })
           }

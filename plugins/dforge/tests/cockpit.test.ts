@@ -6905,7 +6905,7 @@ describe('flight deck', () => {
     // The window's labels slide clear of each other rather than drop out.
     expect(drawn).toContain('>compacts 604k</text>')
     expect(drawn).toContain('>handoff 465k</text>')
-    expect(drawn).toContain('+14k · 7 turns</text>')
+    expect(drawn).toContain('+14k · 7 readings</text>')
     expect((await ui.find({ key: 'plan-headline' }))?.text).toBe('1 blocked · round 2/5 · 1/6')
     expect(drawn).toContain('round 2/5 · impl-sonnet-low')
     // The buttons stay the desktop's own.
