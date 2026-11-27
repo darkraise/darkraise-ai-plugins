@@ -411,6 +411,21 @@ printf 'not a directory\n' > "$H2/.claude/dforge/sessions/turns"
 out=$(HOME="$H2" stop s-5 'Done.' true)
 check "a hold count that cannot be written: the run stops" "$(jq -r .active "$STATE"):$(jq -r .stopped "$STATE" | grep -c 'without its sentinel')" "false:1"
 check "a hold count that cannot be written: one hold asks for the attended ending" "$(jq -r .reason <<<"$out" | grep -c '§Stopping')" "1"
+# Every locked write fails (DFORGE_FLOCK=false), auto-run stop included: the
+# hold past the cap says so, keeps the count, and the next retry passes.
+date +%s > "$HOME/.claude/dforge/sessions/cockpit/s-7"
+(cd "$REPO" && bash "$AR" --session s-7 start --spec docs/s.md --register docs/r.md --force >/dev/null)
+pend compact
+cap=$(DFORGE_FLOCK=false stop s-7 'Done.' | jq -r '.decision // "none"')
+for i in 1 2 3 4; do
+  out=$(DFORGE_FLOCK=false stop s-7 'Done.' true)
+  [ "$i" = 3 ] && out4=$out
+  cap="$cap $(decision "$out")"
+done
+check "auto run: a stop that fails past the cap lets the next retry through" "$cap" "block block block block none"
+check "auto run: a stop that fails past the cap says to stop the run by hand" \
+  "$(jq -r .systemMessage <<<"$out4" | grep -c 'could not be stopped')|$(jq -r .reason <<<"$out4" | grep -c 'scripts/auto-run" stop --reason')|$(jq -r .active "$STATE")" "1|1|true"
+(cd "$REPO" && bash "$AR" --session s-7 stop --reason "test over" >/dev/null 2>&1)
 
 # --- hold_books_total ---
 date +%s > "$HOME/.claude/dforge/sessions/cockpit/s-6"

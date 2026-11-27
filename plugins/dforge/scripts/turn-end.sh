@@ -277,11 +277,20 @@ if [ -n "$auto_pending" ]; then
     holds=$((AUTO_HOLD_CAP + 1))
   fi
   (cd "$root" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" total holds >/dev/null 2>&1) || true
-  if [ "$holds" -gt "$AUTO_HOLD_CAP" ]; then
+  # One hold past the cap stops the run; a retry after it passes, so a stop
+  # that failed cannot hold for ever.
+  if [ "$holds" -gt $((AUTO_HOLD_CAP + 1)) ]; then
     rm -f "$stamp.holds" 2>/dev/null
+    exit 0
+  fi
+  if [ "$holds" -gt "$AUTO_HOLD_CAP" ]; then
     why="the turn ended ${AUTO_HOLD_CAP} times in a row without its sentinel line"
-    (cd "$root" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" stop --reason "$why" >/dev/null 2>&1) || true
-    hold "The auto run stopped: ${why}. End as reference/auto-run.md §Stopping says." "dforge: the auto run stopped (${why})"
+    if (cd "$root" 2>/dev/null && AR_RESOLVE=local bash "${SCRIPT_DIR}/auto-run" --session "$session_id" stop --reason "$why" >/dev/null 2>&1); then
+      rm -f "$stamp.holds" 2>/dev/null
+      hold "The auto run stopped: ${why}. End as reference/auto-run.md §Stopping says." "dforge: the auto run stopped (${why})"
+    else
+      hold "The auto run could not be stopped: ${why}. Run \`bash \"${root_shown}/scripts/auto-run\" stop --reason \"${why}\"\` yourself, then end as reference/auto-run.md §Stopping says." "dforge: the auto run could not be stopped (${why})"
+    fi
     exit 0
   fi
   reason="An auto run is bound to this session (pending: ${auto_pending}; see reference/auto-run.md), so its turns end only on a sentinel line. Do not stop: continue the run. When a budget line said compact, finish the task in flight, then end your message with the line \`Auto run: compacting\`. After \`auto-run clear\` exits 0, end with \`Auto run: clearing\`. After \`auto-run switch\` exits 0, end with \`Auto run: switching\`. If the run must stop (your human partner asked, or a stop the reference names), run \`bash \"${root_shown}/scripts/auto-run\" stop --reason \"<why>\"\` first, then end as the attended flow would."
