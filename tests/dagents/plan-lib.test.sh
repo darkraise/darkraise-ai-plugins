@@ -120,6 +120,14 @@ check "apply: missing amendments file prints the plan" \
   "$(plan_apply_amendments "$TMP/h.md" "$TMP/no-such.md" | wc -l | tr -d ' ')" "$(wc -l < "$TMP/h.md" | tr -d ' ')"
 plan_apply_amendments "$TMP/no-such-plan.md" "" > /dev/null 2>&1; status=$?
 check "apply: an unreadable plan with no amendments fails" "$([ "$status" -ne 0 ] && echo nonzero || echo zero)" "nonzero"
+printf '## A1 — Task 2\nReason: r\nCost if wrong: c\n### Old\n````text\nbody 2\n````\n' > "$TMP/no-new.md"
+out=$(plan_apply_amendments "$TMP/h.md" "$TMP/no-new.md" 2> "$TMP/err"); status=$?
+check "apply: an entry with no New block fails" "$status:$out:$(cat "$TMP/err")" \
+  "1::amendment A1 is not complete: it needs a closed Old and a closed New block"
+printf '## A1 — Task 2\nReason: r\nCost if wrong: c\n### Old\n````text\nbody 2\n````\n### New\n````text\nbody 2 amended\n' > "$TMP/open-new.md"
+out=$(plan_apply_amendments "$TMP/h.md" "$TMP/open-new.md" 2> "$TMP/err"); status=$?
+check "apply: an unclosed New fence fails" "$status:$out:$(cat "$TMP/err")" \
+  "1::amendment A1 is not complete: it needs a closed Old and a closed New block"
 
 # --- plan_amendments_file ---
 export GIT_CONFIG_NOSYSTEM=1
