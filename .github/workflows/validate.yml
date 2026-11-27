@@ -306,7 +306,7 @@ jobs:
         run: if ('${{ matrix.shard }}' -eq 'slice') { node scripts/test-all.mjs --slice } else { node scripts/test-all.mjs --shard ${{ matrix.shard }}/16 --junit junit }
       - name: Upload JUnit timing
         if: ${{ !cancelled() && needs.scope.outputs.scope == 'full' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: junit-windows-${{ matrix.shard }}
           path: junit
@@ -343,7 +343,7 @@ jobs:
         run: node scripts/test-all.mjs --plugin dagents --shard ${{ matrix.shard }}/17 --junit junit
       - name: Upload JUnit timing
         if: ${{ !cancelled() && needs.scope.outputs.scope == 'full' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: junit-windows-dagents-${{ matrix.shard }}
           path: junit
