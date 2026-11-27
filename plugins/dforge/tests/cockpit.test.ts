@@ -9357,6 +9357,26 @@ describe('auto run in the pane', () => {
     expect(sent()).toBe(2)
   })
 
+  test('a session resumed over budget alerts again', async ($, on) => {
+    const fetches: World['fetches'] = []
+    const w: World = { tokens: 100_000, env: { HOME: '/home/me' }, fetches }
+    const clock = world(on, w)
+    mock.store(on, { notifyUrl: WEBHOOK })
+    signedIn(on, {})
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    w.tokens = 470_000
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await clock.advance(1)
+    const sent = () => fetches.filter(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title === '🔶 Handoff budget reached').length
+    expect(sent()).toBe(1)
+    w.sessionId = 'sess-2'
+    await clock.advance(10_000)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await clock.advance(1)
+    expect(sent()).toBe(2)
+  })
+
   test('picks up a run started during the turn, and mutes the handoff note', async ($, on) => {
     const notes: string[] = []
     world(on, { ...SIGNED_IN, tokens: 470_000, notes })

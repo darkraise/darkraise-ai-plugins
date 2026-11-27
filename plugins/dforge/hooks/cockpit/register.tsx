@@ -4951,7 +4951,8 @@ async function engineSettings($: EngineInterface): Promise<string> {
  * leaves the pane as the person left it.
  */
 // The counts that hold within one session: the keep-warm prompts, the
-// reconcile prompts, and the background-work deferral.
+// reconcile prompts, the background-work deferral, the budget alert and the
+// permission mode the last hook reported.
 function resetSessionGuards() {
   S.keepWarmCount = 0
   S.autoDue = null
@@ -4959,6 +4960,8 @@ function resetSessionGuards() {
   S.isHardNoted = false
   S.reconcileSeen = { key: '', count: 0 }
   S.autoDeferredSince = null
+  S.isBudgetSent = false
+  S.permissionMode = null
 }
 
 async function readSession($: EngineInterface, isStart: boolean) {
