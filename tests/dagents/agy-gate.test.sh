@@ -325,6 +325,16 @@ if [ "$SPAWNABLE" = yes ]; then
   check "a probe write keeps an unexpired fallback mark" "$out" \
     "agy-gate usable=true reason=ok review=false lane=true resets_at=- fallback=off fallback_resets_at=$FAR_ISO source=probe"
   check "the probe left the fallback object in the file" "$(field fallback.reason)/$(field fallback.resets_at_epoch)" "quota/$FAR"
+
+  # --- probe_module_native_path: node is given the probe module in native form ---
+  # The stub's native form is the path under $TMP/native, a link to /, so every
+  # converted path still opens and only its spelling shows the conversion.
+  mkdir -p "$TMP/natbin"; ln -sfn / "$TMP/native"
+  printf '#!%s\nfor a; do p=$a; done\nprintf "%%s%%s\\n" "%s" "$p"\n' "$BASH" "$TMP/native" > "$TMP/natbin/cygpath"
+  printf '#!%s\nprintf "%%s\\n" "$@" >> "%s"\nexec "%s" "$@"\n' "$BASH" "$TMP/node-args" "$(type -P node)" > "$TMP/natbin/node"
+  chmod +x "$TMP/natbin/cygpath" "$TMP/natbin/node"
+  fresh; : > "$TMP/node-args"; GATE_PATH="$TMP/natbin:$STUBDIR:$SEAL" gate
+  check "probe_module_native_path" "$(grep -cxF "$TMP/native$P/scripts/lib/agy-probe.mjs" "$TMP/node-args")" "1"
 else
   skip "the gate cases that need a usable probe: Node cannot run the bash-script stub on this platform"
 fi
