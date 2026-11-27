@@ -444,6 +444,12 @@ sed 's/^\*\*Evaluation:\*\* files=0,/**Evaluation:** files=08,/' "$FF/docs/nativ
 out=$(bash "$ROUTE" "$FF/docs/native-zero.md" --plan-round 1 2>"$TMP/err"); rc=$?
 check "native plan round: a score written 08 is read as 8" "$rc:$out" \
   "0:review-seat plan-round=1 primary=native:gpt-6-astra/high fallback=- reason=round cap=3"
+# A routing policy with no judge floor names no pair: the round has no seat.
+cp -R "$HERE/../../plugins/dforge" "$TMP/plug"
+printf '{"role_floors":{},"execution":[]}\n' > "$TMP/plug/reference/codex-routing.json"
+out=$(bash "$TMP/plug/scripts/review-route" "$FF/docs/native.md" --plan-round 1 2>"$TMP/err"); rc=$?
+check "native plan round: an unreadable judge pair exits 2" "$rc|$out|$(grep -c 'cannot read the judge pair' "$TMP/err")" "2||1"
+rm -rf "$TMP/plug"
 
 # --- README, version and program amendment -------------------------------------
 # The version is read from the Claude manifest, so a release bump needs no edit here.
