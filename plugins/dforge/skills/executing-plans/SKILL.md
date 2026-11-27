@@ -65,7 +65,7 @@ What changes here:
   before the turn ends: a compaction there never hands off; three without progress stop the run.
   A `task-close` exit 5 means the run stopped (a task was completed
   on the run base, off its branch or in the primary checkout, or a carried path was committed):
-  end as auto-run.md §Stopping says.
+  end as auto-run.md §Stopping says. Exit 1: fix what it names, then rerun it to finish the close.
 - **The budget line** reads `budget (auto…)`. On `compact` (exit 6), finish
   the task in flight, then end the turn with
   `Auto run: compacting` as its last line. On `handoff`, finish the task in

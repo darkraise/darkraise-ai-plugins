@@ -12,7 +12,9 @@
 # pending decisions, an Early CI that names this task, and the budget line
 # last: in an auto run after every task (none when the run stopped), else
 # after the last task. Writes the task's close marker (scripts/lib/usage-marker.sh).
-# Exit: 0 ok (or the task was already complete); 2 usage, a checkpoint missing
+# Exit: 0 ok (or the task was already complete); 1 the complete line or the
+# run's record of it failed (run task-close again: a complete line left last
+# finishes the close); 2 usage, a checkpoint missing
 # one of its five fields or holding a line break, or a ledger (same basename)
 # that names another plan; 3 no such task, or no open line for it; 4 an
 # amendment does not apply; 5 an auto run stopped at this completion.
@@ -83,7 +85,7 @@ else
   head=$(git rev-parse --short HEAD) || die "not inside a git checkout"
 
   line="Task $n: complete (commits $base..$head, $review) — $checkpoint"
-  printf '%s\n' "$line" >> "$ledger"
+  printf '%s\n' "$line" >> "$ledger" || die "cannot append to $ledger" 1
   echo "wrote: $line"
 fi
 
@@ -116,6 +118,9 @@ if bash "$HERE/auto-run" status >/dev/null 2>&1; then
   if [ "$ar_rc" -eq 5 ]; then
     echo "auto run: stopped at this completion"
     rc=5
+  elif [ "$ar_rc" -ne 0 ]; then
+    echo "auto run: task-complete exited $ar_rc; the run did not record this completion"
+    rc=1
   fi
   pending=$(bash "$HERE/auto-run" decision list 2>/dev/null) || true
   [ -z "$pending" ] || printf 'auto run decisions waiting:\n%s\n' "$pending"

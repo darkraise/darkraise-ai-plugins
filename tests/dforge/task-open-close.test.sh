@@ -192,6 +192,20 @@ check "close: no checkpoint exits 2" "$rc" "2"
 
 # The last close prints the final budget line.
 run bash "$BRIEF" --open docs/plan.md 3
+case $(uname -s) in
+  MINGW*|MSYS*|CYGWIN*) ;;
+  *)
+    LEDGER_BEFORE=$(cat "$LEDGER")
+    i=0
+    while [ "$(wc -c < "$LEDGER")" -le 9000 ]; do
+      printf 'Task 2: note %04d — filler past the file size limit\n' "$i" >> "$LEDGER"; i=$((i + 1))
+    done
+    run bash -c 'trap "" XFSZ; ulimit -f 8; exec bash "$0" "$@"' "$CLOSE" docs/plan.md 3 "$CP"
+    check "close: a failed ledger append exits 1 and announces nothing" \
+      "$rc|$(grep -c 'wrote:' <<<"$out")|$(grep -c '^Task 3: complete' "$LEDGER")" "1|0|0"
+    printf '%s\n' "$LEDGER_BEFORE" > "$LEDGER"
+    ;;
+esac
 run bash "$CLOSE" docs/plan.md 3 "$CP"
 check "close: the last task prints a budget line" "$(grep -c '^budget' <<<"$out")" "1"
 check "close: a middle task prints none" "$(run bash "$CLOSE" docs/plan.md 2 "$CP"; grep -c '^budget' <<<"$out")" "0"
