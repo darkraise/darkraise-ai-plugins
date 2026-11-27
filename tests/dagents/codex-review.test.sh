@@ -429,5 +429,12 @@ CLAUDE_CODE_SESSION_ID=s2 STUB_EMPTY=1 seat final --out "$TMP/o.md" --base main 
 check "failures_book_total: another session's failure adds nothing" "$(pf)" "2"
 rm -rf "$TMP/work/.dagents"
 
+# --- unwritable_out_fails: a report that cannot be written is no review ---
+rm -rf "$TMP"/odir.md*; mkdir -p "$TMP/odir.md"
+out=$(run --kind final --cwd "$TMP/work" --out "$TMP/odir.md" --base main)
+present "unwritable_out_fails" "$out" "status=FAILED exit=0 out=$TMP/odir.md evidence=none"
+present "unwritable_out_fails: the failed write is named" "$(cat "$TMP/err")" "cannot write the report: $TMP/odir.md"
+rm -rf "$TMP"/odir.md*
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

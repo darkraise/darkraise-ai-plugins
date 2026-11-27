@@ -293,6 +293,13 @@ write_out() { # write_out <result-json>
   jq -j '.finalMessage // ""' <<<"$1" > "$out"
 }
 
+# A report that could not be written is no review, whatever the seat answered.
+unwritten() { # unwritten <model> <effort>
+  status "$1" "$2" FAILED "$rc"
+  printf 'run-codex-review: cannot write the report: %s\n' "$out" >&2
+  exit 1
+}
+
 status() { # status <model> <effort> <state> <exit>
   case $3 in FAILED | TIMEOUT) panel_failure ;; esac
   printf 'codex-judge %s/%s status=%s exit=%s out=%s evidence=%s\n' \
@@ -313,12 +320,12 @@ fi
 
 run_seat "$model" "$effort" "$secs" "$out"
 result=$(cat "$out.result" 2>/dev/null)
-write_out "$result"
 rc=0
 [ "$(jq -r '.ok' <<<"$result")" = true ] || rc=1
 [ "$(jq -r '.timedOut' <<<"$result")" = true ] && rc=124
 # timeout's own status: the client was stopped from outside and wrote nothing.
 case "$seat_rc" in 124 | 137) rc=124 ;; esac
+write_out "$result" || unwritten "$model" "$effort"
 
 if [ "$rc" -eq 124 ]; then
   status "$model" "$effort" TIMEOUT "$rc"; exit 1
@@ -343,11 +350,11 @@ if [ "$(jq -r '.refusal' <<<"$result")" = true ] \
   back_secs=$(secs_of "$back_model" "$back_effort")
   run_seat "$back_model" "$back_effort" "$back_secs" "$out.fallback"
   result=$(cat "$out.fallback.result" 2>/dev/null)
-  write_out "$result"
   rc=0
   [ "$(jq -r '.ok' <<<"$result")" = true ] || rc=1
   [ "$(jq -r '.timedOut' <<<"$result")" = true ] && rc=124
   case "$seat_rc" in 124 | 137) rc=124 ;; esac
+  write_out "$result" || unwritten "$back_model" "$back_effort"
   if [ "$rc" -eq 124 ]; then
     status "$back_model" "$back_effort" TIMEOUT "$rc"; exit 1
   fi
