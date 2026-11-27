@@ -192,6 +192,11 @@ present "a run past its deadline is TIMEOUT, never a model change" "$out" "statu
 check "TIMEOUT exits 1" "$rc" "1"
 check "TIMEOUT does not run a second seat" "$(cat "$TMP/calls")" "1"
 
+# A client that never answers, its event loop blocked, is stopped by the outer
+# timeout: that is a TIMEOUT too, not an error.
+out=$(CODEX_REVIEW_GRACE=1 STUB_MODE=wedge seat final --out "$TMP/o.md" --base main)
+check "outer_kill_is_timeout" "$out" "codex-judge gpt-6-astra/high status=TIMEOUT exit=124 out=$TMP/o.md evidence=none"
+
 out=$(STUB_REFUSE_ONCE=1 seat final --out "$TMP/o.md" --base main); rc=$?
 present "a refused model falls back once" "$out" "status=FALLBACK"
 present "the fallback line names the model that ran" "$out" "codex-judge gpt-6.1-sol/high"

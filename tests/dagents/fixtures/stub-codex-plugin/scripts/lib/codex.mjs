@@ -119,6 +119,12 @@ async function turn(cwd, options, label) {
   if (m === "hang") {
     await new Promise(() => {});
   }
+  // A turn that blocks the event loop, so the client's own deadline never
+  // fires and only the runner's outer timeout can stop it.
+  if (m === "wedge") {
+    const end = Date.now() + 600000;
+    while (Date.now() < end) { /* busy */ }
+  }
   // The client process dies after the turn started, printing no result.
   if (m === "die") {
     process.exit(1);
