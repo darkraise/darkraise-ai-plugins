@@ -13,6 +13,7 @@ import {
   gitMessageTexts,
   shellCommands,
   gitTextFiles,
+  gitTextSources,
   isGitWriteTool,
   isPlanTail,
   kTokens,
@@ -975,6 +976,39 @@ describe('attribution guard', () => {
     expect(pushed.deny).toBeUndefined()
     const dirty = await $.tool.call({ tool: 'mcp__github__create_or_update_file', path: 'NOTES.md', message: `docs: add\n\n${A6_AI}`, content: 'x\n' } as never)
     expect(dirty.deny).toBe(A6_DENY)
+    const merged = await $.tool.call({ tool: 'mcp__gitlab__merge_merge_request', merge_request_iid: 1, merge_commit_message: `x\n\n${A6_AI}` } as never)
+    expect(merged.deny).toBe(A6_DENY)
+  })
+
+  test('reads a message file an appending write leaves in place', async ($, on) => {
+    const files: World['files'] = { '/home/me/code/shop/web/msg.txt': { text: `fix\n\n${A6_AI}\n` } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    const commands = ["printf 'more\\n' >> msg.txt && git commit -F msg.txt", "printf 'more\\n' | tee -a msg.txt && git commit -F msg.txt"]
+    const denials: (string | undefined)[] = []
+    for (const command of commands) denials.push((await $.tool.call({ tool: 'Bash', command })).deny)
+    expect(denials).toEqual([A6_DENY, A6_DENY])
+  })
+
+  test('keeps a cd inside a subshell to that subshell', async ($, on) => {
+    const WEB = '/home/me/code/shop/web'
+    const files: NonNullable<World['files']> = { [`${WEB}/msg.txt`]: { text: `fix\n\n${A6_AI}\n` }, [`${WEB}/sub/msg.txt`]: { text: 'fix\n' } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    const after = ['(cd sub && make) && git commit -F msg.txt', '( cd sub ) ; git commit -F msg.txt']
+    const denials: (string | undefined)[] = []
+    for (const command of after) denials.push((await $.tool.call({ tool: 'Bash', command })).deny)
+    expect(denials).toEqual([A6_DENY, A6_DENY])
+    files[`${WEB}/msg.txt`] = { text: 'fix\n' }
+    files[`${WEB}/sub/msg.txt`] = { text: `fix\n\n${A6_AI}\n` }
+    expect((await $.tool.call({ tool: 'Bash', command: '(cd sub && git commit -F msg.txt)' })).deny).toBe(A6_DENY)
+    expect((await $.tool.call({ tool: 'Bash', command: after[0] ?? '' })).deny).toBeUndefined()
+  })
+
+  test('reads cd --, a pushd rotation and an absolute write of the file git reads', () => {
+    expect(gitTextSources('cd -- sub && git commit -F m.txt')[0]?.dirs).toEqual(['sub'])
+    expect(gitTextSources('pushd +1 && git commit -F m.txt')[0]?.dirs).toBeNull()
+    expect(gitTextSources("printf x > /home/me/web/m.txt && git commit -F m.txt", '/home/me/web')[0]?.isWritten).toBe(true)
   })
 
   test('finds AI attribution and leaves human co-authors alone', () => {

@@ -485,16 +485,52 @@ export function gitMessageTexts(command: string): { texts: string[]; isWhole: bo
 // expands, the previous directory (-) or a home directory (~).
 const isSpelled = (word: string) => word !== '-' && !/[$`]/.test(word) && !word.startsWith('~')
 
-// The directory a cd or pushd simple command moves to (a leading `(` read
-// past); null when its words do not spell it out, or for a popd, which returns
+// The directory a cd or pushd simple command moves to; null when its words do
+// not spell it out, for a pushd rotation (+N, -N), or for a popd, which returns
 // to a directory they do not name; undefined for any other command.
 function dirChange(words: readonly string[]): string | null | undefined {
-  const all = words[0] === '(' ? words.slice(1) : words
-  const name = (all[0] ?? '').replace(/^\(+/, '')
+  const name = words[0] ?? ''
   if (name === 'popd') return null
   if (name !== 'cd' && name !== 'pushd') return undefined
-  const target = all.slice(1).find(word => !/^-[LPe@]+$/.test(word))?.replace(/\)+$/, '')
-  return target === undefined || target === '' || !isSpelled(target) ? null : target
+  const operands = words.slice(1).filter(word => !/^-[LPe@]+$/.test(word))
+  const target = operands[0] === '--' ? operands[1] : operands[0]
+  return target === undefined || target === '' || /^[+-]\d+$/.test(target) || !isSpelled(target) ? null : target
+}
+
+// A simple command's words with the subshell parentheses around them taken
+// off, and how many subshells open before it and close after it. A close is
+// counted only while a subshell is open, so a word such as `$(cat x)` or a
+// message ending in `)` keeps its text.
+function subshellEdges(words: readonly string[], depth: number): { words: string[]; opens: number; closes: number } {
+  const all = [...words]
+  let opens = 0
+  while (all.length > 0 && (all[0] ?? '').startsWith('(')) {
+    const first = all[0] ?? ''
+    const bare = first.replace(/^\(+/, '')
+    opens += first.length - bare.length
+    if (bare !== '') {
+      all[0] = bare
+      break
+    }
+    all.shift()
+  }
+  let closes = 0
+  while (all.length > 0 && closes < depth + opens) {
+    const last = all[all.length - 1] ?? ''
+    let bare = last
+    let unbalanced = (last.match(/\)/g)?.length ?? 0) - (last.match(/\(/g)?.length ?? 0)
+    while (unbalanced > 0 && bare.endsWith(')') && closes < depth + opens) {
+      bare = bare.slice(0, -1)
+      unbalanced--
+      closes++
+    }
+    if (bare !== '') {
+      all[all.length - 1] = bare
+      break
+    }
+    all.pop()
+  }
+  return { words: all, opens, closes }
 }
 
 // The -C directories a git command runs in, in order, read before its
@@ -515,16 +551,19 @@ function gitDirs(words: readonly string[]): string[] | null {
   return dirs
 }
 
-// The files a simple command writes: its redirection targets and tee's operands.
+// The files a simple command writes afresh: its truncating redirection
+// targets, and tee's operands unless it appends. An appending write (`>>`,
+// `tee -a`) keeps the text already there, so that file is still read.
 function writtenFiles(words: readonly string[]): string[] {
   const files: string[] = []
   words.forEach((word, at) => {
-    const redirect = /^(?:\d*|&)>>?\|?(.*)$/.exec(word)
+    const redirect = /^(?:\d*|&)>(?!>)\|?(.*)$/.exec(word)
     const target = redirect === null ? undefined : redirect[1] === '' ? words[at + 1] : redirect[1]
     if (target !== undefined && !target.startsWith('&')) files.push(target)
   })
   const tee = words.findIndex(word => isProgram(word, 'tee'))
-  if (tee >= 0) files.push(...words.slice(tee + 1).filter(word => !word.startsWith('-')))
+  const options = words.slice(tee + 1).filter(word => word.startsWith('-'))
+  if (tee >= 0 && !options.some(word => word === '--append' || /^-[a-z]*a/.test(word))) files.push(...words.slice(tee + 1).filter(word => !word.startsWith('-')))
   return files
 }
 
@@ -533,13 +572,13 @@ export function sourcePath(base: string, parts: readonly string[]): string {
   return parts.reduce((path, part) => (isAbsolutePath(part) || path === '' ? part : `${path.replace(/[\\/]+$/, '')}/${part}`), base)
 }
 
-// A path relative to the session's directory, or absolute, with its . and ..
-// segments applied, so two spellings of one file compare equal; null when a
-// directory before it is not spelled out.
-function sourceKey(dirs: readonly string[] | null, file: string): string | null {
+// A path below `cwd` (the session's directory, `.` when unknown), or absolute,
+// with its . and .. segments applied, so two spellings of one file compare
+// equal; null when a directory before it is not spelled out.
+function sourceKey(cwd: string, dirs: readonly string[] | null, file: string): string | null {
   if (dirs === null && !isAbsolutePath(file)) return null
   const segments: string[] = []
-  for (const segment of sourcePath('.', [...(dirs ?? []), file]).split('/')) {
+  for (const segment of sourcePath(cwd === '' ? '.' : cwd, [...(dirs ?? []), file]).split('/')) {
     if (segment === '.' || (segment === '' && segments.length > 0)) continue
     if (segment === '..' && segments.length > 0 && segments[segments.length - 1] !== '..' && segments[segments.length - 1] !== '') segments.pop()
     else segments.push(segment)
@@ -560,30 +599,38 @@ export type GitTextSource = {
  * The files a commit or pull request command takes its text from (`git commit
  * -F`, `gh pr create --body-file`, a `$(cat file)` message), each with the
  * directories it is read below; stdin's names are the command's own text.
+ * `cwd`, the session's directory, lets an absolute and a relative spelling of
+ * one written file compare equal.
  */
-export function gitTextSources(command: string): GitTextSource[] {
+export function gitTextSources(command: string, cwd = ''): GitTextSource[] {
   const sources: GitTextSource[] = []
   const written: string[] = []
   let dirs: string[] | null = []
+  // The directories in force where each open subshell began: a cd inside one
+  // ends with it.
+  const outer: (string[] | null)[] = []
   for (const one of shellCommands(command)) {
-    if (isGitWriteCommand(one.words)) {
-      const own = gitDirs(one.words)
+    const { words, opens, closes } = subshellEdges(one.words, outer.length)
+    for (let n = 0; n < opens; n++) outer.push(dirs)
+    if (isGitWriteCommand(words)) {
+      const own = gitDirs(words)
       const gitRuns = dirs === null || own === null ? null : [...dirs, ...own]
-      for (const { kind, value } of messageOptions(one.words)) {
+      for (const { kind, value } of messageOptions(words)) {
         const cat = kind === 'text' ? CAT_FILE.exec(value)?.[1] : undefined
         // A substitution runs where the shell is: git -C moves only git.
         const source = kind === 'file' && value !== '' && !STDIN_PATH.test(value) ? { file: value, dirs: gitRuns } : cat === undefined ? undefined : { file: cat, dirs }
         if (source === undefined) continue
-        const key = sourceKey(source.dirs, source.file)
+        const key = sourceKey(cwd, source.dirs, source.file)
         sources.push({ ...source, isWritten: key !== null && written.includes(key) })
       }
     }
-    for (const file of writtenFiles(one.words)) {
-      const key = sourceKey(dirs, file)
+    for (const file of writtenFiles(words)) {
+      const key = sourceKey(cwd, dirs, file)
       if (key !== null) written.push(key)
     }
-    const change = dirChange(one.words)
+    const change = dirChange(words)
     if (change !== undefined) dirs = dirs === null || change === null ? null : [...dirs, change]
+    for (let n = 0; n < closes; n++) dirs = outer.pop() ?? dirs
   }
   return sources
 }
