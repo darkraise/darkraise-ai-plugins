@@ -1,6 +1,6 @@
 # Windows desktop
 
-**Status:** unverified — no session has run this guide yet. The first run on a Windows host replaces this line with the date and what ran.
+**Status:** unverified — no session has run this guide yet. Never edit this file, which ships with the plugin; the proof report's `## Automated checks` records that the guide was unverified and which of its steps ran.
 
 - **Launch:** the profile's Harness command, or the built executable, as a
   background process; note its PID and kill its tree with

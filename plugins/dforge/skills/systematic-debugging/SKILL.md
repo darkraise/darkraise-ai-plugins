@@ -193,6 +193,7 @@ the next acts on.
    - One-off test script if no framework
    - Have it before fixing: it is the proof that the fix addresses this failure
    - Use the `dforge:test-driven-development` skill for writing proper failing tests
+   - Fix will change anything a user sees or does? Run `dforge:ui-ux` Shape at touch depth now, so the delta is written before the fix
 
 2. **Implement Single Fix**
    - Address the root cause identified
@@ -205,7 +206,7 @@ the next acts on.
    - No other tests broken?
    - Issue actually resolved?
    - Use the `dforge:verification-before-completion` skill before claiming success
-   - Fix changes anything a user sees or does? Run `dforge:ui-ux` at touch depth: its delta and proof come before you claim the bug fixed
+   - Fix changes anything a user sees or does? Finish `dforge:ui-ux` Prove before you claim the bug fixed
 
 4. **If Fix Doesn't Work**
    - STOP
