@@ -134,7 +134,7 @@ case $1 in
     git rev-parse --verify --quiet "$base^{commit}" >/dev/null || die "bad BASE: $base"
     git rev-parse --verify --quiet "$head^{commit}" >/dev/null || die "bad HEAD: $head"
     cap=${DFORGE_LENS_CAP:-$(dforge_setting lensCap 5)}
-    [[ "$cap" =~ ^[0-9]$ ]] || cap=5
+    [[ "$cap" =~ ^[0-9]+$ ]] || cap=5
     if [ "$cap" -eq 0 ]; then echo "lenses off"; exit 0; fi
     depth=$(depth_plan_depth "$src" "$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)")
     changed=$(git -c core.quotepath=off diff --name-only "$base..$head")
