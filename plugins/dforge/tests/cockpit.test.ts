@@ -9898,6 +9898,18 @@ describe('session state file', () => {
     expect(stateOf(written).launches.map((l: Record<string, unknown>) => l.id)).toEqual(['t1'])
   })
 
+  test("keeps a background shell's command redacted", async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { ...SIGNED_IN, written, tools: bg('b7k2') })
+    signedIn(on, {})
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'curl -H "Authorization: Bearer abcdefghijkl" https://x', run_in_background: true } as never)
+    expect(stateOf(written).launches[0].command).toBe('curl -H "Authorization: Bearer [token]" https://x')
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Bearer \[token\]/ })).toBeDefined()
+    expect(JSON.stringify(await ui.drawn())).not.toContain('abcdefghijkl')
+  })
+
   test('marks the launches partial once a Monitor starts', async ($, on) => {
     const written: Record<string, string> = {}
     world(on, { ...SIGNED_IN, written })

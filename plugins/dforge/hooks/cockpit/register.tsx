@@ -5354,7 +5354,8 @@ async function trackShells($: EngineInterface, tool: string, e: object, result: 
   if (tool === 'Bash') {
     const id = (result as { backgroundTaskId?: unknown } | undefined)?.backgroundTaskId
     if (typeof id !== 'string' || id === '') return
-    const shell: CockpitShell = { id, command: String((e as { command?: unknown }).command ?? ''), startedAt: await $.clock.now(), agentId: (e as { agentId?: string }).agentId ?? null }
+    // Masked here, so neither the pane nor the state file keeps a secret the command carried.
+    const shell: CockpitShell = { id, command: redact(String((e as { command?: unknown }).command ?? '')), startedAt: await $.clock.now(), agentId: (e as { agentId?: string }).agentId ?? null }
     S.shellWhat[id] = String((e as { description?: unknown }).description ?? '')
     await update($, shells, list => [...list.filter(one => one.id !== id), shell].slice(-20))
     await writeSessionState($)
