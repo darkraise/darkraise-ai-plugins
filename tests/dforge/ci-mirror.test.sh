@@ -51,6 +51,21 @@ mirror "$TMP/none.md"
 check "none exits 0" "$rc" "0"
 check "none prints ci: none and nothing else" "$out" "ci: none"
 check "none runs nothing through suite-run" "$([ -e "$REPO/.dforge/suites.tsv" ] && echo yes || echo no)" "no"
+# A mktemp that always names one fixed path: a sibling planted beside it must
+# be neither truncated nor removed.
+mkdir -p "$TMP/shim"
+real_mktemp=$(command -v mktemp)
+cat > "$TMP/shim/mktemp" <<EOF
+#!/usr/bin/env bash
+for a in "\$@"; do [ "\$a" = -d ] && exec "$real_mktemp" "\$@"; done
+: > "$TMP/fixed"
+printf '%s\n' "$TMP/fixed"
+EOF
+chmod +x "$TMP/shim/mktemp"
+printf 'keep\n' > "$TMP/fixed.err"
+PATH="$TMP/shim:$PATH" mirror "$TMP/none.md"
+check "a planted sibling of the temp file is not written" "$rc:$(cat "$TMP/fixed.err" 2>/dev/null)" "0:keep"
+rm -f "$TMP/fixed" "$TMP/fixed.err"
 
 # --- local commands run through suite-run ----------------------------------------
 cat > "$TMP/ci.md" <<'EOF'

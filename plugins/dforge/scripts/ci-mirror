@@ -26,11 +26,11 @@ plan=$(plan_locate "$1")
 [ -f "$plan" ] && [ -r "$plan" ] || die "cannot read $plan"
 plan_amendments_ready "$plan"
 
-TMP=$(mktemp) || die "cannot create a temporary file"
-trap 'rm -f "$TMP" "$TMP.err"' EXIT
-plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$TMP" 2> "$TMP.err" \
-  || die "the plan's amendments do not apply: $(cat "$TMP.err")"
-line=$(plan_header_line "$TMP" CI)
+TMP=$(mktemp -d) || die "cannot create a temporary directory"
+trap 'rm -rf "$TMP"' EXIT
+plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$TMP/plan.md" 2> "$TMP/err" \
+  || die "the plan's amendments do not apply: $(cat "$TMP/err")"
+line=$(plan_header_line "$TMP/plan.md" CI)
 line=${line%$'\r'}
 [ -n "$line" ] || die "no **CI:** line in $plan"
 
