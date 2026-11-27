@@ -120,6 +120,8 @@ printf '## A1 — Task 1\nReason: r\nCost if wrong: c\n### Old\n````text\nold li
 check "apply: multi-line old text inside a fence" "$(plan_apply_amendments "$TMP/multi.md" "$TMP/multi-am.md" | tail -n 2 | tr '\n' '|')" 'new line|```|'
 check "apply: missing amendments file prints the plan" \
   "$(plan_apply_amendments "$TMP/h.md" "$TMP/no-such.md" | wc -l | tr -d ' ')" "$(wc -l < "$TMP/h.md" | tr -d ' ')"
+plan_apply_amendments "$TMP/no-such-plan.md" "" > /dev/null 2>&1; status=$?
+check "apply: an unreadable plan with no amendments fails" "$([ "$status" -ne 0 ] && echo nonzero || echo zero)" "nonzero"
 
 # --- plan_amendments_file ---
 export GIT_CONFIG_NOSYSTEM=1
