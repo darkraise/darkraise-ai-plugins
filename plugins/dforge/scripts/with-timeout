@@ -3,8 +3,9 @@
 # coreutils on macOS), killing it 10 seconds after the bound if it ignores TERM.
 #
 # Usage: with-timeout SECONDS CMD [ARG...]
-# Exit: CMD's status (124 when the bound fired); 125 when no timeout command
-#       is on PATH; 2 on usage.
+# Exit: CMD's status (124 when the bound fired and CMD ended on TERM; 137
+#       when CMD ignored TERM and was killed 10 seconds later); 125 when no
+#       timeout command is on PATH; 2 on usage.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
