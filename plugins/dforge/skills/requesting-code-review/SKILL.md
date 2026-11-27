@@ -28,9 +28,13 @@ dispatch their own templates, and this skill's steps do not apply.
 
 **1. Get git SHAs:**
 ```bash
-BASE_SHA=$(git merge-base origin/main HEAD)  # the commit the work started from; never HEAD~1, which truncates multi-commit work
+BASE=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD) ||
+  { git rev-parse --verify --quiet main >/dev/null && BASE=main; } || BASE=master
+BASE_SHA=$(git merge-base "$BASE" HEAD)  # the commit the work started from; never HEAD~1, which truncates multi-commit work
 HEAD_SHA=$(git rev-parse HEAD)
 ```
+
+When the work branched from another branch, use that branch as `BASE`.
 
 **2. Write the diff file and dispatch the reviewer:**
 
