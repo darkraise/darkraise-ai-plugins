@@ -455,8 +455,28 @@ async function documentsToDarkmem(context) {
     return { moved: false, reason: `${rel} changed during the move; the repository copy stays`, details: [...(again.failed ? [again.failed] : []), ...again.problems, ...drifted] };
   }
   if (!documents.length) return { moved: true, details: [`${rel} holds no tracked files; nothing to stage`] };
+  // Recorded before git rm, so a kill from here on leaves a recorded move with
+  // its deletion staged, not a staged deletion every later run refuses as
+  // uncommitted. A kill before git rm leaves docs/dforge tracked while
+  // documents are applied darkmem, which leftoverLines names; nothing is lost.
+  const where = { project: cfg.project, mirror: cfg.mirror };
+  try {
+    writeApplied(context.env, cfg.repoRoot, { documents: "darkmem" }, where);
+  } catch (error) {
+    if (!(error instanceof ConfigError) && typeof error?.code !== "string") throw error;
+    return { moved: false, reason: `the record of the move could not be written: ${error.message}; nothing was deleted`, details: [] };
+  }
   const removed = runGit(cfg.repoRoot, ["rm", "-r", "-q", "--", rel]);
-  if (removed.status !== 0) return { moved: false, reason: `git rm failed: ${removed.stderr.trim()}`, details: [] };
+  if (removed.status !== 0) {
+    const details = [];
+    try {
+      writeApplied(context.env, cfg.repoRoot, { documents: "local" }, where);
+    } catch (error) {
+      if (!(error instanceof ConfigError) && typeof error?.code !== "string") throw error;
+      details.push(`the record of the move could not be set back to local: ${error.message}; documents stay applied darkmem, and docs/dforge is not read`);
+    }
+    return { moved: false, reason: `git rm failed: ${removed.stderr.trim()}`, details };
+  }
   const details = [`the deletion of ${rel} is staged in ${cfg.repoRoot}; commit it`];
   const cites = runGit(cfg.repoRoot, ["grep", "-I", "-l", "-F", "-e", "docs/superpowers/", "-e", "docs/forge/", "-e", "docs/dforge/", "--", ".", `:(exclude)${rel}`]);
   const citing = cites.status === 0 ? cites.stdout.split("\n").filter(Boolean) : [];
@@ -707,7 +727,9 @@ export async function reconcile(context) {
       } catch (error) {
         if (!(error instanceof ConfigError) && typeof error?.code !== "string") throw error;
         // The files have moved; stores.json still names the old store, so the
-        // next reconcile moves the family again and records it.
+        // next reconcile moves the family again and records it. A documents
+        // move into darkmem has already recorded itself before its git rm, so
+        // this write repeats it.
         out(`darkmem-sync reconcile: ${family} moved to ${target}, but the record of it could not be written: ${error.message}; the next reconcile finishes it`);
         for (const line of result.details) out(`  ${line}`);
         report.refused += 1;

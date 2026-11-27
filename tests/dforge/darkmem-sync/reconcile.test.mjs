@@ -1319,3 +1319,41 @@ test("a file created untracked in docs/dforge during the move keeps the reposito
   assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
 });
 
+test("a reconcile after a documents move killed after git rm completes without refusing on uncommitted changes", { skip: process.platform === "win32" && "a POSIX git shim" }, async t => {
+  const s = await docsRepo(t);
+  const realGit = process.env.PATH.split(path.delimiter).map(dir => path.join(dir, "git")).find(file => fs.existsSync(file));
+  const bin = scratch("dms-git-");
+  fs.writeFileSync(path.join(bin, "git"), `#!/bin/sh\nfor a in "$@"; do [ "$a" = "grep" ] && { kill -KILL $PPID; exit 137; }; done\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
+  const killed = await reconcile(s.repo, { ...s.env, PATH: `${bin}${path.delimiter}${s.env.PATH ?? process.env.PATH}` });
+  assert.notEqual(killed.code, 0, killed.stdout + killed.stderr);
+  assert.equal(s.stores().documents, "darkmem");
+  assert.equal(git(s.repo, "diff", "--cached", "--name-only"), "docs/dforge/specs/a.md");
+  assert.equal(read(path.join(s.docsRoot, "specs", "a.md")), "# A\n");
+  const again = await s.reconcile();
+  assert.equal(again.code, 0, again.stdout + again.stderr);
+  assert.doesNotMatch(again.stdout, /has uncommitted changes/);
+});
+
+test("a stores record that cannot be written before git rm refuses the documents move and deletes nothing", async t => {
+  const s = await docsRepo(t);
+  s.stub.db.onRequest = (method, route) => {
+    if (method === "GET" && route === "/api/v1/documents/by-uri") fs.writeFileSync(path.join(s.home, ".dforge", "stores.json"), "{not json");
+  };
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents stay local \(configured darkmem\): the record of the move could not be written: .*stores\.json.*; nothing was deleted$/m);
+  assert.equal(git(s.repo, "diff", "--cached", "--name-only"), "");
+  assert.ok(fs.existsSync(path.join(s.repo, "docs", "dforge", "specs", "a.md")));
+});
+
+test("a documents move whose git rm fails sets the record back to local", { skip: process.platform === "win32" && "a POSIX git shim" }, async t => {
+  const s = await docsRepo(t);
+  const realGit = process.env.PATH.split(path.delimiter).map(dir => path.join(dir, "git")).find(file => fs.existsSync(file));
+  const bin = scratch("dms-git-");
+  fs.writeFileSync(path.join(bin, "git"), `#!/bin/sh\nfor a in "$@"; do [ "$a" = "rm" ] && { echo "fatal: rm refused by the test" >&2; exit 128; }; done\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
+  const result = await reconcile(s.repo, { ...s.env, PATH: `${bin}${path.delimiter}${s.env.PATH ?? process.env.PATH}` });
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: documents stay local (configured darkmem): git rm failed: fatal: rm refused by the test\n"), result.stdout);
+  assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
+  assert.equal(git(s.repo, "diff", "--cached", "--name-only"), "");
+});
