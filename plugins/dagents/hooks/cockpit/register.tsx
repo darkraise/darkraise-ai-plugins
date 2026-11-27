@@ -541,6 +541,14 @@ export const register: Register = on => {
       S.watchdog = null
       S.poll?.cancel()
       S.poll = null
+      S.autoTimer?.cancel()
+      S.autoTimer = null
+    }
+    // The auto run's own /clear must not lose the retry it armed for the next session.
+    if (e.reason !== 'clear') {
+      S.apiErrorTimer?.cancel()
+      S.apiErrorTimer = null
+      S.isApiErrorBooked = false
     }
     S.releaseTimer?.cancel()
     S.releaseTimer = null
@@ -765,6 +773,8 @@ export const register: Register = on => {
       if (e.reason === 'error') await bookApiError($)
       else if (e.reason === 'answer' && S.isApiErrorBooked) {
         S.isApiErrorBooked = false
+        S.apiErrorTimer?.cancel()
+        S.apiErrorTimer = null
         await autoRunCall($, await $.session.id(), ['api-error', '--clear'])
       }
       S.compactWindow = await readCompactWindow($)
