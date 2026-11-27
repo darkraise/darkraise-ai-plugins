@@ -815,5 +815,15 @@ OR="$TMP/ohrepo"; repo "$OR"
 out=$(HOME="$OH" migrate "$FM" --dry-run "$OR")
 check "dry: a mirror handoff in an older home is named" "$(grep -cxF "dforge-migrate: $OH/.dr-forge/mirror/p/work/handoff/latest.md is a darkmem mirror's latest.md in an older home; once the homes have moved, a run in its repository renames it to its key" <<<"$out")" "1"
 
+# --- a worktree whose path holds a newline ---
+NR="$TMP/nlrepo"
+repo "$NR"
+NW="$TMP/nl"$'\n'"wt"
+git -C "$NR" worktree add -q -b nl "$NW"
+mkdir -p "$NW/.superpowers/sdd/p"
+echo ledger > "$NW/.superpowers/sdd/p/progress.md"
+out=$(migrate "$FM" "$NR" 2>&1); code=$?
+check "worktree list: a worktree whose path holds a newline is migrated" \
+  "$code:$(cat "$NW/.dforge/sdd/p/progress.md" 2>/dev/null):$(exists "$NW/.superpowers")" "0:ledger:no"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

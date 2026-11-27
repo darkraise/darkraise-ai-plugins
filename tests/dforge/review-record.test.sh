@@ -212,5 +212,23 @@ out=$(cd "$L" && bash "$P/scripts/review-record" ratio "$LB" "$LH" 2>"$TMP/err")
 check "ratio: an unreadable diff exits 1" \
   "$rc:$out:$(grep -c '^review-record: could not read the diff' "$TMP/err")" "1::1"
 
+count_in() { # count_in TEXT NEEDLE — how many times NEEDLE occurs in TEXT
+  local n=0 rest=$1
+  while [[ $rest == *"$2"* ]]; do n=$((n + 1)); rest=${rest#*"$2"}; done
+  echo "$n"
+}
+# --- a worktree whose path holds a newline ---
+NLR="$TMP/nlrepo"
+git init -q -b main "$NLR"
+mkdir -p "$NLR/docs/dforge/plans"
+printf '# P\n' > "$NLR/docs/dforge/plans/2026-01-01-p.md"
+git -C "$NLR" add -A && git -C "$NLR" commit -q -m init
+NLTOP=$(git -C "$NLR" rev-parse --show-toplevel)
+NLW="$TMP/nl"$'\n'"wt"
+git -C "$NLR" worktree add -q -b nl "$NLW"
+ledger "$NLW" 2026-01-01-p docs/dforge/plans/2026-01-01-p.md 'Final review: clean (commits abc1234..def5678)'
+out=$(cd "$NLTOP" && bash "$P/scripts/review-record" retain "$NLTOP/docs/dforge/plans/2026-01-01-p.md" 2>&1); rc=$?
+check "worktree list: a ledger in a worktree whose path holds a newline is found" \
+  "$rc:$out:$(grep -c '^Final review: clean' "$NLTOP/docs/dforge/reviews/2026-01-01-p.md" 2>/dev/null)" "0:$NLTOP/docs/dforge/reviews/2026-01-01-p.md:1"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

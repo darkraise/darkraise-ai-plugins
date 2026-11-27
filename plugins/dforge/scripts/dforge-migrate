@@ -398,10 +398,12 @@ rewrite_active_plans() {
 legacy_handoffs() {
   (
     dforge_stores_init "$root" || exit 2
-    while IFS= read -r wt; do
+    # NUL-separated fields: a worktree path may hold a newline.
+    while IFS= read -r -d '' wt; do
+      case $wt in 'worktree '*) wt=${wt#worktree } ;; *) continue ;; esac
       f="$(dforge_dir state "$(_dforge_path "$wt")")/handoff/latest.md"
       if [ -f "$f" ] || [ -L "$f" ]; then printf '%s\n' "$f"; fi
-    done < <(g -C "$root" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p')
+    done < <(g -C "$root" worktree list --porcelain -z 2>/dev/null)
     f="${_DFORGE_LEDGER_ROOT%/*}/handoff/latest.md"
     if [ "$_DFORGE_PROGRESS_STORE" = darkmem ] && { [ -f "$f" ] || [ -L "$f" ]; }; then printf '%s\n' "$f"; fi
   )
@@ -532,9 +534,11 @@ if [ "$legacy_only" -eq 1 ]; then
   exit 0
 fi
 
-while IFS= read -r wt; do
+# NUL-separated fields: a worktree path may hold a newline.
+while IFS= read -r -d '' wt; do
+  case $wt in 'worktree '*) wt=${wt#worktree } ;; *) continue ;; esac
   [ -n "$wt" ] && [ -d "$wt" ] && checkouts+=("$wt")
-done < <(g -C "$root" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p')
+done < <(g -C "$root" worktree list --porcelain -z 2>/dev/null)
 [ ${#checkouts[@]} -gt 0 ] || checkouts=("$root")
 
 for wt in "${checkouts[@]}"; do

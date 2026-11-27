@@ -45,14 +45,18 @@ done
 
 echo
 echo "## Worktrees"
-git worktree list --porcelain | tr -d '\r' | awk '
-  /^worktree / { if (line != "") print line; line = "- `" substr($0, 10) "`"; next }
-  /^HEAD /     { line = line " " substr($0, 6, 7); next }
-  /^branch /   { b = substr($0, 8); sub(/^refs\/heads\//, "", b); line = line " [" b "]"; next }
-  /^detached/  { line = line " (detached)"; next }
-  /^prunable/  { line = line " — prunable"; next }
-  END { if (line != "") print line }
-'
+# NUL-separated fields: a worktree path may hold a newline.
+wt_line=""
+while IFS= read -r -d '' field; do
+  case $field in
+    'worktree '*) [ -z "$wt_line" ] || printf '%s\n' "$wt_line"; wt_line="- \`${field#worktree }\`" ;;
+    'HEAD '*) wt_head=${field#HEAD }; wt_line="$wt_line ${wt_head:0:7}" ;;
+    'branch '*) wt_branch=${field#branch }; wt_line="$wt_line [${wt_branch#refs/heads/}]" ;;
+    detached) wt_line="$wt_line (detached)" ;;
+    prunable*) wt_line="$wt_line — prunable" ;;
+  esac
+done < <(git worktree list --porcelain -z)
+[ -z "$wt_line" ] || printf '%s\n' "$wt_line"
 
 dirty=$(git status --short)
 count=$(printf '%s' "$dirty" | grep -c . || true)
@@ -260,14 +264,21 @@ while IFS=$'\t' read -r f key kind age claim; do
   [ -n "$f" ] && [ "$f" != "$own" ] || continue
   show_handoff "$f" "$key" "$kind" "$age" "$claim" 0
 done <<<"$handoffs"
-while IFS=$'\t' read -r wt wprune; do
-  wt=$(_dforge_path "$wt")
-  [ -z "$wprune" ] && [ -d "$wt" ] || echo "- skipped \`$wt\`: prunable or missing"
-done < <(git -C "$(dr_native_path "$root")" worktree list --porcelain 2>/dev/null | tr -d '\r' | awk '
-  /^worktree / { if (p != "") print p "\t" pr; p = substr($0, 10); pr = ""; next }
-  /^prunable/  { pr = "prunable"; next }
-  END { if (p != "") print p "\t" pr }
-')
+# skip_unusable PATH PRUNABLE — name a worktree no handoff was read from.
+skip_unusable() {
+  local wt
+  [ -n "$1" ] || return 0
+  wt=$(_dforge_path "$1")
+  [ -z "$2" ] && [ -d "$wt" ] || echo "- skipped \`$wt\`: prunable or missing"
+}
+wt="" wprune=""
+while IFS= read -r -d '' field; do
+  case $field in
+    'worktree '*) skip_unusable "$wt" "$wprune"; wt=${field#worktree } wprune="" ;;
+    prunable*) wprune=prunable ;;
+  esac
+done < <(git -C "$(dr_native_path "$root")" worktree list --porcelain -z 2>/dev/null)
+skip_unusable "$wt" "$wprune"
 [ "$listed" -eq 1 ] || echo "- none"
 
 echo

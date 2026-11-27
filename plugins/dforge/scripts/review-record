@@ -55,9 +55,11 @@ retain() {
   else
     top=$(git rev-parse --show-toplevel 2>/dev/null) || top=$PWD
     dirs=("$top")
-    while IFS= read -r wt; do
+    # NUL-separated fields: a worktree path may hold a newline.
+    while IFS= read -r -d '' wt; do
+      case $wt in 'worktree '*) wt=${wt#worktree } ;; *) continue ;; esac
       [ -n "$wt" ] && dirs+=("$wt")
-    done < <(git -C "$(dr_native_path "$top")" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p')
+    done < <(git -C "$(dr_native_path "$top")" worktree list --porcelain -z 2>/dev/null)
   fi
 
   for dir in "${dirs[@]}"; do
