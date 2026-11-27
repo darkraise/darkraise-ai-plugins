@@ -170,6 +170,9 @@ check "a counter that cannot be kept lets the stop through and logs why" "$CODE|
 gate "$(fjq -nc --arg m "All done.
 $MISSING" '{cwd:"/nonexistent/dir",agent_id:"a-nocwd",agent_type:"dforge:impl-sonnet-high",last_assistant_message:$m}')"
 check "a missing working directory lets the stop through and logs why" "$CODE|$OUT|$ERR|$(grep -c 'a-nocwd .*cannot enter /nonexistent/dir' "$FALLBACK")" "0|||1"
+mkdir -p "$STATE/impl-stop-gate/a-cdir"
+gate "$(input dforge:impl-sonnet-high a-cdir "$M1")"
+check "a counter that cannot be written lets the stop through and logs why" "$CODE|$OUT|$ERR|$(grep -c 'a-cdir .*cannot write the block counter' "$FALLBACK")" "0|||1"
 
 LINES0=$(wc -l < "$FALLBACK" | tr -d ' ')
 gate "$(fjq -nc --arg m "All done.
