@@ -145,12 +145,9 @@ block, and continue once your partner answers.
 
 **Every session ends with the next step.** When this session ends before the
 plan is finished (a context-budget handoff, or your partner asks you to stop),
-first reconcile live children as dagents:handoff step 0 says: wait for them,
-or `TaskStop` them and record a Ruling, and tell your partner which. Then run
-`scripts/next-step PLAN_FILE` (using-dagents §Session Budget) last, and end
-your final message with the block it prints, verbatim. It also rewrites that
-block in the plan's `<handoff>` in the next session's checkout; on exit 4, say it could
-not be written. When the plan finishes,
+run dagents:handoff steps 0-5: they reconcile live children, write the State,
+Gotchas and Do-not notes, and end on the block
+`scripts/next-step --notes <notes> PLAN_FILE` prints. When the plan finishes,
 dagents:finishing-a-development-branch runs it instead.
 
 ## Setup
