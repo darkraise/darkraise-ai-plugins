@@ -4610,6 +4610,12 @@ describe('discord', () => {
     expect(excerpt('a'.repeat(20), 10)).toBe(`${'a'.repeat(9)}…`)
   })
 
+  test("masks a Google API key and a URL's password", () => {
+    expect(redact('psql postgres://admin:hunter2@db.local:5432/app')).toBe('psql postgres://admin:[hidden]@db.local:5432/app')
+    expect(redact('git clone ssh://git@github.com/o/r https://example.com:8443/x')).toBe('git clone ssh://git@github.com/o/r https://example.com:8443/x')
+    expect(redact('curl "https://maps.googleapis.com/x?key=AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q"')).toBe('curl "https://maps.googleapis.com/x?key=[token]"')
+  })
+
   test('masks private keys, JWTs and escaped JSON values', () => {
     expect(redact('k -----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEA\n-----END OPENSSH PRIVATE KEY----- done')).toBe('k [private key] done')
     expect(redact('t eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2ln x')).toBe('t [token] x')
