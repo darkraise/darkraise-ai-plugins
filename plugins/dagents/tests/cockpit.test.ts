@@ -1205,6 +1205,12 @@ describe('review seat write guard', () => {
     expect((await write($, 'judge-1', REVIEW)).deny).toMatch(GUARD)
   })
 
+  test('keeps a backslash in a POSIX report path', async ($, on) => {
+    await started($, on)
+    const target = `${WS}\\task-1-review-report.md`
+    expect((await write($, 'judge-1', target)).deny).toBe(`dagents: a review seat writes only the report file its dispatch names (${REVIEW}); ${target} is not one.`)
+    expect((await write($, 'judge-1', REVIEW)).deny).toBeUndefined()
+  })
   test('refuses a judge write to anything but the report its dispatch names, and allows that report', async ($, on) => {
     await started($, on)
     const refused = [
