@@ -580,13 +580,7 @@ export const register: Register = on => {
     const startedAt = await $.clock.now()
     const done = await next(e)
     if (e.agentId === undefined && e.trigger !== 'precompute' && 'messages' in done && done.messages !== undefined) {
-      await update($, budget, () => null)
-      await update($, isNudged, () => false)
-      await markHandoff($, false)
-      // The turns before a compaction say nothing about the context after it.
-      await update($, turnTokens, () => [])
-      // The estimate stands in until the next response; the old one is the window before.
-      await readBreakdown($)
+      await afterMainCompaction($)
       // The engine's or the person's compaction: the run's rule still applies after it.
       if ((e.trigger === 'auto' || e.trigger === 'manual') && !S.isPaneCompacting) await bookAutoCompaction($, false, await secondsSince($, startedAt))
     }
@@ -3470,10 +3464,24 @@ async function compactFromPane($: EngineInterface) {
   try {
     const startedAt = await $.clock.now()
     const done = await $.session.compact()
-    if (!('skip' in done)) await bookAutoCompaction($, true, await secondsSince($, startedAt))
+    if (!('skip' in done)) {
+      await afterMainCompaction($)
+      await bookAutoCompaction($, true, await secondsSince($, startedAt))
+    }
   } finally {
     S.isPaneCompacting = false
   }
+}
+
+// The main loop's context was compacted: drop the stale reading and re-arm the note.
+async function afterMainCompaction($: EngineInterface) {
+  await update($, budget, () => null)
+  await update($, isNudged, () => false)
+  await markHandoff($, false)
+  // The turns before a compaction say nothing about the context after it.
+  await update($, turnTokens, () => [])
+  // The estimate stands in until the next response; the old one is the window before.
+  await readBreakdown($)
 }
 
 // A compaction the cockpit did not make, booked so the run's rule applies after it.
