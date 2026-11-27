@@ -49,8 +49,14 @@ session from memory or from a summary.
    elsewhere). Skip EnterWorktree when the recorded workspace is the primary checkout. Take the head commit of the ledger's last `Task N: complete`
    line (or the branch's merge base with main when no task has completed) and
    check `git merge-base --is-ancestor <sha> HEAD`. If it fails, the
-   history was rewritten after the handoff: log
-   `Ruling: HEAD no longer descends from <sha> — history rewritten after the handoff — tasks re-verified from git log`
+   history was rewritten after the handoff. Re-verify each task: for each
+   `Task N: complete (commits <a>..<b>, …)` line, compare the subjects
+   `git log --format=%s <a>..<b>` prints (skip the task when `<b>` is gone)
+   with those of `git log --format=%s <merge base>..HEAD`. A task with none
+   of its subjects on HEAD is unverified: stop and ask, naming the tasks; in
+   an auto run, run `scripts/auto-run stop --reason "Task <N>'s commits are not on HEAD after a history rewrite"`.
+   Otherwise log
+   `Ruling: HEAD no longer descends from <sha> — history rewritten after the handoff — <k> of <n> tasks found on HEAD by subject`
    and continue from the ledger plus `git log`.
 4. **Reload** `<ledger dir>/handoff.md`, the plan's header (run
    `scripts/task-brief --header PLAN_FILE` and read the file it prints), and
