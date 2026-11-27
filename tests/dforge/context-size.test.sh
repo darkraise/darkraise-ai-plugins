@@ -60,6 +60,15 @@ run() { out=$(cd "$REPO" && bash "$SCRIPT" "$@" 2>"$TMP/stderr"); status=$?; }
 
 T="$PROJ/s-1.jsonl"
 
+# --- bash 3.2: the empty mode array (DFORGE_TEST_BASH32 runs bash 3.2) ---
+if [ -n "${DFORGE_TEST_BASH32:-}" ]; then
+  b32=$($DFORGE_TEST_BASH32 "$(cd "$HERE/../.." && pwd)/plugins/dforge/scripts/context-size" 2>"$TMP/b32.err"); b32s=$?
+  check "bash 3.2: a plain call prints its budget line" "$b32s|$b32|$(grep -c 'unbound variable' "$TMP/b32.err")" \
+    "3|budget: unknown — unknown — no jq|0"
+else
+  printf 'skip - bash 3.2: a plain call prints its budget line (DFORGE_TEST_BASH32 unset)\n'
+fi
+
 # --- record; sidechain, synthetic and zero-usage entries ignored ---
 { asst 285000; asst 900000 true; asst 999000 false '<synthetic>'; asst 0; } > "$T"
 record s-1 "$T"
