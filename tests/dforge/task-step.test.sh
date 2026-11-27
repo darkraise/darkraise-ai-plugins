@@ -277,7 +277,7 @@ check "review: the risk-3 judge prompt has no placeholder" "$(placeholders "$JP7
 PP="$WS/task-7-review-panel-prompt.md"
 check "review: the judge prompt keeps no template instruction text" "$(grep -cE '^\[Include |otherwise\.\]$' "$JP7")" "0"
 check "review: the panel command in full" "$(grep '^panel:' <<<"$out")" \
-  "panel: bash \"$PR\"/scripts/run-review-panel --kind task --tier heavy --cwd \"$TOP\" --out-dir \"$WS/task-7-review-panel\" --prompt \"$PP\""
+  "panel: bash $(printf %q "$PR/scripts/run-review-panel") --kind task --tier heavy --cwd $(printf %q "$TOP") --out-dir $(printf %q "$WS/task-7-review-panel") --prompt $(printf %q "$PP")"
 check "review: no gate line while a surface is open" "$(grep -c '^gate:' <<<"$out")" "0"
 check "review: the panel prompt has no unexpanded placeholder" "$(placeholders "$PP")" "0"
 check "review: the panel prompt asks for one JSON object" "$(grep -c 'one JSON object' "$PP")" "1"
@@ -285,6 +285,16 @@ check "review: the panel prompt carries the criteria" "$(grep -c '^#### Spec Com
 check "review: the panel prompt drops the markdown report" "$(grep -cE 'Verification Scores|Output Format|Lens Criteria|Second Pass' "$PP")" "0"
 check "review: the panel prompt names the diff file" "$(grep -c "^\*\*Diff file:\*\* $WS/review-" "$PP")" "1"
 check "review: no Codex prompt is written" "$([ -e "$WS/task-7-review-codex-prompt.md" ] && echo yes || echo no)" "no"
+# The printed panel line is run by the session: a checkout path is text there.
+SUB_REPO="$TMP/fix-\$(touch pwned)"
+cp -a "$REPO" "$SUB_REPO"
+sub_line=$(cd "$SUB_REPO" && bash "$STEP" review docs/plan.md 7 2>/dev/null | grep '^panel:')
+sub_top=$(cd "$SUB_REPO" && git rev-parse --show-toplevel)
+mkdir -p "$TMP/empty"
+sub_arg=$(cd "$TMP/empty" && eval "set -- ${sub_line#panel: }" && printf '%s' "${8:-}")
+check "review: a checkout path holding \$(…) reaches the panel command as text" \
+  "$([ "$sub_arg" = "$sub_top" ] && echo yes || echo no) $([ -e "$TMP/empty/pwned" ] && echo yes || echo no)" "yes no"
+rm -rf "$SUB_REPO" "$TMP/empty"
 printf '%s\n' '#!/usr/bin/env bash' 'echo "agy-gate usable=true reason=ok review=false resets_at=- claude=on claude_resets_at=- source=probe"' > "$TMP/agy-probe-stub"
 TASK_STEP_AGY_GATE="$TMP/agy-probe-stub" step review docs/plan.md 7
 check "review: a gate that probed prints the gate line, untrusted named" "$(grep '^gate:' <<<"$out")" "gate: agy=untrusted codex=open"
@@ -1029,6 +1039,26 @@ REPORT
   rr_run verdict docs/plan.md 1
   check "verdict: a mode-only change to a file dirty at review time exits 6" "$rr_rc $(grep -cx 'other.txt' <<<"$rr_err")" "6 1"
   chmod -x "$RR_REPO/other.txt"
+  rr_git checkout -- other.txt
+  # A restore line never writes through a link swapped in after the review.
+  rr_reset
+  printf 'dirty\n' >> "$RR_REPO/other.txt"
+  rr_run review docs/plan.md 1
+  vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: pass
+|quality: approved
+|scores: spec 17 / scope 18 / verification 16 / quality 16
+REPORT
+  printf 'keep\n' > "$RR_TMP/outside.txt"
+  rm -f "$RR_REPO/other.txt" && ln -s "$RR_TMP/outside.txt" "$RR_REPO/other.txt"
+  rr_run verdict docs/plan.md 1
+  link_rc=$rr_rc
+  while IFS= read -r restore; do
+    (cd "$RR_REPO" && bash -c "$restore" >/dev/null 2>&1)
+  done < <(grep -A1 -x 'other.txt' <<<"$rr_err" | sed -n 's/^  restore: //p')
+  check "verdict: a path swapped for a symbolic link is not written through" "$link_rc $(cat "$RR_TMP/outside.txt")" "6 keep"
+  rm -f "$RR_REPO/other.txt"
   rr_git checkout -- other.txt
 fi
 
