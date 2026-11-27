@@ -1612,3 +1612,20 @@ test("a git that refuses worktree list -z still lists every checkout", { skip: p
   assert.ok(sources.some(item => item.rel === "sdd/p2/progress.md" && item.file.startsWith(worktree)), JSON.stringify(sources));
   assert.equal(pathToUri({ docsRoot: scratch("dms-elsewhere-"), worktreeRoot: repo }, path.join(worktree, "docs", "dforge", "specs", "s.md")), "dforge/specs/s.md");
 });
+
+test("a mirror copy written by another process during the move is not overwritten", async t => {
+  const s = await setup(t, "darkmem");
+  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  const target = path.join(s.workRoot, "sdd", "p1", "progress.md");
+  s.stub.db.onRequest = (method, route) => {
+    if (method !== "POST" || route !== "/api/v1/worklog/entries") return;
+    s.stub.db.onRequest = null;
+    write(target, "an outside edit\n");
+  };
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): the mirror changed during the move; nothing was moved locally\n"), result.stdout);
+  assert.ok(result.stdout.includes(`  ${target}: the mirror already holds a different copy of sdd/p1/progress.md\n`), result.stdout);
+  assert.equal(read(target), "an outside edit\n");
+  assert.equal(s.stores().progress, "local");
+});

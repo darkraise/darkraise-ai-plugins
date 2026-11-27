@@ -219,12 +219,10 @@ function stoppedImport(held, buffer) {
 // holds the first pieces of is a stopped import to resume, so a move stopped
 // part-way runs again; any other existing copy that differs is a problem, so
 // nothing is overwritten.
-export async function checkProgressTargets({ cfg, client }, sources) {
+function mirrorCopyProblems(workRoot, sources) {
   const problems = [];
-  const filed = new Map();
-  const partial = new Map();
   for (const item of sources) {
-    const target = local(path.join(cfg.mirror, "work"), item.rel);
+    const target = local(workRoot, item.rel);
     if (!fs.existsSync(target)) continue;
     let held;
     try {
@@ -235,6 +233,13 @@ export async function checkProgressTargets({ cfg, client }, sources) {
     }
     if (!held.equals(item.buffer)) problems.push(`${target}: the mirror already holds a different copy of ${item.rel}`);
   }
+  return problems;
+}
+
+export async function checkProgressTargets({ cfg, client }, sources) {
+  const problems = mirrorCopyProblems(path.join(cfg.mirror, "work"), sources);
+  const filed = new Map();
+  const partial = new Map();
   const notes = new Map([
     ...(await client.manifest(cfg.project, `${DOC_PREFIX}/handoff`)),
     ...(await client.manifest(cfg.project, `${DOC_PREFIX}/amendments`)),
@@ -444,6 +449,10 @@ export async function progressToDarkmem(context) {
   // atomic write follows one in any directory above the file it replaces.
   const relinked = mirrorRefusal([...mirrorTop(cfg.mirror), ...mirrorLinks(workRoot)], "nothing was moved locally, and darkmem keeps what it accepted");
   if (relinked) return relinked;
+  // The move holds the mirror lock, so no dforge code wrote these since the
+  // check; an outside edit is kept rather than replaced.
+  const outside = mirrorCopyProblems(workRoot, sources);
+  if (outside.length) return refuse("the mirror changed during the move; nothing was moved locally", outside);
   for (const item of sources) writeFileAtomic(local(workRoot, item.rel), item.buffer, path.dirname(workRoot));
   const unread = sources.filter(item => {
     try {
