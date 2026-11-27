@@ -372,7 +372,7 @@ check "A20: the primary's draft handoff is untouched" "$(cmp -s "$TMP/d-before" 
 check "A20: the primary's adhoc handoff is untouched" "$(cmp -s "$TMP/f-before" "$U/.dforge/handoff/adhoc-ffffffff.md" && echo same || echo changed)" "same"
 has "A20: the draft is listed" "$HSEC" "- \`$U/.dforge/handoff/d-design.md\` — key d-design, kind draft"
 audit "$U"
-check "A20: from the primary, too" "$(ls "$U/.dforge/handoff" | sort | paste -sd' ' -)" "adhoc-ffffffff.md d-design.md"
+check "A20: from the primary, too" "$(ls "$U/.dforge/handoff" | grep -vx claims | sort | paste -sd' ' -)" "adhoc-ffffffff.md d-design.md"
 git -C "$U" worktree remove --force "$UW"
 
 # A listing that fails is named, not read as "no handoffs"; a handoff
@@ -404,5 +404,21 @@ printf '#!/usr/bin/env bash\nrm -f "$3"\necho "next-step: the plan is finished: 
 out=$(cd "$RW" && bash "$FX/scripts/repo-audit" 2>&1)
 check "fix: a handoff deleted during the audit prints no error" "$(grep -c 'No such file' <<<"$out")" "0"
 
+# --- a removal with no claims directory takes the claims lock ---
+HC="$TMP/hc"
+git init -q -b main "$HC"
+mkdir -p "$HC/docs/dforge/plans" "$HC/.dforge/handoff"
+printf '.dforge/\n' > "$HC/.gitignore"
+printf '# P\n\n**Spec:** docs/dforge/specs/p.md\n**Execution:** inline — `claude --model sonnet --effort high` — x\n\n### Task 1: One\n' > "$HC/docs/dforge/plans/2026-11-01-p.md"
+printf '# Completed plans\n\n- 2026-11-01 — `docs/dforge/plans/2026-11-01-p.md` — merged\n' > "$HC/docs/dforge/plans/completed.md"
+git -C "$HC" add -A && git -C "$HC" commit -qm init
+printf '# Handoff\n\n## Next session\n\n**Status:** x\n**Next:** y\n<!-- next-step: kind=plan done=0 closed=0 subject=docs/dforge/plans/2026-11-01-p.md at=1 -->\n' > "$HC/.dforge/handoff/2026-11-01-p.md"
+if command -v flock >/dev/null 2>&1; then
+  (cd "$HC" && bash "$SCRIPT" >/dev/null 2>&1)
+  check "fix: a removal with no claims directory takes the claims lock" \
+    "$([ -e "$HC/.dforge/handoff/2026-11-01-p.md" ] && echo kept || echo removed):$([ -e "$HC/.dforge/handoff/claims/.lock" ] && echo locked || echo unlocked)" "removed:locked"
+else
+  printf "skip - fix: a removal with no claims directory takes the claims lock: no flock\n"
+fi
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

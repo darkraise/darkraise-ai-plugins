@@ -201,8 +201,11 @@ show_handoff() {
       reason=${reason:-nothing to resume}
       case $kind in
         plan|draft|complete|kept)
-          if [ -d "$claims" ]; then dr_locked "$claims/" remove_finished "$f" "$key" "$before" || rrc=$?
-          else remove_finished "$f" "$key" "$before" || rrc=$?; fi
+          # Always under the claims lock, the directory made as next-step makes
+          # it, so a first claim cannot land between the check and the removal.
+          if { mkdir -p "$claims" && dforge_self_ignore "${claims%/handoff/claims}"; } 2>/dev/null; then
+            dr_locked "$claims/" remove_finished "$f" "$key" "$before" || rrc=$?
+          else rrc=1; fi
           case $rrc in
             0) echo "- removed finished handoff $f — $reason"; return ;;
             3) echo "$line"; echo "- finished, kept while a live session claims it: $reason" ;;
