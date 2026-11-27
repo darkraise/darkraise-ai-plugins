@@ -41,8 +41,9 @@ rows=$(mktemp) || exit 2
 trap 'rm -f "$rows"' EXIT
 
 # Pass 1: one TSV row per test case — case, seconds, status, flaky, layer, file, id —
-# plus one `overhead` row per leaf suite whose own time exceeds its cases' sum
-# (suite-level setup and teardown that no test case is charged for).
+# plus one `overhead` row per suite whose own time exceeds the sum of its cases
+# and child suites (suite-level setup and teardown that no test case is charged
+# for).
 LAYERS="$layers" awk -v RS='<' '
 function attr(tag, n,   v) {
   if (match(tag, "[ \t\r\n]" n "=\"[^\"]*\"")) { v = substr(tag, RSTART + length(n) + 3, RLENGTH - length(n) - 4) }
@@ -94,11 +95,15 @@ skip != "" { if (index($0, skip)) skip = ""; next }
   if (name == "" && substr(tag, 1, 1) == "/") { split(substr(tag, 2), w, /[ \t\r\n]/); name = "/" w[1] }
   if (name == "testsuite") {
     if (open) emit()
-    d++; st[d] = num(attr(tag, "time")); sum[d] = 0; has[d] = 0
-    if (self) d--
+    d++; st[d] = num(attr(tag, "time")); sum[d] = 0; has[d] = 0; kids[d] = 0
+    if (self) { d--; if (d > 0) { sum[d] += st[d + 1]; kids[d] = 1 } }
   } else if (name == "/testsuite") {
     if (open) emit()
-    if (d > 0) { if (has[d] && st[d] > sum[d]) printf "overhead\t%.6f\n", st[d] - sum[d]; d-- }
+    if (d > 0) {
+      if ((has[d] || kids[d]) && st[d] > sum[d]) printf "overhead\t%.6f\n", st[d] - sum[d]
+      d--
+      if (d > 0) { sum[d] += st[d + 1]; kids[d] = 1 }
+    }
   } else if (name == "testcase") {
     if (open) emit()
     cn = attr(tag, "name"); cc = attr(tag, "classname"); fl = attr(tag, "file")
