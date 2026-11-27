@@ -2919,6 +2919,9 @@ const S = {
   // time, never awaited.
   offerRanKey: null as string | null,
   isOfferRunning: false,
+  // Bumped when the session or its checkout changes: a chain started before
+  // then writes no offer into the context that followed.
+  offerEpoch: 0,
   // A Done held while the main conversation's background work runs: when its
   // chain of turns began, when a turn last ended with the work pending, and
   // that turn's answer, which a Done released with no turn carries.
@@ -4074,8 +4077,14 @@ async function readResumeOffer(
   if (S.isOfferRunning || S.offerRanKey === runKey) return
   S.offerRanKey = runKey
   S.isOfferRunning = true
+  const epoch = S.offerEpoch
   void offerChain($, here, fresh, claims, docs, places)
     .then(async offer => {
+      if (epoch !== S.offerEpoch) {
+        // The scan this chain stood for no longer holds: the next read scans again.
+        S.offerDirStamp = null
+        return
+      }
       if (JSON.stringify(await read($, resumeOffer)) !== JSON.stringify(offer)) await update($, resumeOffer, () => offer)
     })
     .catch(() => undefined)
@@ -4956,6 +4965,7 @@ async function readSession($: EngineInterface, isStart: boolean) {
   S.offerTexts.clear()
   S.offerRanKey = null
   S.offerDirStamp = null
+  S.offerEpoch += 1
   // Each read fills its own section: one that throws leaves only that section
   // unread, and a slow poll tick reads that one again, not the whole session,
   // whose caches the reset above would otherwise clear on every retry.
@@ -5227,7 +5237,10 @@ async function readPlace($: EngineInterface) {
   const was = S.where.checkout
   S.where.checkout = top?.exitCode === 0 ? (top.stdout.split('\n')[0] ?? '').trim() || null : null
   // A cd into another repository moves its primary checkout too.
-  if (S.where.checkout !== was) await readPrimary($)
+  if (S.where.checkout !== was) {
+    S.offerEpoch += 1
+    await readPrimary($)
+  }
 }
 
 // Until the first request goes out: the session's model and the effort setting.
