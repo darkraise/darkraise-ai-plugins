@@ -34,8 +34,10 @@ done
 [ ${#args[@]} -eq 3 ] || die "usage: task-close PLAN_FILE N CHECKPOINT [--review TEXT]"
 plan_arg=${args[0]} n=${args[1]} checkpoint=${args[2]}
 [[ $n =~ ^[0-9]+$ ]] || die "N must be a task number: $n"
+# A label counts only where a field starts: `undone:` is not `done:`.
 for field in 'done:' 'verified:' 'remaining:' 'discovered:' 'assumptions:'; do
-  [[ $checkpoint == *"$field"* ]] || die "the checkpoint lacks '$field' (done: …; verified: …; remaining: …; discovered: …; assumptions: …)"
+  re="(^|;[[:space:]]*)$field"
+  [[ $checkpoint =~ $re ]] || die "the checkpoint lacks '$field' (done: …; verified: …; remaining: …; discovered: …; assumptions: …)"
 done
 # A line break would start a second ledger line, which recovery would read.
 case $checkpoint in *$'\n'*|*$'\r'*) die "the checkpoint must be one line" ;; esac

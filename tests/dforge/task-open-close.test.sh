@@ -182,6 +182,8 @@ run bash "$CLOSE" docs/plan.md 99 "$CP"
 check "close: no such task exits 3" "$rc" "3"
 run bash "$CLOSE" docs/plan.md 1 "done: x"
 check "close: a checkpoint missing fields exits 2" "$rc" "2"
+run bash "$CLOSE" docs/plan.md 1 'undone: x; unverified: y; remaining: none; discovered: none; assumptions: none'
+check "close: a checkpoint whose fields are only substrings exits 2" "$rc" "2"
 run bash "$CLOSE" docs/plan.md 1
 check "close: no checkpoint exits 2" "$rc" "2"
 
