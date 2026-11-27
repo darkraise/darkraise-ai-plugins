@@ -86,7 +86,9 @@ export function utcStamp(date = new Date()) {
 }
 
 // Where a deleted document is archived: dforge/<rest> becomes
-// dforge/archive/<stamp>/<rest>, so a name deleted twice never collides.
+// dforge/archive/<stamp>/<rest>. The stamp has one-second resolution, so a uri
+// archived twice within one second collides: darkmem refuses the second move,
+// which archiveDeleted reports as a conflict.
 export function archiveUri(uri, stamp) {
   return `${ARCHIVE_PREFIX}/${stamp}/${String(uri).slice(DOC_PREFIX.length + 1)}`;
 }
