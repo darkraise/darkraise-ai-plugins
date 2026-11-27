@@ -83,5 +83,14 @@ printf '2026-01-01T00:00:00Z\topen\tdagents\t1.0.0\t/plugin\tdocs/dagents/plans/
 missing_case "markers naming a transcript that does not exist" "no transcript"
 missing_case "no node on PATH" "node not found" "$(nonode_path)"
 
+# --- inferred_bounds: a quoted script path ---
+B=$(cd "$HERE/../../plugins/dagents/scripts/lib" && node --input-type=module -e '
+  import { inferBounds } from "./usage-report.mjs";
+  const call = (c) => ({ type: "assistant", message: { content: [{ type: "tool_use", id: "t", name: "Bash", input: { command: c } }] } });
+  const at = (list) => list.map((c, i) => ({ offset: i, entry: c ? call(c) : { type: "assistant", message: { content: [] } } }));
+  console.log(JSON.stringify(inferBounds(at(["bash \"/p/scripts/task-brief\" --open docs/p.md 1", null,
+    "bash \"/p/scripts/task-close\" docs/p.md 1 x", "bash \x27/p/scripts/task-step\x27 start docs/p.md 2"])).map((b) => [b.task, b.start, b.end])));' 2>&1)
+check "inferred_bounds: a quoted script path" "$B" '[[1,0,3],[2,3,4]]'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
