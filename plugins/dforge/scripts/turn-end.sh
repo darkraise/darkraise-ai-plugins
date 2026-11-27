@@ -102,6 +102,15 @@ if [ -f "$stamp" ]; then
   # FILE changed this turn after next-step last printed a block for this
   # session, terminal blocks included (they write no handoff).
   turn_record=$(ending_turn_record "$session_id")
+  # A roadmap outside git has no turn-start version: the closed count at this
+  # session's last stop stands in for it.
+  closed_last="" closed_mirror=""
+  if [ "$docs_store" != local ] && [ -n "$docs" ] && [ -f "$docs/roadmap.md" ]; then
+    . "${SCRIPT_DIR}/lib/roadmap.sh"
+    closed_last=$(tr -d '\r' < "$stamp.closed" 2>/dev/null)
+    closed_mirror=$(roadmap_rows "$docs/roadmap.md" | awk -F'\t' '$5 == "closed"' | grep -c . || true)
+    printf '%s\n' "$closed_mirror" > "$stamp.closed" 2>/dev/null || true
+  fi
   changed_here() { # FILE
     local commit_at
     [ -f "$1" ] && [ "$1" -nt "$stamp" ] || return 1
@@ -126,7 +135,7 @@ if [ -f "$stamp" ]; then
       closed_then=$(roadmap_rows <(at_start "$docs/roadmap.md") | awk -F'\t' '$5 == "closed"' | grep -c . || true)
       [ "$closed_now" -le "$closed_then" ] || transition=project
     else
-      transition=project
+      case $closed_last in '' | *[!0-9]*) ;; *) [ "$closed_mirror" -le "$closed_last" ] || transition=project ;; esac
     fi
   fi
 fi

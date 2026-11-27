@@ -558,6 +558,25 @@ check "a turn in a removed worktree that edits the roadmap is not held" "$(stop_
 sleep 1; prompt s-tr5 "$TRP"
 check "nothing changed, nothing held" "$(stop_at s-tr5 "$TRP" 'Done.')" ""
 
+# --- darkmem documents: the roadmap lives in the mirror, outside git ---
+. "$HERE/fixtures/darkmem-stores.sh"
+DMR="$TMP/dm-roadmap"; git init -q "$DMR"
+DMM=$(stores_home "$HOME" "$DMR" proj9 darkmem local)
+mkdir -p "$DMM/dforge"
+{ printf '# Roadmap\n\n| M | Name | Exit | Register | State | Note |\n|---|---|---|---|---|---|\n'; milestone M1 One open; milestone M2 Two open; } > "$DMM/dforge/roadmap.md"
+sleep 1; prompt s-dm "$DMR"
+stop_at s-dm "$DMR" 'Done.' >/dev/null
+sleep 1; prompt s-dm "$DMR"
+sleep 1
+milestone M3 Three open >> "$DMM/dforge/roadmap.md"
+check "darkmem documents: a roadmap edit that closes nothing passes" "$(stop_at s-dm "$DMR" 'Added M3.')" ""
+sleep 1; prompt s-dm "$DMR"
+sleep 1
+sed 's/| M1 | One | \(.*\) | open |/| M1 | One | \1 | closed |/' "$DMM/dforge/roadmap.md" > "$TMP/roadmap.md" && mv "$TMP/roadmap.md" "$DMM/dforge/roadmap.md"
+out=$(stop_at s-dm "$DMR" 'M1 closed.')
+check "darkmem documents: a milestone closed since the last stop is held once" \
+  "$(decision "$out")|$(jq -r .reason <<<"$out" | grep -c 'next-step" --project')" "block|1"
+rm -f "$HOME/.dforge/config.json" "$HOME/.dforge/stores.json"
 
 # A transition turn is released by the block next-step wrote, by finishing's
 # menu, and by nothing hand-typed; an uncommitted index edit counts as its own.
