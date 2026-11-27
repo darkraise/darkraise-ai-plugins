@@ -1520,7 +1520,7 @@ const SERVICES = [
   /^docker(-| )compose up(?!.*\s(-d|--detach)(\s|$))/,
   /^tail -[fF](\s|$)/,
   /^cargo watch(\s|$)/,
-  /\s--watch(All)?(=|\s|$)/,
+  /\s--watch(All)?(=(?!(false|0)(\s|$))|\s|$)/,
 ]
 
 /** Whether a background command, by its first line, starts a service that never ends on its own. */
