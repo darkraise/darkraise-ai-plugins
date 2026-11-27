@@ -86,10 +86,12 @@ inflight_scan() {
             elif ($text | test("^(<tool_use_error>)?No task found with ID: ")) then
               "S\t\(($text | capture("No task found with ID: (?<id>[A-Za-z0-9_-]+)").id) // "-")"
             else empty end
-        else empty end' 2>/dev/null <"$tp" | tr -d '\r') || return 1
+        else empty end' 2>/dev/null <"$tp" | tr -d '\r' | awk '{ print $0 "\t" NR }') || return 1
+  # Each event ends in its index in the transcript: a stop removes the launches
+  # of its id made before it, so a resume after a stop is running again.
   launched=$(awk -F '\t' '$1 == "L" && $2 != "-"' <<<"$events")
   [ -n "$launched" ] || return 0
-  stopped=$(awk -F '\t' '$1 == "S" && $2 != "-" { print $2 }' <<<"$events" | sort -u)
+  stopped=$(awk -F '\t' '$1 == "S" && $2 != "-" { print $2 "\t" $3 }' <<<"$events")
   # The latest notification per launch decides. Notifications are read only
   # where Claude Code delivers them (a queued command, a queue operation, or a
   # user message's own text), never from tool output that quotes one. Each is
@@ -123,14 +125,14 @@ inflight_scan() {
   # The three tables reach awk as files: a long transcript's events overflow
   # the per-string limit of an environment variable or an argument.
   running=$(awk -F '\t' '
-      FILENAME == ARGV[1] { if ($0 != "") gone[$0] = 1; next }
+      FILENAME == ARGV[1] { if ($0 != "") gone[$1] = $2 + 0; next }
       FILENAME == ARGV[2] { if ($0 != "") { seq[$1] = $2 + 0; state[$1] = $3 }; next }
       FILENAME == ARGV[3] { if ($1 == "U") { what[$2] = $3; cmd[$2] = $4 }; next }
       { u = "u:" $2; t = "t:" $3; k = ""
         if (u in seq) k = u
         if ((t in seq) && (k == "" || seq[t] > seq[k])) k = t
         if (k != "" && state[k] == "done") next }
-      ($3 in gone) || seen[$2]++ || ($3 != "-" && listed[$3]++) { next }
+      (($3 in gone) && gone[$3] > $7) || seen[$2]++ || ($3 != "-" && listed[$3]++) { next }
       { w = what[$2]; if (w == "") w = "(no description)"; print $4 "\t" $3 "\t" $5 "\t" $6 "\t" w "\t" cmd[$2] }' \
       <(printf '%s\n' "$stopped") <(printf '%s\n' "$latest") <(printf '%s\n' "$events") - <<<"$launched") || return 1
   [ -z "$running" ] && return 0
