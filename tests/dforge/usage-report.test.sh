@@ -286,6 +286,15 @@ B=$(cd "$HERE/../../plugins/dforge/scripts/lib" && node --input-type=module -e '
   console.log(JSON.stringify([...one, ...two].map((b) => [b.task, b.start, b.end])));' 2>&1)
 check "plain_brief_after_open: one slice per task" "$B" '[[1,0,5],[2,0,3]]'
 
+# --- inferred_bounds: a quoted script path ---
+B=$(cd "$HERE/../../plugins/dforge/scripts/lib" && node --input-type=module -e '
+  import { inferBounds } from "./usage-report.mjs";
+  const call = (c) => ({ type: "assistant", message: { content: [{ type: "tool_use", id: "t", name: "Bash", input: { command: c } }] } });
+  const at = (list) => list.map((c, i) => ({ offset: i, entry: c ? call(c) : { type: "assistant", message: { content: [] } } }));
+  console.log(JSON.stringify(inferBounds(at(["bash \"/p/scripts/task-brief\" --open docs/p.md 1", null,
+    "bash \"/p/scripts/task-close\" docs/p.md 1 x", "bash \x27/p/scripts/task-step\x27 start docs/p.md 2"])).map((b) => [b.task, b.start, b.end])));' 2>&1)
+check "inferred_bounds: a quoted script path" "$B" '[[1,0,3],[2,3,4]]'
+
 # --- wait_matches_job: a launch with no job id is not credited with another job's end ---
 WJ="$TMP/wj"; mkdir -p "$WJ/proj"
 jq -nc '{type: "assistant", isSidechain: false, timestamp: "2026-01-01T00:00:10Z", message: {id: "j1", model: "claude-opus-5-5",

@@ -232,11 +232,11 @@ export function inferBounds(entries) {
         const as = /^([A-Za-z_]\w*)=("[^"]*"|'[^']*'|\S*)\s*$/.exec(cmd);
         if (as) { vars[as[1]] = as[2].replace(/^["']|["']$/g, ''); continue; }
         const unq = (x) => x.replace(/^["']|["']$/g, '');
-        let m = /task-brief(\s+--open)?\s+("[^"]+"|'[^']+'|[^\s-]\S*)\s+(\d+)\b/.exec(cmd);
+        let m = /task-brief["']?(\s+--open)?\s+("[^"]+"|'[^']+'|[^\s-]\S*)\s+(\d+)\b/.exec(cmd);
         if (m) opens.push({ plan: unq(m[2]), task: Number(m[3]), start: offset, explicit: Boolean(m[1]) });
-        m = /task-step\s+start\s+("[^"]+"|'[^']+'|\S+)((?:\s+\d+)+)/.exec(cmd);
+        m = /task-step["']?\s+start\s+("[^"]+"|'[^']+'|\S+)((?:\s+\d+)+)/.exec(cmd);
         if (m) for (const n of m[2].trim().split(/\s+/)) opens.push({ plan: unq(m[1]), task: Number(n), start: offset });
-        m = /task-close\s+("[^"]+"|'[^']+'|\S+)\s+(\d+)\b/.exec(cmd);
+        m = /task-close["']?\s+("[^"]+"|'[^']+'|\S+)\s+(\d+)\b/.exec(cmd);
         if (m) closes.push({ plan: unq(m[1]), task: Number(m[2]), at: offset });
       }
     }
