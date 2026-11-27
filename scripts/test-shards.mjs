@@ -41,6 +41,7 @@ export const windowsSeconds = {
   'tests/dforge/auto-run-worktree-setting-qa.acceptance.test.sh': 420,
   'tests/dforge/auto-run-worktree-setting.acceptance.test.sh': 240,
   'tests/dforge/auto-run.test.sh': 800,
+  'tests/dforge/bash32.test.sh': 10,
   'tests/dforge/budget-line.test.sh': 180,
   'tests/dforge/ci-mirror.test.sh': 60,
   'tests/dforge/clean-session-phases.acceptance.test.sh': 125,

@@ -14,6 +14,7 @@ const MESSAGES = {
   'awk-v-backslash': 'awk -v expands a backslash in its value; pass the value through ENVIRON instead',
   'jq-pwd-file': 'jq.exe cannot open a POSIX path built from $PWD or $TMPDIR; feed the file on stdin',
   'import-path': 'a dynamic import of a path must go through pathToFileURL',
+  'bash4-construct': 'a bash 4 construct fails under the bash 3.2 that macOS ships; use a read loop, a child sh for the subshell pid, tr for case, or a portable lookup',
 };
 
 const EXEMPT = /(?:#|\/\/) portability: ok — +\S.*$/;
@@ -23,6 +24,21 @@ const AWK_V_OPTION = /(?:^|\s)-v\s*[A-Za-z_]\w*=("(?:\\.|[^"\\])*"|'[^']*'|\S+)/
 const MSYS_EXPORT = /^\s*export\b.*MSYS_NO_PATHCONV/m;
 const PWD_OR_TMPDIR = /\$PWD(?![\w])|\$\{PWD\}|\$TMPDIR(?![\w])|\$\{TMPDIR\}/;
 const DYNAMIC_IMPORT = /(?<![\w$.])import\(/g;
+const BASH4 = /\bmapfile\b|\breadarray\b|\$BASHPID|\$\{[A-Za-z_]\w*(?:,,|\^\^)\}|declare -A/;
+// Skill files are read for the bash 4 rule alone; the Windows rules cover
+// the scripts and tests.
+const SKILL_FILE = /^plugins\/[^/]+\/skills\//;
+
+// A shipped shell file runs on the user's bash, which on macOS is 3.2; the
+// repository's own scripts and every test run only on the hosts CI names.
+function shippedShell(path, firstLine) {
+  if (SKILL_FILE.test(path)) return path.endsWith('.sh');
+  return /^plugins\/[^/]+\/scripts\//.test(path) && (path.endsWith('.sh') || /^#!.*\b(?:ba)?sh\b/.test(firstLine));
+}
+
+function bash4(line) {
+  return !/^\s*#/.test(line) && BASH4.test(line);
+}
 
 function gitCPwd(line) {
   return GIT_C_PWD.test(line) && !line.includes('dr_native_path');
@@ -78,15 +94,18 @@ export function lintText(path, text) {
   const lines = text.split('\n').map(line => line.replace(/\r$/, ''));
   const exempt = index => EXEMPT.test(lines[index]);
   const msys = MSYS_EXPORT.test(lines.join('\n'));
+  const shipped = shippedShell(path, lines[0]);
   const hits = [];
   const hit = (line, rule) => hits.push({ line, rule, message: typeof MESSAGES[rule] === 'function' ? MESSAGES[rule](path) : MESSAGES[rule] });
   lines.forEach((line, index) => {
     if (exempt(index)) return;
+    if (shipped && bash4(line)) hit(index + 1, 'bash4-construct');
+    if (SKILL_FILE.test(path)) return;
     if (gitCPwd(line)) hit(index + 1, 'git-c-pwd');
     if (awkVBackslash(line)) hit(index + 1, 'awk-v-backslash');
     if (msys && jqPwdFile(line)) hit(index + 1, 'jq-pwd-file');
   });
-  for (const line of importPathLines(text)) if (!exempt(line - 1)) hit(line, 'import-path');
+  if (!SKILL_FILE.test(path)) for (const line of importPathLines(text)) if (!exempt(line - 1)) hit(line, 'import-path');
   return hits.sort((a, b) => a.line - b.line);
 }
 
@@ -119,12 +138,13 @@ export function lintTree(root) {
   const dirs = [join(root, 'scripts')];
   if (existsSync(plugins)) {
     for (const name of readdirSync(plugins)) {
-      if (isDirectory(join(plugins, name))) dirs.push(join(plugins, name, 'scripts'), join(plugins, name, 'tests'), join(root, 'tests', name));
+      if (isDirectory(join(plugins, name))) dirs.push(join(plugins, name, 'scripts'), join(plugins, name, 'skills'), join(plugins, name, 'tests'), join(root, 'tests', name));
     }
   }
   const skipped = [];
   const files = dirs.flatMap(dir => filesUnder(dir, skipped))
     .map(path => ({ path, name: relative(root, path).split(sep).join('/') }))
+    .filter(({ name }) => !SKILL_FILE.test(name) || name.endsWith('.sh'))
     .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   for (const path of skipped) console.error(`lint-portability: not linted, a symbolic link to no file: ${relative(root, path).split(sep).join('/')}`);
   const out = [];

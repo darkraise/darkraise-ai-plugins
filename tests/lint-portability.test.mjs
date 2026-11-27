@@ -106,6 +106,48 @@ test('the tree scan reads plugin scripts and tests and the repository scripts on
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+const SHEBANG = '#!/usr/bin/env bash';
+const BASH4 = ['mapfile -t a <<<"$x"', 'readarray -t a < list', 'echo "$BASHPID"', 'echo "${v,,}"', 'echo "${v^^}"', 'declare -A seen'];
+
+test('bash 4 construct in a shipped script', () => {
+  for (const construct of BASH4) {
+    for (const [file, lines] of [
+      ['plugins/x/scripts/s', [SHEBANG, construct]],
+      ['plugins/x/scripts/lib/s.sh', ['set -u', construct]],
+      ['plugins/x/skills/y/z.sh', [SHEBANG, `  ${construct}`]],
+    ]) {
+      assert.deepEqual(found(file, lines), [{ line: 2, rule: 'bash4-construct' }], `${file}: ${construct}`);
+      assert.deepEqual(found(file, marked(file, lines, 1)), [], `${file} exempt: ${construct}`);
+    }
+  }
+  const dir = fixtureTree({
+    'plugins/x/scripts/s': `${SHEBANG}\nmapfile -t a <<<"$x"\n`,
+    'plugins/x/skills/y/z.sh': `${SHEBANG}\ndeclare -A seen\n`,
+  });
+  try {
+    const lint = spawnSync(process.execPath, ['scripts/lint-portability.mjs', dir], { cwd: root, encoding: 'utf8', timeout: 20000 });
+    assert.ifError(lint.error);
+    assert.equal(lint.status, 1);
+    assert.match(lint.stdout, /^plugins\/x\/scripts\/s:2 bash4-construct \S/m);
+    assert.match(lint.stdout, /^plugins\/x\/skills\/y\/z\.sh:2 bash4-construct \S/m);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('bash 4 construct in a comment or a test', () => {
+  for (const construct of BASH4) {
+    for (const [file, lines] of [
+      ['plugins/x/scripts/s', [SHEBANG, `# ${construct}`]],
+      ['plugins/x/scripts/lib/s.sh', ['set -u', `    # ${construct}`]],
+      ['plugins/x/skills/y/z.sh', [SHEBANG, `#${construct}`]],
+      ['plugins/x/tests/t.test.sh', [SHEBANG, construct]],
+      ['tests/x/t.test.sh', [SHEBANG, construct]],
+      ['scripts/s.sh', [SHEBANG, construct]],
+      ['plugins/x/scripts/s.mjs', ['#!/usr/bin/env node', `const s = '${construct}';`]],
+      ['plugins/x/skills/y/z.md', [construct]],
+    ]) assert.deepEqual(found(file, lines), [], `${file}: ${construct}`);
+  }
+});
+
 test('the repository has no portability hit', () => {
   assert.deepEqual(lintTree(root), []);
 });
