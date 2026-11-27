@@ -216,6 +216,7 @@ case $cmd in
     k=$((10#$1))
     src=$(mktemp) || die 2 "cannot create a temporary file"
     trap 'rm -f "$src"' EXIT
+    plan_amendments_ready "$plan"
     plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2>/dev/null \
       || die 2 "an amendment does not apply; run plan-lint"
     case $(plan_parallelism "$src") in

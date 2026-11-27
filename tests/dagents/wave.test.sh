@@ -236,6 +236,10 @@ printf '%s\n' '## A1 — Header' 'Reason: a faster check between full checks' 'C
 due docs/cadence-nocheck.md 1
 check "check-due: reads a Wave check line an amendment adds" "$out" "wave-check"
 check "check-due: the plan file itself is unchanged" "$(grep -c '^\*\*Wave check:\*\*' docs/cadence-nocheck.md)" "0"
+printf '%s\n' '# SDD ledger — plan: docs/cadence-nocheck.md' 'Task 1: Ruling: amendment A2 — x — none' > "$WS_C/progress.md"
+due docs/cadence-nocheck.md 1
+check "check-due: a ledger citing a missing amendment exits 2" "$status:$(grep -c 'the ledger cites amendment A2' <<<"$out")" "2:1"
+rm -f "$WS_C/progress.md"
 
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
