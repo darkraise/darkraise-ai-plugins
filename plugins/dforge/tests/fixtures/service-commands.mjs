@@ -45,6 +45,14 @@ export default [
     "role": "service"
   },
   {
+    "command": "jest --watch=false",
+    "role": "work"
+  },
+  {
+    "command": "jest --watchAll=false",
+    "role": "work"
+  },
+  {
     "command": "cargo watch -x run",
     "role": "service"
   },

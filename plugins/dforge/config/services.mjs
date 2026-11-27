@@ -8,7 +8,7 @@ export default {
     "^docker(-| )compose up(?!.*\\s(-d|--detach)(\\s|$))",
     "^tail -[fF](\\s|$)",
     "^cargo watch(\\s|$)",
-    "\\s--watch(All)?(=|\\s|$)"
+    "\\s--watch(All)?(=(?!(false|0)(\\s|$))|\\s|$)"
   ],
   "timer": "^sleep\\s+[0-9]+(\\.[0-9]+)?[smhd]?$"
 }
