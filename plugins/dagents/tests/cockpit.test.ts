@@ -4826,6 +4826,16 @@ describe('discord', () => {
     expect(await ui.find({ type: 'Text', text: /not a Discord webhook URL/ })).toBeDefined()
   })
 
+  test('the Notifications tab says where the webhook rows are kept', async ($, on) => {
+    world(on, { tokens: 50_000 })
+    mock.store(on, {})
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Notifications' })
+    expect(await ui.find({ type: 'Text', text: "Saved to ~/.dagents/config.json; the webhook and mention rows are kept in the cockpit's own store." })).toBeDefined()
+  })
+
   test('keeps one editor open on the Notifications tab', async ($, on) => {
     world(on, { tokens: 50_000 })
     mock.store(on, {})
