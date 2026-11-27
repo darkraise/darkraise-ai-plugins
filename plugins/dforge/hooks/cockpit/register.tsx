@@ -710,7 +710,7 @@ export const register: Register = on => {
     await update($, remote, now => ({ ...now, clients: [...now.clients.filter(one => one.id !== e.clientId), { id: e.clientId, surface: e.surface }] }))
     // A desktop session's start can come before its window joins: show the
     // pane once it has, unless the person closed it.
-    if (o.openAtStart && !o.isMinimized && e.surface === 'desktop' && !S.isClosedByPerson && !(await isPaneUp($))) void $.ui.open(paneFor(o.layout))
+    if (o.openAtStart && !o.isMinimized && e.surface === 'desktop' && !S.isClosedByPerson && !(await isPaneUp($))) void $.ui.open(paneFor(o.layout)).catch(() => undefined)
     return joined
   }).catch(($, e, next) => next(e))
 
@@ -1195,7 +1195,7 @@ export const register: Register = on => {
             auto run left by a closed session — run scripts/auto-run stop --stale
           </Text>
         )}
-        {isRunLeft && button('pane-stop-stale', '■ Stop stale run', () => void stopStaleRun($), { isCompact: isDense })}
+        {isRunLeft && button('pane-stop-stale', '■ Stop stale run', () => void stopStaleRun($).catch(() => undefined), { isCompact: isDense })}
         {autoNow?.active && (
           <Text key="auto-line" color="magenta">
             {`Auto run · ${autoNow.phase} · ${autoNow.regime} · ${autoNow.compactions} ${autoNow.compactions === 1 ? 'compaction' : 'compactions'} · ${autoNow.resumes} ${autoNow.resumes === 1 ? 'resume' : 'resumes'}`}
@@ -1206,7 +1206,7 @@ export const register: Register = on => {
             {`version mismatch — run ${autoNow.mismatch.run}, this call ${autoNow.mismatch.call}`}
           </Text>
         )}
-        {autoNow?.active && button('pane-stop-auto', '■ Stop auto', () => void stopAutoRun($), { isCompact: isDense })}
+        {autoNow?.active && button('pane-stop-auto', '■ Stop auto', () => void stopAutoRun($).catch(() => undefined), { isCompact: isDense })}
         {canHandOff && !autoNow?.active && button('pane-handoff', '↪ Hand off', () => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true }), { hotkey: 'h', isMain: isNearHandoff, isCompact: isDense })}
         {button('pane-compact', '⇣ Compact', () => compactFromPane($), { hotkey: 'c', isCompact: isDense })}
       </Box>
@@ -4913,7 +4913,7 @@ async function readSession($: EngineInterface, isStart: boolean) {
     const o = await live($)
     if (isStart && o.isMinimized) {
       if ((await read($, view)) !== 'settings') await shutPane($)
-    } else if (isStart && o.openAtStart) void $.ui.open(paneFor(o.layout))
+    } else if (isStart && o.openAtStart) void $.ui.open(paneFor(o.layout)).catch(() => undefined)
   }, false)
   await step(async () => {
     S.compactWindow = await readCompactWindow($)
