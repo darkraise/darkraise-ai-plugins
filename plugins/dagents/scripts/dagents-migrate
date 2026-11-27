@@ -250,6 +250,17 @@ renamed_lines() {
                        -e 's#docs/dforge([/[:space:]*]|$)#docs/dagents\1#g' "$1") -
 }
 
+# temp_beside FILE — a new temporary file beside FILE holding its bytes and
+# mode, printed. mktemp creates the name exclusively, so a link planted at it
+# is never written through; a rewrite written there is renamed over FILE in
+# one step, so a kill leaves FILE whole, with its old text or its new.
+temp_beside() {
+  local tmp
+  tmp=$(mktemp "$1.dagents-migrate.XXXXXX") || return 1
+  cp -p -- "$1" "$tmp" 2>/dev/null || { rm -f -- "$tmp"; return 1; }
+  printf '%s\n' "$tmp"
+}
+
 # rewrite_names FILE MODE — the ignore and attribute lines that name an
 # older directory. MODE replace renames them in place, dropping a renamed
 # line the file already holds; MODE add keeps each line and puts the renamed
@@ -267,14 +278,11 @@ rewrite_names() {
     moved=1
     return 0
   fi
-  # mktemp creates each name exclusively, so a link planted at it is never
-  # written through.
-  tmp=$(mktemp "$file.dagents-migrate.XXXXXX") || return 1
+  tmp=$(temp_beside "$file") || return 1
   renamed_lines "$file" "$mode" > "$tmp" \
     && ! cmp -s -- "$tmp" "$file" \
-    && cat "$tmp" > "$file" \
+    && mv -f -- "$tmp" "$file" \
     || { rm -f -- "$tmp"; return 1; }
-  rm -f -- "$tmp"
   printf 'rewrote the older names in %s\n' "$file"
   moved=1
 }
@@ -338,7 +346,7 @@ rewrite_prefixes() {
     moved=1
     return 0
   fi
-  tmp=$(mktemp "$file.dagents-migrate.XXXXXX") || { refuse "could not rewrite the plugin prefixes in $file"; return 1; }
+  tmp=$(temp_beside "$file") || { refuse "could not rewrite the plugin prefixes in $file"; return 1; }
   if ! prefixes_renamed "$file" > "$tmp"; then
     rm -f -- "$tmp"
     refuse "could not rewrite the plugin prefixes in $file"
@@ -349,8 +357,7 @@ rewrite_prefixes() {
     rm -f -- "$tmp"
     return 1
   fi
-  if cat "$tmp" > "$file"; then
-    rm -f -- "$tmp"
+  if mv -f -- "$tmp" "$file"; then
     printf 'rewrote the plugin prefixes in %s\n' "$file"
     moved=1
     return 0

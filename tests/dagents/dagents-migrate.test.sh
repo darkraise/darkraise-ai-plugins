@@ -9,7 +9,7 @@ FM="$HERE/../../plugins/dagents/scripts/dagents-migrate"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
-  if [ "$2" = "$3" ]; then pass=$((pass + 1))
+  if [ "$2" = "$3" ]; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
   else printf 'FAIL - %s\n       got:  [%s]\n       want: [%s]\n' "$1" "$2" "$3"; fail=$((fail + 1)); fi
 }
 exists() { [ -e "$1" ] && echo yes || echo no; }
@@ -867,5 +867,28 @@ out=$(HOME="$TMP/dl-home" migrate "$FM" --dry-run "$DK")
 check "dry: a latest.md whose key the older directory holds is refused" "$(grep -c "refused: $DKT/.dagents/handoff/latest.md is the handoff for p3" <<<"$out") $(grep -c "would move $DKT/.dagents/handoff/latest.md" <<<"$out")" "1 0"
 out=$(HOME="$TMP/dl-home" migrate "$FM" "$DK")
 check "the real run refuses it too" "$(grep -c "refused: $DKT/.dagents/handoff/latest.md is the handoff for p3" <<<"$out")" "1"
+# --- a plan rewrite is one rename: a kill leaves the old text or the new ---
+KP="$TMP/kill-plan"; repo "$KP"
+mkdir -p "$KP/docs/dagents/plans"
+printf '# Plan\ndr-forge:impl-sonnet-low\n' > "$KP/docs/dagents/plans/active.md"
+KS="$TMP/kill-stubs"; mkdir -p "$KS"
+printf '#!/bin/sh\nfor a in "$@"; do case $a in *.dagents-migrate.*) head -n 1 -- "$a"; kill -KILL $PPID; exit 137 ;; esac; done\nexec "%s" "$@"\n' "$(command -v cat)" > "$KS/cat"
+printf '#!/bin/sh\nfor a in "$@"; do case $a in *.dagents-migrate.*) kill -KILL $PPID; exit 137 ;; esac; done\nexec "%s" "$@"\n' "$(command -v mv)" > "$KS/mv"
+chmod +x "$KS/cat" "$KS/mv"
+HOME="$TMP/kp-home" PATH="$KS:$PATH" migrate "$FM" "$KP" > /dev/null 2>&1
+case $(cat "$KP/docs/dagents/plans/active.md") in
+  $'# Plan\ndr-forge:impl-sonnet-low') whole=old ;;
+  $'# Plan\ndagents:impl-sonnet-low') whole=new ;;
+  *) whole="torn: $(cat "$KP/docs/dagents/plans/active.md")" ;;
+esac
+check "a plan rewrite killed partway: the plan holds its old or its new text" "$whole" "$([ "$whole" = new ] && echo new || echo old)"
+KM="$TMP/mode-plan"; repo "$KM"
+mkdir -p "$KM/docs/dagents/plans"
+printf '# Plan\ndr-forge:impl-sonnet-low\n' > "$KM/docs/dagents/plans/active.md"
+chmod 0640 "$KM/docs/dagents/plans/active.md"
+want_mode=$(stat -c %a "$KM/docs/dagents/plans/active.md" 2>/dev/null || stat -f %Lp "$KM/docs/dagents/plans/active.md")
+HOME="$TMP/kp-home" migrate "$FM" "$KM" > /dev/null 2>&1
+check "a plan rewrite keeps the plan's mode" "$(stat -c %a "$KM/docs/dagents/plans/active.md" 2>/dev/null || stat -f %Lp "$KM/docs/dagents/plans/active.md") $(tail -n 1 "$KM/docs/dagents/plans/active.md")" "$want_mode dagents:impl-sonnet-low"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
