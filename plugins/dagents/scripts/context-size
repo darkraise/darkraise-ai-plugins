@@ -44,7 +44,7 @@ elif [ "${1:-}" = --wave ]; then
 fi
 [ $# -eq 0 ] || { echo "usage: context-size [--final | --tail R | --plan | --wave W | --observations]" >&2; exit 2; }
 
-ctx_line "${mode[@]}"
+ctx_line ${mode[@]+"${mode[@]}"}
 status=$?
 # A task marker a caller asked for (USAGE_MARK, scripts/lib/usage-marker.sh).
 um_mark_request "${CTX_TOKENS:-}"
