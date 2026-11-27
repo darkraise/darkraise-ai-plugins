@@ -64,6 +64,10 @@ esac
 [ -n "$out" ] || die "--out is required"
 [ -d "$cwd" ] || die "--cwd is not a directory: $cwd"
 [ -d "$(dirname "$out")" ] || die "--out directory not found: $(dirname "$out")"
+# How long past the client's own deadline timeout waits before stopping it.
+# Tests set it low to reach that outer kill.
+GRACE="${CODEX_REVIEW_GRACE:-60}"
+case "$GRACE" in '' | *[!0-9]*) die "CODEX_REVIEW_GRACE must be whole seconds: $GRACE" ;; esac
 
 case "$kind" in
   task) schema="$TASK_SCHEMA" ;;
@@ -199,7 +203,7 @@ run_seat() { # run_seat <model> <effort> <seconds> <log-prefix>; the result JSON
   # In the background, so a TERM to this script reaches its trap, which stops
   # the client's group: GNU timeout leads its own process group, out of reach
   # of a signal sent to this script's.
-  printf '%s' "$request" | "$DFORGE_TIMEOUT" -k 10 $(( $3 + 60 )) node "$(dr_native_path "$HERE/lib/codex-client.mjs")" "$plugin_root" \
+  printf '%s' "$request" | "$DFORGE_TIMEOUT" -k 10 $(( $3 + GRACE )) node "$(dr_native_path "$HERE/lib/codex-client.mjs")" "$plugin_root" \
     > "$4.result" 2>"$4.stderr" &
   client_pid=$!
   wait "$client_pid"; seat_rc=$?
@@ -279,6 +283,8 @@ write_out "$result"
 rc=0
 [ "$(jq -r '.ok' <<<"$result")" = true ] || rc=1
 [ "$(jq -r '.timedOut' <<<"$result")" = true ] && rc=124
+# timeout's own status: the client was stopped from outside and wrote nothing.
+case "$seat_rc" in 124 | 137) rc=124 ;; esac
 
 if [ "$rc" -eq 124 ]; then
   status "$model" "$effort" TIMEOUT "$rc" timeout; exit 1
@@ -307,6 +313,7 @@ if [ "$(jq -r '.refusal' <<<"$result")" = true ] \
   rc=0
   [ "$(jq -r '.ok' <<<"$result")" = true ] || rc=1
   [ "$(jq -r '.timedOut' <<<"$result")" = true ] && rc=124
+  case "$seat_rc" in 124 | 137) rc=124 ;; esac
   if [ "$rc" -eq 124 ]; then
     status "$back_model" "$back_effort" TIMEOUT "$rc" timeout; exit 1
   fi
