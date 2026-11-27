@@ -73,6 +73,9 @@ the roadmap exists, and new work is an epic row (see Changing the roadmap).
    partner approved to `done` with `scripts/register set`, close M0 through
    dagents:closing-a-milestone, and end with
    `scripts/next-step --draft <product spec> --next "Brainstorm the first M1 epic with dagents:brainstorming"`.
+   In that close, dagents:closing-a-milestone's step 7 sign-off is the approval
+   just given, and its step 9 is replaced by this `next-step --draft` call,
+   whose block is the message's only next-step block.
 
 ## After this skill
 
