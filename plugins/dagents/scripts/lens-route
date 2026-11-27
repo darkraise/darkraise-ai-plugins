@@ -19,7 +19,9 @@
 #                                           the plan has fewer tasks than the
 #                                           lensMinorFrom setting)
 #         lenses off                        (--final, lensCap 0)
-#         lens <id> criteria=<path>         (--task, one per id on the task's **Lenses:** line)
+#         lens <id> criteria=<path>         (--task, one per id on the task's **Lenses:**
+#                                           lines, each part's for a split task, in
+#                                           order, repeats dropped)
 # The depth (scripts/depth-route) sizes --final: light keeps only security,
 # standard keeps at most 2 lenses besides test-quality, which it adds when it
 # applies, up to lensCap in all; full keeps up to lensCap.
@@ -157,9 +159,20 @@ case $1 in
     id=$2
     [[ "$id" =~ ^[0-9]+$ ]] || die "not a task id: $id"
     text=$(plan_task_text "$src" "$id") || die "no Task $id in the plan"
-    line=$(plan_lines Lenses <<<"$text" | head -n 1)
-    [ -n "$line" ] || exit 0
-    ids=$(sed 's/^\*\*Lenses:\*\*//' <<<"$line" | tr ',' ' ')
+    # A split task's Lenses lines are its parts' own; one left above Part A
+    # describes the task before the split, as plan-lint reads it.
+    parts=$(plan_task_parts <<<"$text")
+    if [ -n "$parts" ]; then
+      lines=$(for p in $parts; do plan_part_text "$p" <<<"$text" | plan_lines Lenses; done)
+    else
+      lines=$(plan_lines Lenses <<<"$text")
+    fi
+    [ -n "$lines" ] || exit 0
+    ids=""
+    for lid in $(sed 's/^\*\*Lenses:\*\*//' <<<"$lines" | tr ',' ' '); do
+      case " $ids " in *" $lid "*) continue ;; esac
+      ids="${ids:+$ids }$lid"
+    done
     for lid in $ids; do [ -f "$LENSES/$lid.md" ] || die "unknown lens id: $lid"; done
     for lid in $ids; do printf 'lens %s criteria=%s\n' "$lid" "$LENSES/$lid.md"; done
     exit 0 ;;
