@@ -23,11 +23,7 @@ AR_API_ERROR_CAP=10
 # pipefail, so jq's own status, which -e relies on, still decides.
 ar_jq() { "${DAGENTS_JQ:-jq}" "$@" | tr -d '\r'; }
 
-ar_primary_root() {
-  local common
-  common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
-  git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null || return 1
-}
+ar_primary_root() { plan_primary_root; }
 
 # ar_in_primary — true in the primary checkout. A worktree run's tasks run in
 # a linked worktree (dagents:using-git-worktrees), so a task step here would
