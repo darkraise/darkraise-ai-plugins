@@ -32,6 +32,14 @@ dr_task_assert_snapshot "$fixture/before.json" >/dev/null 2>&1
 check 'HEAD drift invalidates review snapshot' "$?" 1
 git -C "$fixture/work" reset -q --hard HEAD~1
 
+# A snapshot taken from a subdirectory still covers the whole worktree.
+mkdir -p "$fixture/work/sub" && printf 'sub\n' > "$fixture/work/sub/s.txt"
+dr_snapshot "$fixture/work/sub" "$fixture/sub.json"
+printf 'root\n' > "$fixture/work/rootfile.txt"
+dr_task_assert_snapshot "$fixture/sub.json" >/dev/null 2>&1
+check 'subdir_cwd_covers_repo' "$?" 1
+rm -f "$fixture/work/sub/s.txt" "$fixture/work/rootfile.txt" && rmdir "$fixture/work/sub"
+
 # Batched JSON serialization must preserve filenames and deleted entries.
 git -C "$fixture/primary" worktree add -q --detach "$fixture/encoding" HEAD
 odd="space [brackets] 'quote'.txt"
