@@ -202,14 +202,25 @@ ar_start() {
   # cover nothing, and next-step finds a register only through its Covers.
   [ -z "$regfile" ] && [ -n "$register" ] && regfile=$(dagents_resolve "$register" "$top")
   if [ -f "$regfile" ] && [ "$(register_field "$regfile" Covers)" = - ]; then
-    COVERS="**Covers:** $spec" awk '
-      !done && /^\*\*Covers:\*\*[ \t]*-[ \t\r]*$/ { print ENVIRON["COVERS"]; done = 1; next }
-      { print }' "$regfile" > "$regfile.tmp" && mv -f "$regfile.tmp" "$regfile" || {
-        rm -f "$regfile.tmp" 2>/dev/null
-        echo "auto-run: could not set **Covers:** in $regfile to $spec; set it by hand, or next-step finds no register" >&2
-      }
+    local lockbase
+    { lockbase=$(dr_lock_base "$regfile") && dr_locked "$lockbase" _ar_set_covers "$regfile" "$spec"; } \
+      || echo "auto-run: could not set **Covers:** in $regfile to $spec; set it by hand, or next-step finds no register" >&2
   fi
   printf '%s\n' "$register"
+}
+
+# _ar_set_covers REGISTER SPEC — under the register's lock, an empty Covers
+# becomes SPEC. It is read again here: another writer may have set it since.
+_ar_set_covers() {
+  local tmp rc
+  [ "$(register_field "$1" Covers)" = - ] || return 0
+  tmp=$(mktemp) || return 1
+  COVERS="**Covers:** $2" awk '
+    !done && /^\*\*Covers:\*\*[ \t]*-[ \t\r]*$/ { print ENVIRON["COVERS"]; done = 1; next }
+    { print }' "$1" > "$tmp" && dr_replace "$1" "$tmp"
+  rc=$?
+  rm -f "$tmp"
+  return "$rc"
 }
 
 # The plugin this library belongs to, as a run records the plugin it ran on.
