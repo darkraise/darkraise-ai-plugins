@@ -740,9 +740,10 @@ export function reportPlan(plan, rows, opts, prices, foreign = new Map()) {
   }
   const outside = total(outsideMsgs, prices, outsideUnpriced, byModel);
   // A subagent no slice took is outside only when it started after the
-  // transcript's first open and inside none of another plan's slices.
+  // transcript's first open and inside none of another plan's slices or a
+  // deferred task's.
   for (const [f, list] of subs) {
-    const others = foreign.get(f) || [];
+    const others = [...(foreign.get(f) || []), ...deferredSegs.filter((s) => s.file === f)];
     for (const sa of list) {
       if (sa.taken) continue;
       if (!(sa.first >= (firstOpenAt.get(f) ?? Infinity)) || others.some((s) => sa.first >= s.from && sa.first <= s.to)) {
