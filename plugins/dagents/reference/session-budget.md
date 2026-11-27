@@ -120,8 +120,11 @@ under `ok` is not a reason to stop.
 
 - **Hard:** the plan is saved. It launches the execution model the Execution
   line names. writing-plans runs
-  dagents:handoff once the plan is reviewed. In an auto run the plan saved is
-  no stop: the cockpit clears the session and starts execution
+  dagents:handoff once the plan is reviewed. A light plan of 1-3 tasks is no
+  stop when `scripts/context-size` says `ok` after handoff steps 0-4: it
+  continues in this session, as dagents:handoff says. A light plan of 4 or more
+  tasks, or one whose budget is not `ok`, stops. In an auto run the plan saved
+  is no stop: the cockpit clears the session and starts execution
   ([auto-run.md](auto-run.md) §The switch).
 - **Never a stop:** the last task completing, in either mode. The final review
   and finishing follow in the same session whatever `context-size --final`
