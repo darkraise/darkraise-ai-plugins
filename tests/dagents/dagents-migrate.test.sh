@@ -934,5 +934,17 @@ old_block 'session=- done=0 closed=0 subject=- at=1700001150' "$ROT/.forge/hando
 HOME="$TMP/rh-home" migrate "$FM" "$RO" > /dev/null 2>&1
 check "renamed handoff names itself: an older state directory's path is rewritten" "$(grep -c 'latest\.md' "$RO/.dagents/handoff/adhoc-legacy-1700001150.md" 2>&1)" "0"
 
+# --- a key another session writes after the check is never replaced ---
+CR="$TMP/crepo"; repo "$CR"
+mkdir -p "$CR/.dagents/handoff"
+marked plan docs/dagents/plans/p1.md 1700001400 > "$CR/.dagents/handoff/latest.md"
+CS="$TMP/collide-stubs"; mkdir -p "$CS"
+for tool in mv ln; do
+  printf '#!/bin/sh\nfor a in "$@"; do case $a in */handoff/p1.md) printf "other session\\n" > "$a" ;; esac; done\nexec "%s" "$@"\n' "$(command -v "$tool")" > "$CS/$tool"
+  chmod +x "$CS/$tool"
+done
+out=$(HOME="$TMP/rh-home" PATH="$CS:$PATH" migrate "$FM" "$CR" 2>&1); code=$?
+check "refuses collision: a key written after the check is not overwritten" "$code $(cat "$CR/.dagents/handoff/p1.md") $(exists "$CR/.dagents/handoff/latest.md")" "1 other session yes"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
