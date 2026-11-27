@@ -101,7 +101,24 @@ if (cd "$cwd" && bash "$HERE/auto-run" review-skipped codex) >/dev/null 2>&1; th
   printf 'run-codex-review: codex failed on quota earlier in this auto run; skipped\n' >&2
   exit 1
 fi
-quota_skip() { (cd "$cwd" && bash "$HERE/auto-run" review-skip codex) >/dev/null 2>&1 || true; }
+quota_skip() { # quota_skip [<epoch>]: the skip lasts until the reset when it is known
+  (cd "$cwd" && bash "$HERE/auto-run" review-skip codex ${1:+--until "$1"}) >/dev/null 2>&1 || true
+}
+# After a quota error the gate probes the account again, which records the
+# reset the account names; a probe that finds Codex usable leaves it on and
+# skips nothing. Any other answer marks Codex off with no reset.
+quota_off() {
+  local line epoch=''
+  line=$(bash "$GATE" --refresh 2>/dev/null | tail -1 | tr -d '\r')
+  [[ " $line " != *" usable=true "* ]] || return 0
+  if [[ " $line " == *" usable=false "* && " $line " == *" reason=quota "* ]]; then
+    epoch=$(jq -r '.resets_at_epoch // empty' "$(executor_session_file codex)" 2>/dev/null | tr -d '\r')
+    [[ $epoch =~ ^[0-9]{1,18}$ ]] || epoch=''
+  else
+    executor_session_mark_off codex quota
+  fi
+  quota_skip "$epoch"
+}
 # A seat that ran and failed or timed out adds to the run's panelFailures total
 # when the run is bound to this session; a gate-off seat ran nothing.
 panel_failure() {
@@ -312,8 +329,7 @@ if [ "$rc" -eq 0 ] && usable_output "$model" "$effort"; then
 fi
 
 if [ "$(jq -r '.quota' <<<"$result")" = true ]; then
-  executor_session_mark_off codex quota
-  quota_skip
+  quota_off
   status "$model" "$effort" FAILED "$rc"; exit 1
 fi
 
@@ -338,7 +354,7 @@ if [ "$(jq -r '.refusal' <<<"$result")" = true ] \
   if [ "$rc" -eq 0 ] && usable_output "$back_model" "$back_effort"; then
     status "$back_model" "$back_effort" FALLBACK "$rc"; exit 0
   fi
-  [ "$(jq -r '.quota' <<<"$result")" = true ] && { executor_session_mark_off codex quota; quota_skip; }
+  [ "$(jq -r '.quota' <<<"$result")" = true ] && quota_off
   status "$back_model" "$back_effort" FAILED "$rc"; exit 1
 fi
 
