@@ -385,8 +385,19 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
       for (const record of Object.values(data)) {
         if (!record || typeof record.mirror !== "string") continue;
         const move = moves.find(([from]) => record.mirror === from || record.mirror.startsWith(`${from}${path.sep}`));
-        if (!move) continue;
-        record.mirror = `${move[1]}${record.mirror.slice(move[0].length)}`;
+        if (move) {
+          record.mirror = `${move[1]}${record.mirror.slice(move[0].length)}`;
+          pointed += 1;
+          continue;
+        }
+        // A mirror an earlier, interrupted run moved: gone from the old home,
+        // and at the same place under the new one.
+        const older = [path.join(forgeHome, "mirror"), path.join(oldHome, "mirror")]
+          .find(dir => record.mirror.startsWith(`${dir}${path.sep}`));
+        if (!older || fs.existsSync(record.mirror)) continue;
+        const rest = record.mirror.slice(older.length + 1);
+        if (!fs.existsSync(view("mirror", rest))) continue;
+        record.mirror = path.join(newMirrors, rest);
         pointed += 1;
       }
       if (pointed) {

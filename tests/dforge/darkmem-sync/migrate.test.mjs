@@ -618,3 +618,14 @@ test("migrateHome merges a directory both homes hold file by file", () => {
   assert.equal(read(to), "new\n");
 });
 
+test("migrateHome points a stores.json record at a mirror an earlier run moved", () => {
+  const home = scratch("dms-home-");
+  const forge = path.join(home, ".dr-forge");
+  const dforge = path.join(home, ".dforge");
+  write(path.join(dforge, "mirror", "p", "work", "x"), "x\n");
+  write(path.join(forge, "stores.json"), JSON.stringify({ "/r": { project: "p", mirror: path.join(forge, "mirror", "p") } }));
+  const { lines, refused } = migrateHome({ HOME: home });
+  assert.equal(refused, 0, lines.join("\n"));
+  assert.equal(JSON.parse(read(path.join(dforge, "stores.json")))["/r"].mirror, path.join(dforge, "mirror", "p"));
+  assert.ok(lines.includes(`pointed 1 ${path.join(dforge, "stores.json")} record(s) at the moved mirrors`), lines.join("\n"));
+});
