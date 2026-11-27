@@ -297,6 +297,11 @@ run --tail 2
 check "relaxed: a tail task past the final-phase limit: exit 5" "$status" "5"
 run --final
 check "relaxed: the final phase never hands off" "$status:$out" "0:budget (final): 560k of 553k (101%) — ok — source: record"
+settings 800000; asst 375000 > "$T"
+printf '{"handoffMode":"relaxed","handoffTokens":100000}\n' > "$HOME/.dagents/config.json"
+run --plan
+check "relaxed: a pinned budget does not move the plan check" "$out" "budget (plan): 375k of 680k (55%) — ok — source: record"
+settings 650000
 # The handoffTokens setting pins the task budget; DAGENTS_BUDGET still wins.
 printf '{"handoffTokens":300000}\n' > "$HOME/.dagents/config.json"
 asst 285000 > "$T"

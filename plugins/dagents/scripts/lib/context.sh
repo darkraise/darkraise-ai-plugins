@@ -309,12 +309,13 @@ ctx_plan_mode() {
   fi
 }
 
-# ctx_plan_budget MODEL — the limit for writing the plan after the spec:
-# CTX_PLAN_PCT of the task budget (DAGENTS_BUDGET included), never above
-# the final-phase limit.
+# ctx_plan_budget MODEL [MODE] — the limit for writing the plan after the
+# spec: CTX_PLAN_PCT of the task budget, never above the final-phase limit.
+# MODE is the handoffMode setting; only strict mode reads the pinned budget
+# (DAGENTS_BUDGET or handoffTokens), which relaxed mode does not use.
 ctx_plan_budget() {
-  local task final plan
-  task=$(ctx_pinned_budget)
+  local task="" final plan
+  [ "${2:-strict}" = relaxed ] || task=$(ctx_pinned_budget)
   [ -n "$task" ] || task=$(ctx_budget "$1")
   final=$(ctx_final_budget "$1")
   plan=$(( task * CTX_PLAN_PCT / 100 ))
@@ -470,7 +471,7 @@ ctx_line() {
   if [ "$limit" = final ]; then
     budget=$(ctx_final_budget "$model")
   elif [ "$limit" = plan ]; then
-    budget=$(ctx_plan_budget "$model")
+    budget=$(ctx_plan_budget "$model" "$mode")
   elif [ "$limit" = relaxed ]; then
     budget=$(( $(ctx_final_budget "$model") - extra ))
     [ "$budget" -gt 0 ] || budget=1
