@@ -608,8 +608,10 @@ writing nothing, when `lens-route` does. Then run the mechanics yourself:
   plan too: BASE is the base its open line records, and `task-close` (§5)
   reads the same line.
 - **§2.** Once the report is written, run
-  `bash <plugin-root>/scripts/suite-run -- <suite command>` yourself in the
-  background at the task's head and treat a non-baseline failure as §3's
+  `bash <plugin-root>/scripts/suite-run -- bash -c '<suite command>'`
+  yourself in the background at the task's head (suite-run takes
+  `COMMAND [ARG ...]`, so an unwrapped `a && b` runs `b` unbounded and
+  unrecorded) and treat a non-baseline failure as §3's
   Important finding. `<suite command>` is resolved as §1's Suite command
   says: the task check, and under a `none` task check the integration check
   on the tasks §1 schedules, and no suite on the others.
@@ -645,7 +647,7 @@ For a task whose last ledger line, read by the caller's Recovery rule, is:
 | An assigned line naming `executor <id> <model>/<effort>` (an executor lane run from before 5.0), or a later fix round of that task, with no complete line | The lane is gone, so the session implements the task. First run `git status`, show your human partner the leftovers, and keep or discard them as they decide; leftover run records under the git directory are inert. Then start the task as the caller's task loop says |
 | `implementer <agent> (assigned …)`, the agent not `inline` (an older run's dispatch) | The session implements the task. If `git log <base>..HEAD` is non-empty, review it (§3); otherwise start the task as the caller's task loop says |
 | `fix round R/5` on a `Host: codex` plan | Codex: R < 5 resumes the loop at round R+1 by the five-round schedule (§4); `fix round 5/5` goes to the breaker (§4) |
-| `fix round 1/2` | The session finishes it: §The session review loop, from round 2 |
+| `fix round 1/2`, or `fix round 1/5` from an older run | The session finishes it: §The session review loop, from round 2 |
 | `fix round 2/2`, or `fix round R/5` with R >= 2 from an older run | Go to the breaker (§4) |
 
 On a Codex plan the Codex row wins; the `older run` mappings apply to a Claude plan only.
