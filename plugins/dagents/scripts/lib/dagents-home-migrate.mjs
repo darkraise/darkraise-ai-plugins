@@ -59,6 +59,16 @@ function writeJson(file, data) {
   }
 }
 
+// A directory itself, not a link to one: a merge never follows a link out of
+// the home.
+function isDirectory(file) {
+  try {
+    return fs.lstatSync(file).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 function sameFile(a, b) {
   try {
     return fs.statSync(a).isFile() && fs.statSync(b).isFile() && fs.readFileSync(a).equals(fs.readFileSync(b));
@@ -190,6 +200,29 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
   }
 
   if (!dryRun) fs.mkdirSync(newHome, { recursive: true });
+  // An entry the new home lacks moves; one it holds the same is dropped; a
+  // directory both hold is merged entry by entry, then removed once empty.
+  const place = (from, to) => {
+    if (!fs.existsSync(to)) {
+      if (!dryRun) fs.renameSync(from, to);
+      did(`moved ${from} to ${to}`, `would move ${from} to ${to}`);
+    } else if (isDirectory(from) && isDirectory(to)) {
+      for (const child of fs.readdirSync(from)) place(path.join(from, child), path.join(to, child));
+      if (!dryRun) {
+        try {
+          fs.rmdirSync(from);
+        } catch (error) {
+          // Still holds something refused.
+          if (!["ENOTEMPTY", "EEXIST"].includes(error.code)) refuse(`${from} could not be removed: ${error.message}`);
+        }
+      }
+    } else if (sameFile(from, to)) {
+      if (!dryRun) fs.rmSync(from);
+      did(`dropped ${from}, the same as ${to}`, `would drop ${from}, the same as ${to}`);
+    } else {
+      refuse(`${from} differs from ${to}; keep one by hand, then run dagents-migrate again`);
+    }
+  };
   for (const entry of fs.readdirSync(forgeHome, { withFileTypes: true })) {
     const from = path.join(forgeHome, entry.name);
     const to = path.join(newHome, entry.name);
@@ -224,17 +257,7 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
       });
       continue;
     }
-    if (!fs.existsSync(to)) {
-      if (!dryRun) fs.renameSync(from, to);
-      did(`moved ${from} to ${to}`, `would move ${from} to ${to}`);
-      continue;
-    }
-    if (sameFile(from, to)) {
-      if (!dryRun) fs.rmSync(from);
-      did(`dropped ${from}, the same as ${to}`, `would drop ${from}, the same as ${to}`);
-      continue;
-    }
-    refuse(`${from} differs from ${to}; keep one by hand, then run dagents-migrate again`);
+    place(from, to);
   }
   if (!dryRun) {
     try {

@@ -243,3 +243,32 @@ test("migrateHome keeps the mode of a config.json it merges into", t => {
   assert.deepEqual(fs.readdirSync(path.join(failing, ".dagents")).filter(name => /^\.config\.json\..*\.tmp$/.test(name)), []);
 });
 
+test("migrateHome merges a directory both homes hold file by file", () => {
+  const home = scratch("dagents-migrate-home-");
+  const forge = path.join(home, ".dr-forge");
+  const dagents = path.join(home, ".dagents");
+  fs.mkdirSync(path.join(forge, ".lock"), { recursive: true });
+  fs.mkdirSync(path.join(dagents, ".lock"), { recursive: true });
+  write(path.join(forge, "notes", "a.txt"), "a\n");
+  write(path.join(forge, "notes", "same.txt"), "same\n");
+  write(path.join(dagents, "notes", "b.txt"), "b\n");
+  write(path.join(dagents, "notes", "same.txt"), "same\n");
+  const dry = migrateHome({ HOME: home }, { dryRun: true });
+  assert.equal(dry.refused, 0, dry.lines.join("\n"));
+  assert.ok(dry.lines.includes(`would move ${path.join(forge, "notes", "a.txt")} to ${path.join(dagents, "notes", "a.txt")}`), dry.lines.join("\n"));
+  const { lines, refused } = migrateHome({ HOME: home });
+  assert.equal(refused, 0, lines.join("\n"));
+  assert.deepEqual(fs.readdirSync(path.join(dagents, "notes")).sort(), ["a.txt", "b.txt", "same.txt"]);
+  assert.equal(read(path.join(dagents, "notes", "a.txt")), "a\n");
+  assert.equal(fs.existsSync(forge), false);
+  const other = scratch("dagents-migrate-home-");
+  const from = path.join(other, ".dr-forge", "notes", "c.txt");
+  const to = path.join(other, ".dagents", "notes", "c.txt");
+  write(from, "old\n");
+  write(to, "new\n");
+  const second = migrateHome({ HOME: other });
+  assert.equal(second.refused, 1, second.lines.join("\n"));
+  assert.ok(second.lines.includes(`refused: ${from} differs from ${to}; keep one by hand, then run dagents-migrate again`), second.lines.join("\n"));
+  assert.equal(read(from), "old\n");
+  assert.equal(read(to), "new\n");
+});
