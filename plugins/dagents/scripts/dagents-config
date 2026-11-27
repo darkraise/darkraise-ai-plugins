@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dagents's settings: dagents-config get KEY | get --json | set KEY VALUE | unset KEY | claude-restore JSON | workflow
+# dagents's settings: dagents-config get KEY | get --json | set KEY VALUE | unset KEY | claude-restore JSON | drop-snapshot SESSION | workflow
 # The schema is config/schema.mjs; values live in ~/.dagents/config.json.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
