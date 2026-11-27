@@ -208,5 +208,18 @@ printf 'keep\n' > "$TMP/out.json"; printf 'x\n' > "$TMP/out.json.wrote"
 run --kind task --tier heavy --prompt "$TMP/prompt.md" --dry-run
 check "dry_run_keeps_report" "$(cat "$TMP/out.json" 2>/dev/null)/$(cat "$TMP/out.json.wrote" 2>/dev/null)" "keep/x"
 
+# --- linked_hooks_dir_watched: hooks behind a symlinked hooks directory ---
+reset_work
+mkdir -p "$TMP/realhooks"; printf '#!/bin/sh\n' > "$TMP/realhooks/pre-commit"; chmod +x "$TMP/realhooks/pre-commit"
+if ln -s "$TMP/realhooks" "$TMP/linkprobe" 2>/dev/null && [ -L "$TMP/linkprobe" ]; then
+  mv "$hooks" "$TMP/hooks.saved" && ln -s "$TMP/realhooks" "$hooks"
+  STUB_AGY_SIDE=hook-target STUB_AGY_HOOK_TARGET="$TMP/realhooks/pre-commit" STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
+  has "linked_hooks_dir_watched" "$out" "evidence=wrote reason=wrote"
+  check "linked_hooks_dir_watched: the hook is named" "$(grep -c 'pre-commit$' "$TMP/out.json.wrote" 2>/dev/null)" "1"
+  rm -f "$hooks" && mv "$TMP/hooks.saved" "$hooks"
+else
+  printf 'skip - linked_hooks_dir_watched: this host copies on ln -s\n'
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
