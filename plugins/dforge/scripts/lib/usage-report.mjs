@@ -478,7 +478,8 @@ function quality(opts, rowsOut, closeRows, planText) {
   if (lens.length) {
     for (const m of lens) ['Critical', 'Important', 'Minor'].forEach((k, i) => { q.findings[k] = (q.findings[k] || 0) + Number(m[i + 1]); });
   } else if (record) for (const m of record.matchAll(/\[(Critical|Important|Minor)\]/g)) q.findings[m[1]] = (q.findings[m[1]] || 0) + 1;
-  const progress = opts.workspace && read(path.join(opts.workspace, 'progress.md'));
+  const ledger = opts.ledger || (opts.workspace && path.join(opts.workspace, 'progress.md'));
+  const progress = ledger && read(ledger);
   if (progress) q.breakerItems = (progress.match(/^Task \d+: fix round 3\/3 \(.*still failing\)/gm) || []).length;
   const register = opts.register && read(opts.register);
   if (register) {

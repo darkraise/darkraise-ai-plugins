@@ -316,6 +316,12 @@ check "unmarked_ledger_line: a complete task no transcript bounds is unresolved"
   "$(q "$J" '.plans[0] | [.completed, ([.tasks[] | [.tasks[0], .label]] | sort), (.excluded | map(select(test("no transcript bounds"))))]')" \
   '[1,[[1,"marked"],[2,"unresolved"]],["Task 2: no transcript bounds its slice"]]'
 
+# --- quality_pairing: breaker items from the ledger, not the workspace ---
+mkdir -p "$UB/ledger" "$UB/ws"
+printf 'Task 1: fix round 3/3 (x; commits a..b; still failing)\n' > "$UB/ledger/progress.md"
+J=$(node "$REPORT" --markers "$UB/markers.tsv" --transcripts "$UB/proj" --ledger "$UB/ledger/progress.md" --workspace "$UB/ws" --format json 2>/dev/null)
+check "quality_pairing: breaker items from the ledger" "$(q "$J" '.plans[0].quality.breakerItems')" "1"
+
 # --- wait_matches_job: a launch with no job id is not credited with another job's end ---
 WJ="$TMP/wj"; mkdir -p "$WJ/proj"
 jq -nc '{type: "assistant", isSidechain: false, timestamp: "2026-01-01T00:00:10Z", message: {id: "j1", model: "claude-opus-5-5",
