@@ -41,7 +41,10 @@ refuses, so the review runs through *The steps by hand* below.
 - **Suite command.** Read the plan header's `**Task check:**` line first,
   then resolve the plan's suite command once:
   - A plan with no `**Task check:**` line runs as it does today. Pass the
-    suite command to its first `task-step review` as `--suite '<suite command>'`.
+    suite command to its first `task-step review` as
+    `--suite '<suite command>' --suite-base <base>`, `<base>` being the
+    `base <sha7>` on the task's open line: `review` exits 2 on a `--suite`
+    without `--suite-base`.
     It is the command on the plan header's
     `**Integration check:**` line; else the test command
     `<docs>/gates.md` declares (the `Command` of the gate that runs the
@@ -53,7 +56,8 @@ refuses, so the review runs through *The steps by hand* below.
     only the focused tests that cover your change while you work; §2 runs the
     suite.
   - A command task check is the suite command: every `task-step review`
-    passes it, never the Integration check. The rest of the loop is
+    passes it, with `--suite-base` set to the task's base, never the
+    Integration check. The rest of the loop is
     unchanged.
   - With a task check of `none`, `review` passes no
     `--suite` on a task the schedule skips. The integration check is the command the first sub-bullet
@@ -67,8 +71,9 @@ refuses, so the review runs through *The steps by hand* below.
     key `suite-run` records for `bash -c '<integration check>'`, whatever its
     exit, and whose HEAD is the task's base or an ancestor of it
     (`git merge-base --is-ancestor <row head> <task base>`). A row at the task's own head, left by an earlier
-    review of the task, never counts. The plan base is the `base` in the step
-    file of the plan's first task. So a regression made by an earlier task is
+    review of the task, never counts. The plan base is the base on Task 1's
+    open line in the ledger (`Task 1: implementer inline (assigned; base
+    <sha7>)`), which `task-brief --open` writes for every task, risk 3 or not. So a regression made by an earlier task is
     not excused as a base failure. `review` exits 2 when `--suite` comes
     without `--suite-base`, when `--suite-base` is not the task's base or an
     ancestor of it, and when a scheduled task gets no `--suite` and its step
