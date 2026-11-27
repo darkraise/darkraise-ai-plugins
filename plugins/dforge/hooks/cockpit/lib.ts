@@ -417,7 +417,9 @@ function messageOption(word: string): { kind: MessageKind; value: string | undef
 }
 
 // Every message option in a simple command's words: its kind, its value, the
-// option's word and the word holding the value.
+// option's word and the word holding the value. A value word is read as an
+// option too: a letter that takes no value in this command (gh pr merge's -m)
+// must not hide the option after it.
 function messageOptions(words: readonly string[]): { kind: MessageKind; value: string; at: number; valueAt: number }[] {
   const out: { kind: MessageKind; value: string; at: number; valueAt: number }[] = []
   for (let at = 0; at < words.length; at++) {
@@ -427,7 +429,6 @@ function messageOptions(words: readonly string[]): { kind: MessageKind; value: s
       out.push({ kind: option.kind, value: option.value, at, valueAt: at })
     } else if (at + 1 < words.length) {
       out.push({ kind: option.kind, value: words[at + 1] ?? '', at, valueAt: at + 1 })
-      at++
     }
   }
   return out

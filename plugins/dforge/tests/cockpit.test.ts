@@ -917,6 +917,8 @@ describe('attribution guard', () => {
       [`gh pr create -b="x\n\n${A6_AI}"`, true],
       [`git commit --mess="fix\n\n${A6_AI}"`, true],
       [`git commit -m x --trai "${A6_AI}"`, true],
+      [`gh pr merge 12 -m --body "x\n\n${A6_AI}"`, true],
+      [`gh pr merge 12 -dm -b "x\n\n${A6_AI}"`, true],
       ['git commit -amfix', false],
       ['git commit --mess=fix', false],
     ]
