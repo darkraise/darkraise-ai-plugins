@@ -488,9 +488,9 @@ export function gitTextFiles(command: string): string[] {
   return files
 }
 
-/** Whether a tool by this name writes a pull request or commits files. */
+/** Whether a tool by this name writes a pull or merge request or commits files. */
 export function isGitWriteTool(tool: string): boolean {
-  return /pull_request|create_or_update_file|push_files/.test(tool) && !/read|list|search|get_/.test(tool)
+  return /pull_request|merge_request|create_commit|create_or_update_file|push_files/.test(tool) && !/read|list|search|get_/.test(tool)
 }
 
 /** Whether a subagent type or skill name belongs to dagents. */

@@ -13,6 +13,7 @@ import {
   gitMessageTexts,
   shellCommands,
   gitTextFiles,
+  isGitWriteTool,
   isPlanTail,
   kTokens,
   attributionIn,
@@ -894,6 +895,15 @@ describe('attribution guard', () => {
     expect(clean).toEqual([undefined, undefined])
   })
 
+  test('judges GitLab merge request and commit tools', async ($, on) => {
+    expect(isGitWriteTool('mcp__gitlab__create_merge_request')).toBe(true)
+    expect(isGitWriteTool('mcp__gitlab__create_commit')).toBe(true)
+    expect(isGitWriteTool('mcp__gitlab__get_merge_request')).toBe(false)
+    world(on, { ...SIGNED_IN })
+    signedIn(on, {})
+    const ran = await $.tool.call({ tool: 'mcp__gitlab__create_merge_request', title: 'x', description: `x\n\n${A6_GENERATED}` } as never)
+    expect(ran.deny).toBe(`dagents: this project keeps AI attribution out of git. Remove "${A6_GENERATED}" and try again.`)
+  })
 
   test('finds AI attribution and leaves human co-authors alone', () => {
     expect(attributionIn('fix\n\nCo-Authored-By: Claude Opus <noreply@anthropic.com>')).toMatch(/Co-Authored-By/)
