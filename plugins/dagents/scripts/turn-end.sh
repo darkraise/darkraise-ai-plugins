@@ -36,13 +36,13 @@ PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 command -v jq >/dev/null 2>&1 || exit 0
 stdin_json="$(cat 2>/dev/null || true)"
 jq -e . >/dev/null 2>&1 <<<"$stdin_json" || exit 0
-session_id=$(jq -r '.session_id // empty' <<<"$stdin_json")
-cwd=$(jq -r '.cwd // empty' <<<"$stdin_json")
-transcript_path=$(jq -r '.transcript_path // empty' <<<"$stdin_json")
+session_id=$(jq -r '.session_id // empty' <<<"$stdin_json" | tr -d '\r')
+cwd=$(jq -r '.cwd // empty' <<<"$stdin_json" | tr -d '\r')
+transcript_path=$(jq -r '.transcript_path // empty' <<<"$stdin_json" | tr -d '\r')
 [ -n "$session_id" ] || exit 0
 . "${SCRIPT_DIR}/lib/stand-down.sh"
 ! stand_down_active "$session_id" || exit 0
-is_retry=$(jq -r '.stop_hook_active // false' <<<"$stdin_json")
+is_retry=$(jq -r '.stop_hook_active // false' <<<"$stdin_json" | tr -d '\r')
 
 hold() { # hold <reason> <what the user sees>
   jq -n --arg reason "$1" --arg msg "$2" '{decision: "block", reason: $reason, systemMessage: $msg}'
