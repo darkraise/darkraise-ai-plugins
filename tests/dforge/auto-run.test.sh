@@ -584,6 +584,12 @@ ar --session s-1 resumed
 asst 30000 > "$T"
 out=$(after); status=$?
 check "after-compact: with nothing pending it only measures" "$status:${out%% *}:$(field pending)" "0:continue:null"
+cp "$STATE" "$TMP/state.keep60"
+jq '.regime = "normal" | .phase = "spec" | .pending = null' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+asst 450000 > "$T"
+out=$(after); status=$?
+check "after-compact: with nothing pending prints the stored regime" "$status:$out" "0:continue — 450k after compaction; regime normal"
+mv -f "$TMP/state.keep60" "$STATE"
 regime_compacted
 asst 700000 > "$T"
 after >/dev/null
