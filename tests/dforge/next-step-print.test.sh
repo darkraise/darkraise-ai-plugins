@@ -221,6 +221,12 @@ check "latest draft: a draft with no plan prints the stored block" "$status" 0
 sed 's#docs/dforge/specs/demo.md#docs/dforge/specs/D.md#' "$L/$P" > "$LD/plans/2026-11-02-d.md"
 latest
 check "latest draft: a plan naming the draft supersedes it" "$status" 6
+lfixture
+printf '# D\n' > "$LD/specs/my draft.md"
+stored "<!-- next-step: kind=draft done=1 closed=0 subject=docs/dforge/specs/my draft.md at=1 -->"
+sed 's#^\*\*Spec:\*\* docs/dforge/specs/demo.md#**Spec:** `docs/dforge/specs/my draft.md`#' "$L/$P" > "$LD/plans/2026-11-02-d.md"
+latest
+check "latest draft: a Spec path with a space supersedes the draft" "$status" 6
 
 lfixture
 stored ""

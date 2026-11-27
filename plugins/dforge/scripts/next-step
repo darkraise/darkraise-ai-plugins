@@ -373,7 +373,7 @@ draft_planned() {
   local want name file sub spec
   want=$(dforge_name_key "$2")
   while IFS=$'\t' read -r name file sub; do
-    spec=$(tr -d '\r' < "$file" | sed -n 's/^\*\*Spec:\*\*[[:space:]]*//p' | head -n 1 | sed 's/^`\([^`]*\)`.*/\1/; s/[[:space:]].*//')
+    spec=$(tr -d '\r' < "$file" | sed -n 's/^\*\*Spec:\*\*[[:space:]]*//p' | head -n 1 | sed 's/^`\([^`]*\)`.*/\1/; t; s/[[:space:]].*//')
     [ "$(dforge_name_key "$spec")" = "$want" ] && return 0
   done < <(_spec_plan_files "$1" "$2")
   return 1
