@@ -285,6 +285,40 @@ check "report: --report without --id: exit 2" "$status" "2"
 run docs/rep-b.md --id A1
 check "report: --id without --report: exit 2" "$status" "2"
 check "report: the refusals left amendments unchanged" "$(cmp -s "$REP_B" "$TMP/rep-snapshot" && echo same)" "same"
+# Text after the entry larger than a pipe buffer: the reader stops at the New
+# fence's close and nothing upstream may die of SIGPIPE under pipefail.
+{
+  cat "$TMP/rep-e1"
+  printf '\n## Notes\n\n'
+  awk 'BEGIN { s = sprintf("%099d", 0); for (i = 0; i < 10486; i++) print s }'
+} > "$TMP/big-report.md"
+cp docs/plan.md docs/rep-e.md
+run docs/rep-e.md --report "$TMP/big-report.md" --id A1
+check "report: an entry followed by more than a pipe buffer applies" "$status:$out" "0:amended: A1 Task 2"
+# A heading quoted inside a fence is text, not the entry.
+{
+  printf '## Verdict\n\nAn example of the entry form:\n\n`````markdown\n'
+  entry "$TMP/rep-fake" '## A1 — Task 2' 'Print `hello NAME` twice.' 'Print `hello NAME` as an example.'
+  cat "$TMP/rep-fake"
+  printf '`````\n\n'
+  cat "$TMP/rep-e1"
+} > "$TMP/fenced-report.md"
+cp docs/plan.md docs/rep-f.md
+run docs/rep-f.md --report "$TMP/fenced-report.md" --id A1
+REP_F="$REPO/.dagents/sdd/rep-f/amendments.md"
+check "report: a heading inside a fence is not the entry" \
+  "$status:$(grep -c 'three times' "$REP_F"):$(grep -c 'as an example' "$REP_F")" "0:1:0"
+# A plan-lint that cannot run is no clean lint: the amendment is rejected.
+cp -R "$HERE/../../plugins/dagents/scripts" "$TMP/badlint"
+printf '#!/usr/bin/env bash\necho "plan-lint: cannot read the routing policy" >&2\nexit 2\n' > "$TMP/badlint/plan-lint"
+cp docs/plan.md docs/rep-g.md
+run docs/rep-g.md b1.md
+REP_G="$REPO/.dagents/sdd/rep-g/amendments.md"
+cp "$REP_G" "$TMP/rep-g-snapshot"
+entry b-lint.md '## Task 1' 'Print `hello NAME`.' 'Print `hello, NAME`.'
+out=$(bash "$TMP/badlint/plan-amend" docs/rep-g.md b-lint.md 2>&1); status=$?
+check "a plan-lint that cannot run: rejected, amendments unchanged" \
+  "$status:$(grep -c '^rejected: plan-lint could not check the plan (exit 2)$' <<<"$out"):$(cmp -s "$REP_G" "$TMP/rep-g-snapshot" && echo same)" "1:1:same"
 # A linked worktree session must not amend the primary checkout's plan: the
 # worktree's task-brief would never see the amendment.
 git add -A && git commit -qm 'test: seed' && git worktree add -q "$TMP/wt"
