@@ -82,6 +82,11 @@ session from memory or from a summary.
      complete, each goes straight to its Final Review section, and both follow
      the same [final-review.md](../../reference/final-review.md).
    - Run finishing: invoke dagents:finishing-a-development-branch.
+   - Your human partner decides: …: stop and ask, record the ruling in the
+     ledger, then rerun `scripts/next-step --print PLAN_FILE`.
+   - Re-review <head>..HEAD with the fix-wave re-review …: invoke the skill the plan's `**Execution:**` line names, whose
+     recovery routes a `stale` final review to final-review.md's scoped
+     re-review.
 
 ## Auto run
 
