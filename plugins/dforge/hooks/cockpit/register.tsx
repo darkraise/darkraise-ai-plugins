@@ -3632,7 +3632,16 @@ async function beat($: EngineInterface) {
 // The session facts the scripts read in place of a transcript scan
 // (scripts/lib/session-state.sh): written whole to its final path, since a
 // mod cannot rename, so a reader meeting a half-written file falls back.
-async function writeSessionState($: EngineInterface) {
+let sessionStateWrites: Promise<void> = Promise.resolve()
+
+// One write at a time: two hooks writing at once could leave the older facts last.
+function writeSessionState($: EngineInterface): Promise<void> {
+  const written = sessionStateWrites.then(() => writeSessionStateNow($))
+  sessionStateWrites = written.catch(() => undefined)
+  return written
+}
+
+async function writeSessionStateNow($: EngineInterface) {
   try {
     const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
     if (!home) return
