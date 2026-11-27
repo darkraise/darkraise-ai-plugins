@@ -752,5 +752,19 @@ date +%s > "$HOME/.claude/dforge/sessions/cockpit/s1"
 obs_pair "auto run"
 (cd "$REPO" && bash "$HERE/../../plugins/dforge/scripts/auto-run" --session s1 stop >/dev/null)
 
+# --- the measure: the next request carries the last response's output ---
+MT="$TMP/measure.jsonl"
+usage_line() { # usage_line USAGE_JSON
+  printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-opus-5-5","usage":%s}}\n' "$1"
+}
+measure() { ( . "$HERE/../../plugins/dforge/scripts/lib/context.sh"; ctx_measure "$MT" ); }
+{ asst 1000; usage_line '{"input_tokens":2,"cache_creation_input_tokens":600,"cache_read_input_tokens":143103,"output_tokens":393}'; } > "$MT"
+m1=$(measure)
+{ usage_line '{"input_tokens":2,"cache_creation_input_tokens":600,"cache_read_input_tokens":143103,"output_tokens":393}'; boundary 50000; } > "$MT"
+m2=$(measure)
+usage_line '{"input_tokens":2,"cache_creation_input_tokens":600,"cache_read_input_tokens":143103}' > "$MT"
+m3=$(measure)
+check "the measure adds the last response's output tokens" "$m1|$m2|$m3" "144098|50000|143705"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
