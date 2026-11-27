@@ -283,7 +283,10 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
   }
 
   const oldConfig = readOrRefuse(path.join(oldHome, "config.json"));
-  if (oldConfig !== UNREADABLE && oldConfig?.darkmem && typeof oldConfig.darkmem === "object") {
+  const oldDarkmem = oldConfig !== UNREADABLE && !notObject(oldConfig) ? oldConfig.darkmem : undefined;
+  if (oldDarkmem !== undefined && notObject(oldDarkmem)) {
+    refuse(`${path.join(oldHome, "config.json")} holds a darkmem value that is not an object; fix or delete it, then run dforge-migrate again`);
+  } else if (oldDarkmem !== undefined) {
     const file = path.join(newHome, "config.json");
     const source = view("config.json");
     if (!dryRun) fs.mkdirSync(newHome, { recursive: true });
@@ -306,9 +309,12 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
   const oldMirrors = path.join(oldHome, "mirror");
   const newMirrors = path.join(newHome, "mirror");
   for (const entry of fs.existsSync(oldMirrors) ? fs.readdirSync(oldMirrors, { withFileTypes: true }) : []) {
-    if (!entry.isDirectory()) continue;
     const source = path.join(oldMirrors, entry.name);
     const target = path.join(newMirrors, entry.name);
+    if (!entry.isDirectory()) {
+      refuse(`${source} is not a directory, so it was not moved; move or delete it by hand, then run dforge-migrate again`);
+      continue;
+    }
     if (fs.existsSync(view("mirror", entry.name))) {
       refuse(`${target} exists, so ${source} was not moved`);
       continue;

@@ -501,3 +501,17 @@ test("migrateHome refuses an unreadable config or stores file once and finishes 
     assert.equal(read(bad), "{not json", label);
   }
 });
+
+test("migrateHome refuses what it cannot move from ~/.dr-superpowers", () => {
+  const home = scratch("dms-home-");
+  const old = path.join(home, ".dr-superpowers");
+  write(path.join(old, "mirror", ".DS_Store"), "x");
+  write(path.join(old, "config.json"), JSON.stringify({ darkmem: null }));
+  for (const dryRun of [true, false]) {
+    const { lines, refused } = migrateHome({ HOME: home }, { dryRun });
+    assert.equal(refused, 2, lines.join("\n"));
+    assert.ok(lines.includes(`refused: ${path.join(old, "mirror", ".DS_Store")} is not a directory, so it was not moved; move or delete it by hand, then run dforge-migrate again`), lines.join("\n"));
+    assert.ok(lines.includes(`refused: ${path.join(old, "config.json")} holds a darkmem value that is not an object; fix or delete it, then run dforge-migrate again`), lines.join("\n"));
+  }
+});
+
