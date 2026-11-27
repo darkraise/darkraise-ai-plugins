@@ -102,7 +102,7 @@ suite_row() {
 # from TAP "not ok" lines so the same test reads the same at two commits.
 suite_failing_lines() {
   [ -f "$1" ] || return 0
-  tr -d '\r' < "$1" | grep -E '^[[:space:]]*(not ok|\(fail\)|FAIL)' | cut -c1-200 | sed -E 's/^([[:space:]]*not ok) [0-9]+/\1/'
+  tr -d '\r' < "$1" | grep -E '^[[:space:]]*(not ok|\(fail\)|FAIL)' | sed -E 's/^([[:space:]]*not ok) [0-9]+/\1/'
 }
 
 # suite_fail_set LOG CODE: the failing lines of a failed run's log, one per
@@ -265,13 +265,14 @@ suite_base_lines() {
   cat "$file"
 }
 
-# drop_base_cache STEP_FILE N OLD_BASE: removes task N's cached base run when
-# the step file's suite base (suite_base_sha) is no longer OLD_BASE, the one
-# read before the step file was rewritten. The cache is keyed by task, not by
+# drop_base_cache STEP_FILE N OLD_BASE OLD_SUITE: removes task N's cached base
+# run when the step file's suite base (suite_base_sha) is no longer OLD_BASE or
+# its suite command no longer OLD_SUITE, both read before the step file was
+# rewritten. The cache is keyed by task, not by
 # commit, so it would otherwise answer for a base it was not run at.
 drop_base_cache() {
   local ws
-  [ "$(suite_base_sha "$1")" != "$3" ] || return 0
+  [ "$(suite_base_sha "$1")" != "$3" ] || [ "$(jq -r '.suite // empty' "$1" | tr -d '\r')" != "${4:-}" ] || return 0
   ws=$(dirname "$1")
   rm -f "$ws/task-$2-base-failures.txt" "$ws/task-$2-base-timeout" "$ws/task-$2-base.log" "$ws/task-$2-base.log.setup.log"
 }
@@ -341,7 +342,7 @@ rr_render() { # rr_render TEMPLATE FINDINGS_FILE — the fenced prompt body, de-
 cmd_rereview() (
   local here plan_arg plan tmp src header ws state first t
   local fix bullets nopen review_head round new_round head_ref head_sha fix_base fix_base_sha
-  local pkg diff_file now prompt tpl check_dir snap old_base
+  local pkg diff_file now prompt tpl check_dir snap old_base old_suite
   here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
   . "$here/lib/plan.sh"
   [ $# -eq 2 ] && [[ $2 =~ ^[0-9]+$ ]] || rr_usage
@@ -425,10 +426,11 @@ cmd_rereview() (
   }
   now=$(date +%s)
   old_base=$(suite_base_sha "$state")
+  old_suite=$(jq -r '.suite // empty' "$state" | tr -d '\r')
   jq --arg rh "$head_sha" --argjson r "$new_round" --argjson t "$now" --argjson chk "$snap" \
     '.reviewHead = $rh | .round = $r | .t0 = $t | .reviewCheck = $chk' \
     "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
-  drop_base_cache "$state" "$first" "$old_base"
+  drop_base_cache "$state" "$first" "$old_base" "$old_suite"
 
   printf 'task %s: re-review round %s: packaged %s..%s, prompt written\n' "$first" "$new_round" "${fix_base_sha:0:7}" "${head_sha:0:7}"
   printf 'seat: dforge:judge-sonnet-high prompt: %s\n' "$prompt"
@@ -694,12 +696,13 @@ do_review() {
 
   snap=$(tracked_snapshot "$top") || die "cannot record the tracked files of $top for the verdict check"
   old_base=$(suite_base_sha "$state")
+  old_suite=$(jq -r '.suite // empty' "$state" | tr -d '\r')
   jq --arg rh "$headsha" --argjson t0 "$t0" --argjson chk "$snap" \
     --arg suite "$suite_arg" --arg sbase "$suite_base_sha_arg" \
     '.reviewHead = $rh | .t0 = $t0
      | .reviewCheck = $chk | (if $suite == "" then . else .suite = $suite end) | (if $sbase == "" then . else .suiteBase = $sbase end)' \
     "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
-  drop_base_cache "$state" "$first" "$old_base"
+  drop_base_cache "$state" "$first" "$old_base" "$old_suite"
   if [ -n "$suite_arg" ]; then
     ledger_init
     if [ "$(tr -d '\r' < "$ledger" | grep -cF 'Ruling: suite command —')" -eq 0 ]; then
@@ -1104,7 +1107,7 @@ suite_check() {
     [[ $line =~ ^(command\ exit\ [0-9]+)\ \(unnamed\ [0-9]+-[0-9]+\)$ ]] && line=${BASH_REMATCH[1]}
     case $line in
       'suite did not finish'*) printf '%s\tImportant\tsuite\t0\tsuite: %s at %s\n' "$target" "$line" "$head7" ;;
-      *) printf '%s\tImportant\tsuite\t0\tsuite: %s fails at %s\n' "$target" "${line//$'\t'/ }" "$head7" ;;
+      *) line=${line//$'\t'/ }; printf '%s\tImportant\tsuite\t0\tsuite: %s fails at %s\n' "$target" "${line:0:200}" "$head7" ;;
     esac
   done < "$TMP/suite-new" > "$TMP/suite-findings"
 }

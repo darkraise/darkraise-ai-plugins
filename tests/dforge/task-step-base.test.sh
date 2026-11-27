@@ -478,6 +478,9 @@ ts review docs/plan.md 19 --suite-base "$LAST_FULL"
 check "task 19: a review at the same suite base keeps the cached base run" "$rc $(base_cache)" "0 yyyy"
 ts review docs/plan.md 19 --suite-base "$(g rev-parse HEAD~1 | tr -d '\r')"
 check "task 19: a review that moves the suite base drops the cached base run" "$rc $(base_cache)" "0 nnnn"
+for f in base-failures.txt base-timeout base.log base.log.setup.log; do printf 'not ok - regress\n' > "$WS/task-19-$f"; done
+ts review docs/plan.md 19 --suite 'bash suite.sh --again' --suite-base "$(jq -r '.suiteBase' < "$WS/task-19-step.json" | tr -d '\r')"
+check "task 19: a review that changes the suite command drops the cached base run" "$rc $(base_cache)" "0 nnnn"
 
 # Task 22: a verdict killed during its base run, as a foreground call past its
 # cap is, leaves no worktree checked out or registered.
@@ -501,6 +504,22 @@ check "task 22: the base run had started" "$(g worktree list | wc -l | tr -d ' '
 kill -TERM "$killed"
 wait "$killed" 2>/dev/null
 check "task 22: a killed verdict leaves no worktree registered" "$(g worktree list | wc -l | tr -d ' ')" "1"
+
+# Task 23: two failing lines that share their first 200 characters are two
+# failures; the base row at the task's base answers.
+printf '\n### Task 23: Task 23\n\n**Files:**\n- Modify: `app.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' >> "$REPO/docs/plan.md"
+long=$(printf '%0200d' 0 | tr 0 x)
+set_failing "not ok 1 - $long-alpha"$'\n'
+commit "a base with one long failure"
+sr
+seed docs/plan.md 23 'bash suite.sh'
+set_failing "not ok 1 - $long-alpha"$'\n'"not ok 2 - $long-beta"$'\n'
+commit "work 23"
+sr
+ts review docs/plan.md 23
+clean_report 23
+ts verdict docs/plan.md 23
+check "task 23: two failures sharing a 200-character prefix stay apart" "$(grep '^suite: ' <<<"$out")" "suite: red (1 failing, 1 baseline)"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
