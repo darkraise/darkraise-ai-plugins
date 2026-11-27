@@ -459,6 +459,13 @@ ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
 rc=$( cd "$REPO" && . "$HERE/../../plugins/dforge/scripts/lib/context.sh" && . "$HERE/../../plugins/dforge/scripts/lib/auto-run.sh" && AR_SESSION=s-1 AR_RUN_SEEN=r-old ar_write "$STATE" '.x = 1' >/dev/null 2>&1; echo $? )
 check "under the lock: an update observed against a replaced run is refused" "$rc:$(field x)" "3:null"
 
+# ar_update reads the run's id before the lock: a run replaced while it waited
+# (here, by the lock's holder) is refused.
+rc=$( cd "$REPO" && . "$HERE/../../plugins/dforge/scripts/lib/context.sh" && . "$HERE/../../plugins/dforge/scripts/lib/auto-run.sh" \
+  && dr_locked() { jq '.runId = "r-new"' "$STATE" > "$STATE.held" && mv -f "$STATE.held" "$STATE"; shift; "$@"; } \
+  && AR_SESSION=s-1 ar_update '.x = 1' >/dev/null 2>&1; echo $? )
+check "under the lock: an update whose run was replaced while it waited is refused" "$rc:$(field x)" "3:null"
+
 live s-1
 beat s-1
 rc=$( cd "$REPO" && . "$HERE/../../plugins/dforge/scripts/lib/context.sh" && . "$HERE/../../plugins/dforge/scripts/lib/auto-run.sh" && AR_SESSION=s-9 _ar_start_bound docs/dforge/specs/2026-10-14-gadget-design.md "" 0 worktree "$STATE" >/dev/null 2>&1; echo $? )
