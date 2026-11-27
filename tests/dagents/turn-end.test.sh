@@ -59,6 +59,14 @@ turn_rec() { # turn_rec <session> <Status> <Next>
   sleep 1; mkdir -p "${f%/*}"; printf 'status=%s\nnext=%s\n' "$2" "$3" > "$f"
 }
 
+# --- a live session keeps its UI reminder marker past the 7-day prune ---
+mkdir -p "$HOME/.claude/dagents/sessions/turns"
+: > "$HOME/.claude/dagents/sessions/turns/s-1.ui-ux"
+touch -d '10 days ago' "$HOME/.claude/dagents/sessions/turns/s-1.ui-ux"
+prompt s-1
+check "a live session's UI reminder marker survives the prune" \
+  "$([ -f "$HOME/.claude/dagents/sessions/turns/s-1.ui-ux" ] && echo yes || echo no)" "yes"
+
 # --- turn-start ---
 check "turn-start prints nothing" "$(prompt s-1)" ""
 check "turn-start stamps the session" \
