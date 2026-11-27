@@ -34,8 +34,15 @@ export function sha256(data) {
   return crypto.createHash("sha256").update(data).digest("hex");
 }
 
-// A workstream key doubles as a directory name under work/sdd/.
+// A workstream key doubles as a directory name under work/sdd/, so it must be
+// one the uri mapping takes (no leading dot) and every mirror can hold.
 export function validKey(key) {
+  return storedKey(key) && !key.startsWith(".") && uriProblem(key) === null;
+}
+
+// The rule a saved state's keys were written under; a state saved before
+// validKey tightened stays loadable.
+function storedKey(key) {
   return typeof key === "string" && KEY.test(key) && key !== "." && key !== "..";
 }
 
@@ -170,7 +177,7 @@ function dictOf(value, check) {
 
 const isHash = value => typeof value === "string" && HASH.test(value);
 const isLines = value => Array.isArray(value) && value.every(line => typeof line === "string");
-const isLedgerRecord = (slug, record) => validKey(slug) && record !== null && typeof record === "object"
+const isLedgerRecord = (slug, record) => storedKey(slug) && record !== null && typeof record === "object"
   && Number.isSafeInteger(record.offset) && record.offset >= 0 && isHash(record.prefix)
   && (record.pending === undefined || typeof record.pending === "boolean")
   && (record.lastSeq === undefined || (Number.isSafeInteger(record.lastSeq) && record.lastSeq >= 0));
@@ -310,7 +317,7 @@ export function loadState(file) {
   const checkpointAt = checkpointAtRecord(raw?.checkpointAt, raw?.checkpointAtByWorkstream);
   const checkpoints = raw?.checkpoints === undefined
     ? Object.create(null)
-    : dictOf(raw.checkpoints, (key, hash) => validKey(key) && isHash(hash));
+    : dictOf(raw.checkpoints, (key, hash) => storedKey(key) && isHash(hash));
   // Each command's own conflicts (darkmem-sync.mjs recordConflicts); absent
   // in a state written before it was kept.
   const conflictsBy = raw?.conflictsBy === undefined ? undefined : dictOf(raw.conflictsBy, (name, lines) => isLines(lines));

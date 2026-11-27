@@ -8,7 +8,7 @@ import {
   EMPTY_SHA, MAX_ENTRY_CHARS, StateError, acquireLock, archiveUri, caseGroups, checkRemote, checkpointTarget, lockOwner, decodeUtf8, emptyState, familiesOf,
   isArchiveUri, isoMicros, ledgerEntries, ledgerFiles, ledgerPieces, ledgerPlanPath, lineProperties, listDocumentFiles, loadState, localChanges,
   pathToUri, propertiesFor, saveState, sha256, splitAtBlankLines, splitAtLimit, unsupportedPlanDirs, uriFamily, uriProblem, uriToLocal,
-  utcStamp, utf8Fault, checkpointAtOf, newestCheckpointAt, recordCheckpointAt, refuseLinkedDirs,
+  utcStamp, utf8Fault, checkpointAtOf, newestCheckpointAt, recordCheckpointAt, refuseLinkedDirs, validKey,
 } from "../../../plugins/dforge/scripts/lib/darkmem-mirror.mjs";
 import { git, makeRepo, scratch, write } from "./helpers.mjs";
 
@@ -440,6 +440,19 @@ test("the lock admits one holder, waits on a live one however old, and takes ove
   successor();
   assert.equal(fs.existsSync(lock), false);
   assert.deepEqual(fs.readdirSync(root), [], "no side directory is left behind");
+});
+
+test("a workstream key is refused when the uri mapping or Windows could not use it", () => {
+  for (const key of [".plan", "CON", "con.v2", "lpt1", "plan."]) assert.equal(validKey(key), false, key);
+  for (const key of ["plan-1.v2", "p1", "_x"]) assert.equal(validKey(key), true, key);
+  const { root, roots } = mirror();
+  write(path.join(roots.workRoot, "sdd", ".plan", "progress.md"), "# ledger\n");
+  assert.deepEqual(unsupportedPlanDirs(roots.workRoot), [path.join(roots.workRoot, "sdd", ".plan")]);
+  const file = path.join(root, ".sync-state.json");
+  const state = emptyState();
+  state.ledgers.CON = { offset: 0, prefix: EMPTY_SHA };
+  saveState(file, state);
+  assert.deepEqual(Object.keys(loadState(file).ledgers), ["CON"]);
 });
 
 test("two takeovers of one abandoned lock leave exactly one holder", () => {
