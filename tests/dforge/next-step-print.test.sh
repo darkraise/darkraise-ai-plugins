@@ -438,5 +438,24 @@ if [ "$(uname -s)" = Linux ]; then
   check "timing: under 10 s on Linux" "$([ "$ms" -lt 10000 ] && echo fast || echo "slow ($ms ms)")" fast
 fi
 
+# --- --print records no version mismatch ---
+. "$HERE/fixtures/cockpit-ack.sh"
+cockpit_ack_start "$HOME"
+AR="$TMP/ar-repo"
+git init -q -b main "$AR"
+mkdir -p "$AR/docs/dforge/plans" "$AR/docs/dforge/specs"
+printf '.dforge/\n' > "$AR/.gitignore"
+: > "$AR/docs/dforge/specs/demo.md"
+cp "$REPO/$PLAN" "$AR/$PLAN"
+git -C "$AR" add -A && git -C "$AR" commit -qm init
+mkdir -p "$HOME/.claude/dforge/sessions/cockpit"; date +%s > "$HOME/.claude/dforge/sessions/cockpit/s-p"
+(cd "$AR" && bash "$HERE/../../plugins/dforge/scripts/auto-run" --session s-p start --spec docs/dforge/specs/demo.md --force >/dev/null 2>&1)
+ARF="$AR/.dforge/sdd/auto-run.json"
+jq '.version = "0.0.0"' "$ARF" > "$ARF.new" && mv -f "$ARF.new" "$ARF"
+before=$(digest "$ARF")
+(cd "$AR" && CLAUDE_CODE_SESSION_ID=s-p timeout 120 bash "$SCRIPT" --print "$PLAN" >/dev/null 2>&1)
+check "print: a version mismatch is not recorded" "$(jq -r '.active' "$ARF"):$(digest "$ARF")" "true:$before"
+(cd "$AR" && bash "$HERE/../../plugins/dforge/scripts/auto-run" --session s-p stop --reason test >/dev/null 2>&1)
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
