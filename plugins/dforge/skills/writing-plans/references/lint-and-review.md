@@ -38,7 +38,7 @@
      call's limit defaults to 30 minutes):
 
      ```bash
-     bash scripts/run-review-panel --kind plan --tier heavy --cwd <repository-root> \
+     bash <plugin-root>/scripts/run-review-panel --kind plan --tier heavy --cwd <repository-root> \
        --out-dir <workspace>/plan-review-round-1-panel --prompt <workspace>/plan-review-prompt.md
      ```
 
