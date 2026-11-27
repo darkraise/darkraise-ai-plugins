@@ -327,5 +327,24 @@ else
   printf 'skip - gate_child_reaped: setsid is not on PATH\n'
 fi
 
+# --- term_escalates_to_kill: a runner that ignores TERM is killed when the panel is ---
+if command -v setsid >/dev/null 2>&1; then
+  printf '%s\n' '#!/usr/bin/env bash' "trap '' TERM" "printf '%s\\n' \$\$ > '$TMP/runner.pid'; printf '%s\\n' \$\$ >> '$TMP/children'" 'sleep 60' > "$TMP/term-runner"
+  chmod +x "$TMP/term-runner"
+  rm -f "$TMP/runner.pid"; rm -rf "$TMP/out"
+  AGY_GATE_LINE='agy-gate usable=false reason=setting review=false resets_at=- claude=on claude_resets_at=- source=setting' \
+    PANEL_CODEX_RUNNER="$TMP/term-runner" bash "$PANEL" --cwd "$TMP/work" --out-dir "$TMP/out" \
+    --kind task --tier heavy --prompt "$TMP/prompt.md" >/dev/null 2>&1 &
+  pp=$!
+  for _ in $(seq 1 100); do [ -s "$TMP/runner.pid" ] && break; sleep 0.1; done
+  rp=$(cat "$TMP/runner.pid" 2>/dev/null)
+  kill -TERM "$pp" 2>/dev/null
+  sleep 10
+  check "term_escalates_to_kill" "$([ -n "$rp" ] && kill -0 "$rp" 2>/dev/null && echo alive || echo gone)" "gone"
+  kill -KILL "$pp" 2>/dev/null; wait "$pp" 2>/dev/null
+else
+  printf 'skip - term_escalates_to_kill: setsid is not on PATH\n'
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -206,7 +206,27 @@ stop_runner() { # stop_runner <pid> <signal>
   kill "-$sig" "$pid" 2>/dev/null
 }
 stop_all() { local p; for p in ${pids[@]+"${pids[@]}"}; do [ -z "$p" ] || stop_runner "$p" TERM; done; }
-trap 'stop_all; exit 130' INT TERM
+alive() { kill -0 "$1" 2>/dev/null; }
+any_alive() { local p; for p in ${pids[@]+"${pids[@]}"}; do [ -n "$p" ] && alive "$p" && return 0; done; return 1; }
+# A runner that traps TERM gets five seconds before KILL. A runner that died
+# stays a zombie kill -0 finds until it is reaped, so the wait can run its full
+# five seconds; the KILL then reaches only what is left of its group.
+kill_survivors() {
+  local p kill_at
+  kill_at=$(( $(date +%s) + 5 ))
+  while any_alive && [ "$(date +%s)" -lt "$kill_at" ]; do sleep 0.5; done
+  for p in ${pids[@]+"${pids[@]}"}; do [ -n "$p" ] && alive "$p" && stop_runner "$p" KILL; done
+  for p in ${tree_pids[@]+"${tree_pids[@]}"}; do alive "$p" && kill -KILL "$p" 2>/dev/null; done
+}
+interrupted() {
+  local p
+  trap '' INT TERM
+  stop_all
+  kill_survivors
+  for p in ${pids[@]+"${pids[@]}"}; do [ -z "$p" ] || wait "$p" 2>/dev/null; done
+  exit 130
+}
+trap interrupted INT TERM
 
 for id in ${open_ids[@]+"${open_ids[@]}"}; do
   runner=$(seam "$id" RUNNER)
@@ -229,9 +249,6 @@ for id in ${open_ids[@]+"${open_ids[@]}"}; do
   pids+=("$!")
 done
 
-alive() { kill -0 "$1" 2>/dev/null; }
-any_alive() { local p; for p in ${pids[@]+"${pids[@]}"}; do [ -n "$p" ] && alive "$p" && return 0; done; return 1; }
-
 while any_alive && [ "$(date +%s)" -lt "$deadline" ]; do sleep 0.5; done
 timed_out=false
 if any_alive; then
@@ -242,11 +259,7 @@ if any_alive; then
     : > "$out_dir/${open_ids[$i]}.timeout"
     stop_runner "$p" TERM
   done
-  # A runner that traps TERM gets five seconds before KILL.
-  kill_at=$(( $(date +%s) + 5 ))
-  while any_alive && [ "$(date +%s)" -lt "$kill_at" ]; do sleep 0.5; done
-  for p in ${pids[@]+"${pids[@]}"}; do [ -n "$p" ] && alive "$p" && stop_runner "$p" KILL; done
-  for p in ${tree_pids[@]+"${tree_pids[@]}"}; do alive "$p" && kill -KILL "$p" 2>/dev/null; done
+  kill_survivors
 fi
 rcs=()
 for p in ${pids[@]+"${pids[@]}"}; do
