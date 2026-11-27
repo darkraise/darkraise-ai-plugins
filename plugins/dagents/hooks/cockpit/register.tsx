@@ -3357,6 +3357,7 @@ async function endedOnApiError($: EngineInterface): Promise<boolean> {
     } catch {
       continue
     }
+    if (entry === null || typeof entry !== 'object') continue
     if (entry.type === 'assistant') return entry.isApiErrorMessage === true
   }
   return false
