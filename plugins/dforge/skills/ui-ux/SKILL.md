@@ -1,6 +1,6 @@
 ---
 name: ui-ux
-description: Use when work touches anything a user sees or does - designing, building or changing screens, components, flows, forms, copy, styling, layout, interaction, accessibility or responsive behaviour, turning a mockup or design into code, or fixing a bug whose fix changes the UI - writes a UI/UX contract, carries it into every UI task, and proves it in the running UI before the work counts as done.
+description: Use when work touches anything a user sees or does - designing, building or changing screens, components, flows, forms, copy, styling, layout, interaction, accessibility or responsive behaviour, turning a mockup or design into code, or fixing a bug whose fix changes the UI
 ---
 
 # UI/UX

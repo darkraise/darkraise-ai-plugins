@@ -1,6 +1,6 @@
 ---
 name: distilling-docs
-description: Use when session notes, findings and gate reports have accumulated, or after a programme completes - distils them into four durable files and deletes the tracked sources it has absorbed, gated on an independent verification
+description: Use when session notes, findings and gate reports have accumulated, or after a programme completes
 ---
 
 # Distilling Docs
