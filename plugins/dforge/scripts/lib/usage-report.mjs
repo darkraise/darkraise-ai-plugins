@@ -315,20 +315,31 @@ function lookupTarget(cmd) {
   return { target: (tail[tail.length - 1] || '').replace(/^['"]|['"]$/g, '') };
 }
 
-// The paths a task's **Files:** block names in the plan.
+// The paths a task names on its **Files:** and its - Create/Modify/Test/Delete
+// lines anywhere in its section, each whole, without a :<line> range or ./
 export function planFiles(planText, n) {
   const m = planText.split(/\r?\n/);
   const start = m.findIndex((l) => new RegExp(`^### Task ${n}:`).test(l));
   if (start < 0) return [];
   const out = [];
-  let inFiles = false;
-  for (let i = start + 1; i < m.length && !/^### /.test(m[i]); i++) {
+  let fence = '';
+  for (let i = start + 1; i < m.length; i++) {
     const l = m[i];
-    if (/^\*\*Files:\*\*/.test(l)) inFiles = true;
-    else if (inFiles && (/^\*\*[^*]+:\*\*/.test(l) || l.trim() === '')) { if (out.length) break; continue; }
-    if (!inFiles) continue;
-    const ticks = [...l.matchAll(/`([^`]+)`/g)].map((x) => x[1].split(/\s+/)[0]);
-    out.push(...(ticks.length ? ticks : (l.replace(/^\*\*Files:\*\*/, '').match(/[\w./-]+\.\w+/g) || [])));
+    const f = /^\s*(`{3,}|~{3,})/.exec(l);
+    if (f) {
+      if (!fence) fence = f[1];
+      else if (f[1][0] === fence[0] && f[1].length >= fence.length) fence = '';
+      continue;
+    }
+    if (fence) continue;
+    if (/^### /.test(l)) break;
+    const head = /^\*\*Files:\*\*/.exec(l) || /^\s*- (?:Create|Modify|Test|Delete)(?:\s*\([^)]*\))?:/.exec(l);
+    if (!head) continue;
+    const ticks = [...l.matchAll(/`([^`]+)`/g)].map((x) => x[1].trim());
+    for (const p of ticks.length ? ticks : (l.slice(head[0].length).match(/[\w./-]+\.\w+/g) || [])) {
+      const file = p.replace(/:\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$/, '').replace(/^\.\//, '');
+      if (file) out.push(file);
+    }
   }
   return out;
 }
