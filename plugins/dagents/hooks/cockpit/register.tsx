@@ -398,20 +398,49 @@ function applyNotify(o: Live) {
 // band above the prompt and the pane draw the guard line alone.
 let guardCheck: Promise<string | null> | null = null
 
+// How many times a check that decided nothing is asked again; after that "no conflict" stands for the process.
+const GUARD_RETRIES = 3
+let guardRetries = 0
+
+/** Cancels every timer the session armed: another workflow plugin now owns the session. */
+function standDownTimers() {
+  S.watchdog?.cancel()
+  S.watchdog = null
+  S.poll?.cancel()
+  S.poll = null
+  S.ticker?.cancel()
+  S.ticker = null
+  S.autoTimer?.cancel()
+  S.autoTimer = null
+  S.apiErrorTimer?.cancel()
+  S.apiErrorTimer = null
+}
+
 function guardNow($: EngineInterface): Promise<string | null> {
+  // A check that timed out or failed to start decides nothing: the next hook
+  // asks again, at most GUARD_RETRIES times.
+  const retryNext = () => {
+    if (guardRetries >= GUARD_RETRIES) return
+    guardRetries += 1
+    guardCheck = null
+  }
   guardCheck ??= $.process
     .run(['node', `${$.plugin.root}/scripts/workflow-guard.mjs`, '--host', 'claude', '--self', 'dagents'], { timeoutMs: 5_000 })
     .then(
       ran => {
-        // A check that timed out or failed to start decides nothing: the next hook asks again.
-        if (ran.exitCode === null) guardCheck = null
+        if (ran.exitCode === null) retryNext()
         return guardLine(ran, $.plugin.root)
       },
       () => {
-        guardCheck = null
+        retryNext()
         return guardLine(null, $.plugin.root)
       },
     )
+    .then(line => {
+      // A retry can find the conflict after session.start armed the timers.
+      if (line !== null) standDownTimers()
+      return line
+    })
   return guardCheck
 }
 
@@ -427,10 +456,7 @@ export const register: Register = on => {
     // session armed stop.
     guardCheck = null
     if ((await guardNow($)) !== null) {
-      S.watchdog?.cancel()
-      S.watchdog = null
-      S.poll?.cancel()
-      S.poll = null
+      standDownTimers()
       return next(e)
     }
     S.permissionMode = null

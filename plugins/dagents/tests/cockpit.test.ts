@@ -254,6 +254,8 @@ type World = {
   processRuns?: string[]
   /** What the workflow guard's standalone check answers; unset, the fallback answer (exit 0). */
   guardOut?: { exitCode: number; stdout: string }
+  /** The workflow guard's check outruns its timeout. */
+  guardFails?: 'timeout'
   /** dagents-config refuses, as on a Claude settings file it cannot parse. */
   isDagentsConfigRefusing?: boolean
   /** How many claude-restore writes the engine misses, as one landing right after its own save. */
@@ -504,6 +506,9 @@ function world(on: On, w: World) {
   on('process.run', (_$, e) => {
     const argv = e.argv.join(' ')
     w.processRuns?.push(argv)
+    if (w.guardFails === 'timeout' && (e.argv[1] ?? '').endsWith('/scripts/workflow-guard.mjs')) {
+      return { deny: 'dagents: $.process.run(node) aborted: still running after 5000ms' }
+    }
     if (w.guardOut !== undefined && (e.argv[1] ?? '').endsWith('/scripts/workflow-guard.mjs')) {
       return { value: { ...w.guardOut, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
@@ -8525,5 +8530,29 @@ describe('the workflow guard', () => {
     expect(await band.find({ key: 'band-expand' })).toBeDefined()
     expect(await band.find({ type: 'Text', text: /^╭─ me@example\.com/ })).toBeDefined()
     expect(runs.filter(run => GUARD.test(run))).toHaveLength(1)
+  })
+
+  test('stops asking after three timed-out checks', async ($, on) => {
+    const runs: string[] = []
+    world(on, { ...SIGNED_IN, guardFails: 'timeout', processRuns: runs })
+    signedIn(on)
+    await $.session.start(START)
+    for (let i = 0; i < 6; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+    // The first check and three retries; after them "no conflict" stands.
+    expect(runs.filter(run => GUARD.test(run))).toHaveLength(4)
+  })
+
+  test("a retry that finds a conflict stops the session's timers", async ($, on) => {
+    const runs: string[] = []
+    const w: World = { ...SIGNED_IN, guardFails: 'timeout', processRuns: runs }
+    const clock = world(on, w)
+    signedIn(on)
+    await $.session.start(START)
+    w.guardFails = undefined
+    w.guardOut = CONFLICT
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const from = runs.length
+    await clock.advance(130_000)
+    expect(runs.slice(from).filter(run => !GUARD.test(run))).toEqual([])
   })
 })
