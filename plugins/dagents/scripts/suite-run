@@ -38,6 +38,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/dagents-dir.sh"
 . "$HERE/lib/timeout.sh"
+. "$HERE/lib/lock.sh"
 
 die() { printf 'suite-run: %s\n' "$1" >&2; exit 2; }
 usage() { die "usage: suite-run [--timeout SECONDS] -- COMMAND [ARG ...]"; }
@@ -86,6 +87,9 @@ age() { # age SECONDS
 
 clean_before=dirty
 if is_clean; then clean_before=clean; fi
+# HEAD read before the status: a checkout between the two would match a clean
+# tree at one commit with another commit's pass.
+[ "$(git rev-parse HEAD 2>/dev/null | tr -d '\r')" = "$head" ] || clean_before=dirty
 
 if [ "$clean_before" = clean ] && [ -f "$record" ]; then
   hit=$(tr -d '\r' < "$record" | H=$head C=$command_text awk -F'\t' '
@@ -136,7 +140,12 @@ if [ "$recorded" = clean ] && ! is_clean; then recorded=dirty; fi
 # A command that moved HEAD (a commit, a checkout) ran against neither commit
 # alone, so its row proves nothing about $head.
 if [ "$recorded" = clean ] && [ "$(git rev-parse HEAD 2>/dev/null | tr -d '\r')" != "$head" ]; then recorded=dirty; fi
-printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$head" "$recorded" "$command_text" "$code" "$log" "$end" "$((end - start))" >> "$record"
+record_row() {
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$head" "$recorded" "$command_text" "$code" "$log" "$end" "$((end - start))" >> "$record"
+}
+if ! { lock=$(dr_lock_base "$record") && dr_locked "$lock" record_row; }; then
+  echo "suite-run: suites.tsv is busy; this run is not recorded" >&2
+fi
 
 counts=$(tr -d '\r' < "$log" | awk '
   /^# pass [0-9][0-9]*[ \t]*$/ { tp = $3; tap = 1 }
