@@ -1796,6 +1796,21 @@ describe('handoff reading', () => {
     await $.session.compact({ trigger: 'manual', messages: [SUMMARY] })
     expect(written[MARK]).toBe('')
   })
+
+  test('a pane compaction empties the handoff mark', async ($, on) => {
+    const MARK = '/home/me/.claude/dforge/sessions/turns/sess-1.handoff'
+    const written: Record<string, string> = {}
+    const w: World = { tokens: 470_000, written, env: { HOME: '/home/me' }, compacts: [] }
+    world(on, w)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(written[MARK]).toBe('due')
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-compact' })
+    expect(w.compacts).toHaveLength(1)
+    expect(written[MARK]).toBe('')
+  })
 })
 
 describe('cockpit pane', () => {
