@@ -436,10 +436,11 @@ one-liner begins `deferred: test-simplifier — ` gates nothing on either list
 (**Redundant tests.** below).
 
 If confirmed findings remain, fix them in ONE wave with the complete list,
-given as report paths (the dedupe report with two lists; the Claude review's
-and lens reports and the [qa] findings with one), never pasted — in
-one pass of your own. Never one
-fixer per finding: per-finding fixers each rebuild context and re-run suites,
+given as report paths, never pasted: with two lists, the dedupe report plus
+every `[qa]`, `[suite]` and `[ci]` finding, which the verifier never sees and
+which enter as confirmed; with one list, the Claude review's and lens reports
+plus those same findings. Fix them in one pass of your own. Never one fixer
+per finding: per-finding fixers each rebuild context and re-run suites,
 and a real session's final-review fix wave cost more than all its tasks
 combined. In an auto run a deferred task's acceptance failures are not on that
 list (step 0.5 (d)).
@@ -476,13 +477,17 @@ scoped re-review quotes that tag in its verdict on each rejection. You write
 it before the re-review. Then run exactly one scoped re-review of the fix wave
 (`scripts/review-package PLAN_FILE FIX_BASE HEAD` over the fix range, with
 [re-review-prompt.md](prompts/re-review-prompt.md),
-its `[IMPLEMENTER_REPORT_FILE]` being that file and its `[REPORT_FILE]`
-being `<workspace>/final-rereview-report.md`). When QA committed tests, FIX_BASE is the
+its `[IMPLEMENTER_REPORT_FILE]` being that file, its `[REPORT_FILE]`
+being `<workspace>/final-rereview-report.md`, its `[BRIEF_FILE]` the spec's
+path, whose Acceptance statements are what QA's tests answer, and its
+`[FINDINGS]` the fix wave's input report paths as given above). When QA committed tests, FIX_BASE is the
 review's HEAD (the `Acceptance QA: dispatched` SHA), so the range holds QA's
 commits too: the final reviewers never saw them. When no confirmed finding
 needs a fix wave but QA committed tests, still run that one scoped re-review
 over the same range, with `<workspace>/acceptance-report.md` as
-`[IMPLEMENTER_REPORT_FILE]`.
+`[IMPLEMENTER_REPORT_FILE]` and the line
+`none: verify QA's acceptance tests against the spec's statements` as
+`[FINDINGS]`.
 Send any residual findings — `NOT ADDRESSED` and `REJECTION DISPUTED` — to the
 ruling seat as `final-residual` items and carry out its verdicts. The scoped re-review is a Claude seat that wrote none of the code, so
 a list from an external reviewer alone still gets an independent reader.
@@ -499,11 +504,11 @@ acceptance test; to dispute one it records `REJECTED: A<n> — <evidence>`, and 
 scoped re-review decides. The fix wave's verification runs the acceptance files
 again. A `fail` or `flaky` acceptance test that survives the fix wave (the
 rejection upheld, or the ruling seat parking it), or one step 0.5 left to a
-deferred task, is the one edit allowed on an acceptance test: mark that test
-skipped with a reason naming its register row, commit it, and run
+deferred task, is the one edit allowed on an acceptance test. First run
 `scripts/register add <register> "A<n>: <statement>" --state deferred --note "<the upheld rejection>"`,
-`<register>` chosen or opened as step 0.5's `PARK` says, so finishing's test
-run is green and the statement is not lost.
+`<register>` chosen or opened as step 0.5's `PARK` says; then mark that test
+skipped with a reason naming the row id that add printed; then commit both.
+Finishing's test run is then green and the statement is not lost.
 
 **Redundant tests.** A `[lens:test-quality]` finding on a redundant test goes
 to the fix wave, which merges the tests into a row of one table or deletes the
@@ -534,7 +539,10 @@ fix wave whose commits moved HEAD past that run is not reused.
 
 There is no second fix wave. Residual load-bearing findings surface to your
 human partner when dforge:finishing-a-development-branch presents the options.
-Only the four stop classes stop you here.
+Only the four stops dforge:executing-plans §Overview lists stop you here (an
+irreversible or destructive operation, a security-sensitive action, a side
+effect outside the workspace, a ruling-seat `BLOCKED`), plus the attended
+`ui-proof check` exit 1 after the fix wave.
 
 ## Retained lines
 
