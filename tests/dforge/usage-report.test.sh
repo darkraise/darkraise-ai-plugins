@@ -18,6 +18,8 @@ TMP=$(mktemp -d)
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export GIT_CONFIG_NOSYSTEM=1
+# Its inferBounds inputs name the run-control scripts; none is run.
+unset CLAUDE_CODE_SESSION_ID AR_SESSION
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
