@@ -257,6 +257,11 @@ git -C "$L" merge -q --no-ff -m merge feat
 stored "$KEPT"
 latest
 check "latest kept: a merged branch exits 6" "$status" 6
+lfixture
+git -C "$L" checkout -q -b feat && printf 'x\n' > "$L/x.txt" && git -C "$L" add x.txt && git -C "$L" commit -qm feat
+stored "$KEPT"
+latest
+check "latest kept: a primary still on the kept branch is not merged" "$status:$(grep -c 'Stored next' <<<"$out")" "0:1"
 
 lfixture
 stored "<!-- next-step: kind=plan done=1 closed=0 subject=$P at=1 -->" "Plan \`$P\`: 2 of 3 tasks complete (ledger \`x\`)." "Resume at Task 3 (Three)."

@@ -471,7 +471,14 @@ if [ "$latest_mode" -eq 1 ]; then
       esac
       case $m_branch in -*|detached:-*) unreadable "malformed marker branch: $m_branch" ;; esac
       git -C "$primary" rev-parse --verify --quiet "$kept_ref" >/dev/null || gone "the kept branch $m_branch is gone"
-      ! git -C "$primary" merge-base --is-ancestor "$kept_ref" HEAD 2>/dev/null || gone "the kept branch $m_branch is merged"
+      # An in-place run keeps its branch checked out in the primary, whose HEAD
+      # then contains it with no merge.
+      on_kept=0
+      case $m_branch in
+        detached:*) [ "$(git -C "$primary" rev-parse --verify --quiet HEAD 2>/dev/null | tr -d '\r')" != "$(git -C "$primary" rev-parse --verify --quiet "$kept_ref" 2>/dev/null | tr -d '\r')" ] || on_kept=1 ;;
+        *) [ "$(git -C "$primary" symbolic-ref --short -q HEAD 2>/dev/null | tr -d '\r')" != "$m_branch" ] || on_kept=1 ;;
+      esac
+      [ "$on_kept" -eq 1 ] || ! git -C "$primary" merge-base --is-ancestor "$kept_ref" HEAD 2>/dev/null || gone "the kept branch $m_branch is merged"
       stored_block ;;
     draft)
       [ -f "$(dagents_resolve "$m_subject" "$root")" ] || gone "the draft $m_subject is gone"
