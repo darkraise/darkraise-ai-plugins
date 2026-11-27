@@ -23,6 +23,9 @@ rm -f "$stamp.asked" 2>/dev/null || true
 # The resume time session-start.sh wrote is read for the whole session; a
 # session that outlives the prune below would otherwise lose it.
 [ ! -f "$stamp.since" ] || touch "$stamp.since" 2>/dev/null || true
+# The once-per-session markers are kept the same way.
+[ ! -f "$stamp.ui-ux" ] || touch "$stamp.ui-ux" 2>/dev/null || true
+[ ! -f "$stamp.nonode" ] || touch "$stamp.nonode" 2>/dev/null || true
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/turn-refs.sh"
 if [ -n "$cwd" ] && turn_refs "$cwd" > "$stamp.refs.tmp" 2>/dev/null; then
   mv "$stamp.refs.tmp" "$stamp.refs" 2>/dev/null || true
