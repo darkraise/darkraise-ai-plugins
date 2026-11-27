@@ -74,6 +74,12 @@ EOF
 out=$(bash "$PROFILE" --brief "$T/hidden.xml")
 check "a CDATA block, a comment and a quoted > add no phantom case" "$out" \
   "tests=2 time=3.0s overhead=0.0s slowest10pct=67% fail=0 skip=0 flaky=0 reran=0"
+printf '<testsuites><testsuite name="outer" time="%s"><testcase classname="o" name="direct" time="2"/><testsuite name="inner" time="10"><testcase classname="i" name="deep" time="10"/></testsuite></testsuite></testsuites>\n' 12 > "$T/nested.xml"
+check "a child suite's time is not its parent's overhead" "$(bash "$PROFILE" --brief "$T/nested.xml")" \
+  "tests=2 time=12.0s overhead=0.0s slowest10pct=83% fail=0 skip=0 flaky=0 reran=0"
+printf '<testsuites><testsuite name="outer" time="%s"><testcase classname="o" name="direct" time="2"/><testsuite name="inner" time="10"><testcase classname="i" name="deep" time="10"/></testsuite></testsuite></testsuites>\n' 13 > "$T/nested.xml"
+check "a parent's own setup is still its overhead" "$(bash "$PROFILE" --brief "$T/nested.xml")" \
+  "tests=2 time=12.0s overhead=1.0s slowest10pct=83% fail=0 skip=0 flaky=0 reran=0"
 printf '<x/>\n' > "$T/empty.xml"
 bash "$PROFILE" "$T/empty.xml" >/dev/null 2>&1; check "no test case exits 2" "$?" "2"
 
