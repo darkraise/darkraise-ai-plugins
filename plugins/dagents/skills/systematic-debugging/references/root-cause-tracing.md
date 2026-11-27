@@ -104,10 +104,19 @@ Use the bisection script `find-polluter.sh` in this directory:
 bash <plugin-root>/skills/systematic-debugging/references/find-polluter.sh 'packages/core/.git' 'src/**/*.test.ts'
 ```
 
-Runs tests one-by-one, stops at first polluter. Name a path that does not
-exist yet: the script refuses one that already does. It exits 0 when no test
-creates the path, 1 only when it names the polluter, and 2 when it could not
-diagnose: a usage error, a path that already exists, or no matching test.
+Runs tests one-by-one, stops at first polluter. A third argument names the
+test command, run with each test file as its last argument; it defaults to
+`npm test`:
+
+```bash
+bash <plugin-root>/skills/systematic-debugging/references/find-polluter.sh 'packages/core/.git' 'src/**/*.test.ts' 'npx vitest run'
+```
+
+Name a path that does not exist yet: the script refuses one that already
+does. It exits 0 when no test creates the path, 1 only when it names the
+polluter, and 2 when it could not diagnose: a usage error, a path that already
+exists, no matching test, a test command that cannot run (exit 126 or 127), or
+every test run failing, which usually means the command is wrong.
 
 ## Real Example: Empty projectDir
 
