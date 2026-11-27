@@ -87,6 +87,19 @@ test('a hook run that cannot read its inputs clears the session marker and stays
   assert.equal(existsSync(marker), false, 'the failed check leaves no stand-down behind');
 });
 
+test('the conflict block tells a managed self how to disable it', t => {
+  const w = world(t);
+  w.installs({ ...w.userInstall('dforge'), ...w.userInstall('dagents') });
+  w.json(join(w.managed, 'managed-settings.json'), { enabledPlugins: { 'dagents@darkraise': true } });
+  w.json(join(w.claude, 'settings.json'), { enabledPlugins: { 'dforge@darkraise': true } });
+  const out = w.run(['--host', 'claude', '--self', 'dagents', '--hook', 'session-start'], JSON.stringify({ session_id: 's-4' }));
+  assert.equal(out.status, 3, out.stderr);
+  const message = JSON.parse(out.stdout).systemMessage;
+  assert.ok(message.includes('- dagents@darkraise: dagents@darkraise is enabled by managed settings; ask your administrator to disable it'), message);
+  assert.ok(message.includes('dagents@darkraise (this session)'), message);
+  assert.ok(!message.includes('claude plugin disable dagents@darkraise --scope local'), message);
+});
+
 test('a marker that cannot be written still announces the conflict', t => {
   const w = world(t);
   w.installs({ ...w.userInstall('dforge'), ...w.userInstall('dagents') });

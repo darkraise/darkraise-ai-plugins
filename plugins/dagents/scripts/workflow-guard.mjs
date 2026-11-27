@@ -176,7 +176,9 @@ function codexActive(env) {
 function activePlugins(env, options) {
   const found = options.host === 'claude' ? claudeActive(env) : codexActive(env);
   const active = found.filter(plugin => plugin.name !== options.self);
-  if (options.self) active.push({ name: options.self, scope: 'self' });
+  // This session's plugin keeps the scope that enables it, so its disable
+  // steps are the real ones; 'self' when nothing found enables it.
+  if (options.self) active.push({ name: options.self, scope: found.find(plugin => plugin.name === options.self)?.scope ?? 'self', self: true });
   return active.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
@@ -190,7 +192,7 @@ function disableSteps(plugin, host) {
 }
 
 function conflictBlock(active, host) {
-  const names = active.map(plugin => `${plugin.name}@${MARKETPLACE} (${plugin.scope === 'self' ? 'this session' : plugin.scope})`);
+  const names = active.map(plugin => `${plugin.name}@${MARKETPLACE} (${plugin.self ? 'this session' : plugin.scope})`);
   const lines = [
     `Workflow plugins conflict: ${names.join(', ')} are enabled together. Each owns a whole workflow, so only one may be enabled. Keep one and disable the others:`,
   ];
@@ -271,7 +273,7 @@ function main(argv, env) {
   try {
     if (options.hook) return hookRun(env, options);
     const active = activePlugins(env, options);
-    for (const plugin of active) process.stdout.write(`${plugin.name}@${MARKETPLACE} ${plugin.scope}\n`);
+    for (const plugin of active) process.stdout.write(`${plugin.name}@${MARKETPLACE} ${plugin.self ? 'self' : plugin.scope}\n`);
     return active.length >= 2 ? 3 : 0;
   } catch (error) {
     process.stderr.write(`workflow-guard: ${String(error?.message ?? error).split('\n')[0]}\n`);
