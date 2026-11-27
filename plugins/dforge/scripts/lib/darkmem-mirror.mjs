@@ -844,8 +844,10 @@ export function propertiesFor(roots, slug, namedPath) {
   if (uri && uri.startsWith(`${DOC_PREFIX}/plans/`)) {
     properties.plan_uri = uri;
     try {
-      const spec = /^\*\*Spec:\*\*\s*`?([^`\s]+)`?/m.exec(fs.readFileSync(uriToLocal(roots, uri), "utf8"));
-      const specUri = spec ? pathToUri(roots, spec[1]) : null;
+      // A backticked path is taken whole, spaces included; a bare one ends at
+      // the first space.
+      const spec = /^\*\*Spec:\*\*[ \t]*(?:`([^`\r\n]+)`|([^`\s]+))/m.exec(fs.readFileSync(uriToLocal(roots, uri), "utf8"));
+      const specUri = spec ? pathToUri(roots, spec[1] ?? spec[2]) : null;
       if (specUri) properties.spec_uri = specUri;
     } catch (error) {
       // The plan is not in this mirror; the workstream carries no spec_uri.

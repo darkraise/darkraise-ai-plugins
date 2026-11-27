@@ -484,6 +484,14 @@ test("a workstream key is refused when the uri mapping or Windows could not use 
   assert.deepEqual(Object.keys(loadState(file).ledgers), ["CON"]);
 });
 
+test("a backticked Spec path with a space names the whole path", () => {
+  const { roots } = mirror();
+  write(path.join(roots.docsRoot, "plans", "p1.md"), "# P1\n\n**Spec:** `docs/dforge/specs/my spec.md`\n");
+  write(path.join(roots.docsRoot, "plans", "p2.md"), "# P2\n\n**Spec:** docs/dforge/specs/s.md and more\n");
+  assert.equal(propertiesFor(roots, "p1", "docs/dforge/plans/p1.md").spec_uri, "dforge/specs/my spec.md");
+  assert.equal(propertiesFor(roots, "p2", "docs/dforge/plans/p2.md").spec_uri, "dforge/specs/s.md");
+});
+
 test("two takeovers of one abandoned lock leave exactly one holder", () => {
   const { root } = mirror();
   const lock = path.join(root, ".sync.lock");
