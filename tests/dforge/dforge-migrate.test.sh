@@ -777,7 +777,9 @@ MH="$TMP/mh-home"; mkdir -p "$MH"
 MR="$TMP/mrepo"; repo "$MR"
 stores_home "$MH" "$MR" mproj local darkmem > /dev/null
 mv "$MH/.dforge" "$MH/.dr-forge"
-MOLD=$(tmp_spelled "$(cygpath -m -l "$MH" 2>/dev/null || printf '%s' "$MH")")/.dr-forge/mirror/mproj/work/handoff/latest.md
+# Spelled as the scripts spell the mirror (git's long C:/… form under Git
+# Bash), the form older_spellings replaces; tmp_spelled would undo it.
+MOLD="$(cygpath -m -l "$MH" 2>/dev/null || printf '%s' "$MH")/.dr-forge/mirror/mproj/work/handoff/latest.md"
 old_block 'session=- done=0 closed=0 subject=- at=1700001160' "$MOLD" > "$MH/.dr-forge/mirror/mproj/work/handoff/latest.md"
 HOME="$MH" migrate "$FM" "$MR" > /dev/null 2>&1
 check "renamed handoff names itself: a mirror path in an older home is rewritten" "$(grep -c 'latest\.md' "$MH/.dforge/mirror/mproj/work/handoff/adhoc-legacy-1700001160.md" 2>&1)" "0"
