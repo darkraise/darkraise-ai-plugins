@@ -1253,5 +1253,18 @@ CLAUDE_CODE_SESSION_ID=s-term run "$TR" --complete "$PLAN_REL"
 check "terminal: claims under other keys are released, their handoffs kept" \
   "$status:$([ -e "$HDT/claims/other" ] && echo held || echo released):$([ -e "$HDT/other.md" ] && echo kept || echo gone):$(grep -cF "next-step: kept $HDT/other.md (released)" "$TMP/stderr")" \
   "0:released:kept:1"
+count_in() { # count_in TEXT NEEDLE — how many times NEEDLE occurs in TEXT
+  local n=0 rest=$1
+  while [[ $rest == *"$2"* ]]; do n=$((n + 1)); rest=${rest#*"$2"}; done
+  echo "$n"
+}
+# --- a worktree whose path holds a newline is one plan root ---
+NLW="$TMP/roots"$'\n'"wt"
+git -C "$GREPO" worktree add -q -b roots-newline "$NLW"
+roots=$(cd "$GREPO" && bash -c '. "$1/lib/plan.sh"; dagents_stores_init "$2" 2>/dev/null; eval "$(sed -n "/^_plan_roots() {\$/,/^}\$/p" "$1/next-step")"; _plan_roots "$2"' _ "$HERE/../../plugins/dagents/scripts" "$GREPO" 2>&1)
+check "worktree list: a path with a newline is one root, whole" \
+  "$(count_in "$roots" "$NLW"$'\t'):$(grep -cx "$TMP/roots"$'\t' <<<"$roots")" "1:0"
+git -C "$GREPO" worktree remove --force "$NLW"
+git -C "$GREPO" branch -q -D roots-newline
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

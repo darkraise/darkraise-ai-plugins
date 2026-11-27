@@ -68,13 +68,15 @@ wave_mark() {
   gitdir=$(git -C "${1:-.}" rev-parse --absolute-git-dir 2>/dev/null) || return 1
   printf '%s/dagents/wave-task\n' "$gitdir"
 }
-# worktrees_holding A B — "<path>" of every detached worktree entered for ref B
+# worktrees_holding A B — "<path>", NUL-terminated (a path may hold a newline),
+# of every detached worktree entered for ref B
 # (wave enter) whose HEAD lies in A..B (an ancestor of B, not of A): the
 # worktrees a parallel task's implementers committed in. Ancestry alone is not
 # ownership: a user's own detached worktree can sit on a task's commit.
 worktrees_holding() {
   local path="" head="" detached=0 line mark
-  while IFS= read -r line; do
+  # NUL-separated fields: a worktree path may hold a newline.
+  while IFS= read -r -d '' line; do
     case $line in
       'worktree '*) path=${line#worktree } head="" detached=0 ;;
       'HEAD '*) head=${line#HEAD } ;;
@@ -84,11 +86,11 @@ worktrees_holding() {
            && mark=$(wave_mark "$path") && [ "$(cat "$mark" 2>/dev/null)" = "${2#refs/heads/}" ] \
            && git merge-base --is-ancestor "$head" "$2" 2>/dev/null \
            && ! git merge-base --is-ancestor "$head" "$1" 2>/dev/null; then
-          printf '%s\n' "$path"
+          printf '%s\0' "$path"
         fi
         path="" ;;
     esac
-  done < <(git worktree list --porcelain; echo)
+  done < <(git worktree list --porcelain -z; printf '\0')
 }
 
 case $cmd in
@@ -137,7 +139,8 @@ case $cmd in
       count=$(git rev-list --count "$base..refs/heads/$ref")
       merged=no
       git merge-base --is-ancestor "refs/heads/$ref" HEAD && merged=yes
-      wt=$(worktrees_holding "$base" "refs/heads/$ref" | paste -sd ' ' -)
+      wt=$(worktrees_holding "$base" "refs/heads/$ref" | tr '\0' ' ')
+      wt=${wt% }
       printf 'Task %s: ref %s %s; commits %s; merged %s; worktree %s\n' \
         "$n" "$ref" "$sha" "$count" "$merged" "${wt:-none}"
     done
@@ -192,7 +195,7 @@ case $cmd in
       if ! git merge-base --is-ancestor "refs/heads/$ref" HEAD; then
         echo "kept $ref: not merged"; continue
       fi
-      while IFS= read -r wt; do
+      while IFS= read -r -d '' wt; do
         [ -n "$wt" ] || continue
         # A later task forked from a merged sibling holds that sibling's
         # commits too, so one worktree can fall in several tasks' ranges.

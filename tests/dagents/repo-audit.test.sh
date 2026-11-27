@@ -408,5 +408,19 @@ E="$TMP/empty"
 git init -q -b main "$E"
 out=$(cd "$E" && bash "$SCRIPT" 2>/dev/null); rc=$?
 check "an empty repository: exit 0" "$rc:$(sed -n '/^## Recent commits/,$p' <<<"$out" | sed -n 2p)" "0:- (no commits)"
+count_in() { # count_in TEXT NEEDLE — how many times NEEDLE occurs in TEXT
+  local n=0 rest=$1
+  while [[ $rest == *"$2"* ]]; do n=$((n + 1)); rest=${rest#*"$2"}; done
+  echo "$n"
+}
+# --- a worktree whose path holds a newline ---
+NR="$TMP/nl-audit"
+git init -q -b main "$NR"
+git -C "$NR" commit -q --allow-empty -m init
+NW="$TMP/nl"$'\n'"audit"
+git -C "$NR" worktree add -q -b nl "$NW"
+out=$(cd "$NR" && bash "$SCRIPT" 2>/dev/null)
+check "worktree list: a path with a newline is listed once, whole" \
+  "$(count_in "$out" "- \`$NW\`"):$(grep -c 'skipped' <<<"$out")" "1:0"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

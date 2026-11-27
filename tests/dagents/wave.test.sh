@@ -242,5 +242,19 @@ check "check-due: a ledger citing a missing amendment exits 2" "$status:$(grep -
 rm -f "$WS_C/progress.md"
 
 
+count_in() { # count_in TEXT NEEDLE — how many times NEEDLE occurs in TEXT
+  local n=0 rest=$1
+  while [[ $rest == *"$2"* ]]; do n=$((n + 1)); rest=${rest#*"$2"}; done
+  echo "$n"
+}
+# --- a worktree whose path holds a newline ---
+NLWT="$TMP/wt-nl"$'\n'"x"
+git worktree add -q --detach "$NLWT" main
+(cd "$NLWT" && bash "$WAVE" enter "$REPO/docs/plan.md" 1 "$BASE" >/dev/null)
+printf 'nl\n' > "$NLWT/n.txt"
+git -C "$NLWT" add -A && git -C "$NLWT" commit -qm nl
+git -C "$NLWT" branch -f sdd/plan/task-1 HEAD
+run status docs/plan.md 1 "$BASE"
+check "worktree list: a path with a newline names its worktree whole" "$(count_in "$out" "worktree $GTMP/wt-nl"$'\n'"x")" "1"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
