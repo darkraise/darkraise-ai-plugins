@@ -117,14 +117,27 @@ model="$pref_model"; effort="$pref_effort"
 secs=$(secs_of "$model" "$effort")
 [ -n "$secs" ] || die "no timeout for $model/$effort in the codex-judge block"
 
+# Every prompt opens with this line. The read-only sandbox still runs shell
+# reads, and a task or plan prompt names its diff by path: told that shell is
+# denied, Codex reads nothing and answers with an unread review. The --prompt
+# file is not changed.
+READ_ONLY='this sandbox is read-only: read each file this prompt names with a shell command such as cat; nothing can be written'
+# The request the client is sent, the dry run's without its prompt. Paths go
+# in native form: on Windows node cannot open Git Bash's /c/... spelling.
+request_json() { # request_json <model> <effort> <seconds> <yes|no: with the prompt>
+  local schema_native=""
+  [ -z "${schema:-}" ] || schema_native=$(dr_native_path "$schema")
+  jq -nc --arg kind "$kind" --arg cwd "$(dr_native_path "$cwd")" --arg model "$1" --arg effort "$2" \
+    --rawfile prompt "${prompt:-/dev/null}" --arg opening "$READ_ONLY" --arg with "$4" \
+    --arg schema "$schema_native" --argjson deadline "$(( $3 * 1000 ))" \
+    '{op:"turn", kind:$kind, cwd:$cwd, model:$model, effort:$effort}
+     + (if $with == "yes" then {prompt:($opening + "\n\n" + $prompt)} else {} end)
+     + {schemaPath:(if $schema == "" then null else $schema end), sandbox:"read-only", deadlineMs:$deadline}'
+}
+
 if [ "$dry_run" = true ]; then
   printf 'would-run:\n'
-  jq -nc --arg kind "$kind" --arg cwd "$cwd" --arg model "$model" \
-    --arg effort "$effort" --arg schema "${schema:-}" \
-    --argjson deadline "$(( secs * 1000 ))" \
-    '{op:"turn", kind:$kind, cwd:$cwd, model:$model, effort:$effort,
-      schemaPath:(if $schema == "" then null else $schema end),
-      sandbox:"read-only", deadlineMs:$deadline}'
+  request_json "$model" "$effort" "$secs" no
   printf 'codex-judge %s/%s status=OK exit=0 out=%s evidence=%s\n' \
     "$model" "$effort" "$out" "$evidence"
   exit 0
@@ -180,21 +193,9 @@ plugin_root=${plugin_line#*root=}
 # --rawfile, not --arg "$(cat ...)": a reviewer prompt carries a whole branch
 # diff and passing it as an argument blows the 32,767-character Windows
 # CreateProcess limit.
-# Every prompt opens with this line. The read-only sandbox still runs shell
-# reads, and a task or plan prompt names its diff by path: told that shell is
-# denied, Codex reads nothing and answers with an unread review. The --prompt
-# file is not changed.
-READ_ONLY='this sandbox is read-only: read each file this prompt names with a shell command such as cat; nothing can be written'
 run_seat() { # run_seat <model> <effort> <seconds> <log-prefix>; echoes the result JSON
   local request
-  request=$(jq -nc \
-    --arg kind "$kind" --arg cwd "$cwd" --arg model "$1" --arg effort "$2" \
-    --rawfile prompt "${prompt:-/dev/null}" --arg schema "${schema:-}" --arg opening "$READ_ONLY" \
-    --argjson deadline "$(( $3 * 1000 ))" \
-    '{op:"turn", kind:$kind, cwd:$cwd, model:$model, effort:$effort,
-      prompt:($opening + "\n\n" + $prompt),
-      schemaPath:(if $schema == "" then null else $schema end),
-      sandbox:"read-only", deadlineMs:$deadline}')
+  request=$(request_json "$1" "$2" "$3" yes)
   printf '%s' "$request" | "$DFORGE_TIMEOUT" $(( $3 + 60 )) node "$(dr_native_path "$HERE/lib/codex-client.mjs")" "$plugin_root" 2>"$4.stderr"
 }
 
