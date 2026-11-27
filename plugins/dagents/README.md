@@ -296,7 +296,7 @@ Codex seat produces nothing, `judge-sonnet-high` takes totals 0 to 5 and
 (`judge-opus` when Codex is off) and `judge-opus` for the delta round:
 at most two rounds on a Claude plan.
 The final whole-branch review runs on `judge-opus`, its one fix subagent on
-the highest tier among the tasks the findings touch, and with `codexReview` on gains a Codex round. When both reviewers return findings,
+the highest tier among the tasks the findings touch, and with `codexReview` on gains a Codex round at depth full. When both reviewers return findings,
 a fresh `judge-opus` dedupes and verifies them. No review route names `judge-fable`:
 on 2026-09-23 Opus 5.5 at high effort matched or beat Fable 5.1 on two replayed reviews with
 known defects, at about 40% of the cost, so Fable takes a review seat only
@@ -1177,8 +1177,10 @@ refused.
 
 No other file is edited: plans, specs and ledgers that cite
 `docs/superpowers/<rest>` keep that spelling, and dr-forge still reads it as
-`docs/forge/<rest>`. A plan whose `**Implementer:**` lines name agents under an
-older plugin prefix fails `scripts/plan-lint` until they name `dr-forge:`.
+`docs/forge/<rest>`. dr-forge 3.0's `plan-lint` failed a plan whose
+`**Implementer:**` lines named agents under an older plugin prefix until they
+named `dr-forge:`; today's dagents `scripts/plan-lint` fails an
+`**Implementer:**` name until it names `dagents:`.
 Rename any `DR_SUPERPOWERS_*` variable you set to its `DR_FORGE_*` name.
 `DR_FORGE_DOCUMENT_STORE` and `DR_FORGE_PROGRESS_SOURCE`, which 2.x read, are
 no longer read at all.
@@ -1255,7 +1257,7 @@ differences:
    carrying its scores and a checkpoint (done, verified, remaining, discovered
    issues, assumptions), which crash recovery and the final review read.
 6. **Cross-family final review, on request.** With `codexReview` on, the final
-   whole-branch review adds a Codex round, and a judge verifies the union of
+   whole-branch review at depth full adds a Codex round, and a judge verifies the union of
    both reviewers' findings.
 7. **Rulings, not stops.** Dispatch problems - an unknown agent name, an
    unavailable model, an Executor line the wrapper refuses - are logged
