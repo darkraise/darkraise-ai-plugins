@@ -209,13 +209,15 @@ report "$WS/task-1-review-report.md"
 LOG25=$(awk -F'\t' -v h="$HEAD_SHA" '$1 == h { print $5 }' .dforge/suites.tsv | tail -n 1 | tr -d '\r')
 jq '.round = 2' "$WS/task-1-step.json" > "$TMP/s.json" && mv "$TMP/s.json" "$WS/task-1-step.json"
 rm -f "$WS"/task-1-fix-*.md
-step verdict docs/plan.md 1
+printf '%s\n' '## Verdict' 'fix round: addressed' 'open: 0' > "$WS/task-1-rereview-2-report.md"
+step verdict docs/plan.md 1 --rereview 2
 check "verdict, 25 failing lines at round 2: the fix line hands them to the breaker" "$(grep '^fix: ' <<<"$out")" "fix: breaker (round 2 of 2; 25 findings)"
 check "verdict, 25 failing lines at round 2: no fix file is written" "$(ls "$WS"/task-1-fix-*.md 2>/dev/null | wc -l | tr -d ' ')" "0"
 check "verdict, 25 failing lines at round 2: the digest names the suite log" "$(grep '^suite: ' <<<"$out" | tr '\n' ';')" \
   "suite: 5 more failing lines in the suite log $LOG25;suite: red (25 failing, 0 baseline);"
 check "verdict, 25 failing lines at round 2: the suite log holds the 25th line" "$(grep -q 'case-25' "$LOG25" && echo yes)" "yes"
 jq 'del(.round)' "$WS/task-1-step.json" > "$TMP/s.json" && mv "$TMP/s.json" "$WS/task-1-step.json"
+rm -f "$WS/task-1-rereview-2-report.md"
 
 # --- verdict: a run cut short is red even when its partial log shows only baseline lines ---
 printf '%s\n' 'echo "not ok 1 - alpha"' 'sleep 20' > slow.sh

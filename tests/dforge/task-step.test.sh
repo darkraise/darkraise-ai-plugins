@@ -759,12 +759,23 @@ check "verdict --rereview 2: no third fix file" "$([ -e "$RR_WS/task-1-fix-3.md"
 rm -f "$RR_WS/task-1-rereview-2-report.md"
 jq '.round = 1' "$RR_WS/task-1-step.json" > "$RR_WS/task-1-step.json.tmp" && mv "$RR_WS/task-1-step.json.tmp" "$RR_WS/task-1-step.json"
 
+# A verdict reads the round the step file is at, never another round's report.
+rr_run verdict docs/plan.md 1
+check "verdict without --rereview after a rereview exits 6" "$rr_rc $(grep -c -- '--rereview 1' <<<"$rr_err")" "6 1"
+rr_run verdict docs/plan.md 1 --rereview 2
+check "verdict --rereview 2 at round 1 exits 6" "$rr_rc" "6"
+vd_round() { # vd_round <round> — the step file at the round a verdict's flag names
+  jq --argjson r "$1" '.round = $r' "$RR_WS/task-1-step.json" > "$RR_WS/task-1-step.json.tmp" && mv "$RR_WS/task-1-step.json.tmp" "$RR_WS/task-1-step.json"
+}
+
 # Failures: a missing or malformed report exits 5 and writes no fix file.
+vd_round 2
 rr_run verdict docs/plan.md 1 --rereview 2
 check "verdict: a missing report exits 5" "$rr_rc" "5"
 check "verdict: a missing report is named" "$(grep -cF "$RR_WS/task-1-rereview-2-report.md" <<<"$rr_err")" "1"
 check "verdict: a missing report writes no fix file" "$([ -e "$RR_WS/task-1-fix-3.md" ] && echo yes || echo no)" "no"
 printf 'spec: pass\n' > "$RR_WS/task-1-review-report.md"
+vd_round 0
 rr_run verdict docs/plan.md 1
 check "verdict: a report that does not open with ## Verdict exits 5" "$rr_rc" "5"
 vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
@@ -772,6 +783,7 @@ vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
 |spec: pass
 |scores: spec 17 / scope 18 / verification 16 / quality 16
 REPORT
+vd_round 0
 rr_run verdict docs/plan.md 1
 check "verdict: a report missing a verdict key exits 5" "$rr_rc" "5"
 check "verdict: the missing key is named" "$(grep -c 'quality' <<<"$rr_err")" "1"
@@ -781,6 +793,7 @@ vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
 |quality: approved
 |scores: spec 17 / scope 18 / verification 16 / quality 16
 REPORT
+vd_round 0
 rr_run verdict docs/plan.md 1
 check "verdict: a verdict value outside its set exits 5" "$rr_rc" "5"
 vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
@@ -792,6 +805,7 @@ vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
 |## Findings
 |- [Severe] app.txt:2 — wrong value
 REPORT
+vd_round 0
 rr_run verdict docs/plan.md 1
 check "verdict: a finding line outside the grammar exits 5" "$rr_rc" "5"
 check "verdict: the bad line is quoted" "$(grep -c 'Severe' <<<"$rr_err")" "1"
@@ -804,6 +818,7 @@ vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
 |## Findings
 |- [Important] docs/user guide.md:3-4 — the heading is wrong - twice
 REPORT
+vd_round 0
 rr_run verdict docs/plan.md 1
 check "verdict: a finding on a path with a space is read whole" "$rr_rc $(grep -c '^Important 1 docs/user guide.md:3-4 — the heading is wrong - twice$' <<<"$rr_out")" "0 1"
 rm -f "$RR_WS"/task-1-fix-*.md
@@ -816,6 +831,7 @@ vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
 |## Findings
 |- [Important] (Task 1) app.txt:2 — a task prefix
 REPORT
+vd_round 0
 rr_run verdict docs/plan.md 1
 check "verdict: a task finding with a (Task N) prefix exits 5" "$rr_rc $(grep -c 'a task prefix' <<<"$rr_err")" "5 1"
 vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
@@ -830,6 +846,7 @@ vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
 |## Findings
 |- [Minor] app.txt:5 — naming
 REPORT
+vd_round 0
 rr_run verdict docs/plan.md 1
 check "verdict: spec fail with no Critical or Important finding exits 5" "$rr_rc $(grep -c 'no Critical or Important finding' <<<"$rr_err")" "5 1"
 vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
@@ -842,6 +859,7 @@ vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
 |### Critical
 |- [Critical] app.txt:2 — wrong value
 REPORT
+vd_round 0
 rr_run verdict docs/plan.md 1
 check "verdict: a sub-heading under Findings exits 5" "$rr_rc $(grep -c '### Critical' <<<"$rr_err")" "5 1"
 vd_report "$RR_WS/task-1-rereview-1-report.md" <<'REPORT'
@@ -852,6 +870,7 @@ vd_report "$RR_WS/task-1-rereview-1-report.md" <<'REPORT'
 |## Findings
 |- [Important] other.txt:4 — stale copy
 REPORT
+vd_round 1
 rr_run verdict docs/plan.md 1 --rereview 1
 check "verdict --rereview: a fix round value outside its set exits 5" "$rr_rc $(grep -c 'fix round: maybe' <<<"$rr_err")" "5 1"
 vd_report "$RR_WS/task-1-rereview-1-report.md" <<'REPORT'
@@ -861,6 +880,7 @@ vd_report "$RR_WS/task-1-rereview-1-report.md" <<'REPORT'
 |
 |## Findings
 REPORT
+vd_round 1
 rr_run verdict docs/plan.md 1 --rereview 1
 check "verdict --rereview: an open round with no open finding exits 5" "$rr_rc $(grep -c 'fix round: open with no Critical or Important finding' <<<"$rr_err")" "5 1"
 vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
@@ -874,6 +894,7 @@ vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
 |
 |## Findings
 REPORT
+vd_round 0
 rr_run verdict docs/plan.md 1
 check "verdict: External findings that are not the last section exit 5" "$rr_rc" "5"
 vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
@@ -887,8 +908,21 @@ vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
 |## Codex findings
 |- [CONFIRMED] app.txt:2 wrong value - the diff shows it
 REPORT
+vd_round 0
 rr_run verdict docs/plan.md 1
 check "verdict: a report whose external section is still Codex findings exits 5" "$rr_rc $(grep -c 'External findings' <<<"$rr_err")" "5 1"
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: pass
+|quality: approved
+|scores: spec 17 / scope 18 / verification 16 / quality 16
+|
+|## Findings:
+|- [Critical] app.txt:2 — wrong value
+REPORT
+vd_round 0
+rr_run verdict docs/plan.md 1
+check "verdict: a misspelled Findings heading exits 5" "$rr_rc $(grep -c '## Findings:' <<<"$rr_err")" "5 1"
 vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
 |## Verdict
 |spec: pass
@@ -898,6 +932,7 @@ vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
 |## Findings
 REPORT
 rm -f "$RR_WS"/task-1-fix-*.md
+vd_round 0
 rr_run verdict docs/plan.md 1
 check "verdict: a clean report exits 0" "$rr_rc" "0"
 check "verdict: a clean report writes no fix file" "$(grep '^fix: ' <<<"$rr_out")" "fix: none"
