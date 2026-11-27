@@ -41,10 +41,11 @@ base=$(tail -n +3 "$stamp.refs" | awk -F'\t' -v top="$root" 'stop { next } $2 ==
 
 . "$SCRIPT_DIR/lib/ui-ux.sh"
 # No UI file differs from the base: ui-proof check would pass, so the stop
-# passes before the transcript scans below. A base git cannot resolve is left
-# to the check, which holds with its error.
+# passes before the transcript scans below. A base git cannot resolve, or a
+# change list git cannot produce, is left to the check, which holds with its
+# error.
 if git -C "$root" rev-parse --verify --quiet "$base^{commit}" >/dev/null 2>&1 \
-   && [ -z "$(uiux_changed "$root" "$base")" ]; then
+   && changed=$(uiux_changed "$root" "$base") && [ -z "$changed" ]; then
   exit 0
 fi
 active=() act=""

@@ -299,6 +299,21 @@ check "quoting: a top-level file name starting with a double quote fingerprints"
 rm '"q.css'
 
 # --- darkmem documents: a docs name for a screenshot resolves through the store (row 27) ---
+# A base whose tree git cannot read: the changed list fails, so the scope step does.
+TR="$TMP/tree-repo"
+git init -q "$TR"
+( cd "$TR" && git config user.email t@example.com && git config user.name t
+  mkdir -p src docs/dforge/ui-ux
+  printf '# UI profile\n\n**Platform:** web\n' > docs/dforge/ui-ux/profile.md
+  printf 'a\n' > src/A.tsx && git add . && git commit -q -m A
+  printf 'b\n' >> src/A.tsx && git commit -qam B )
+TA=$(git -C "$TR" rev-parse HEAD~1)
+TT=$(git -C "$TR" rev-parse "$TA^{tree}")
+rm -f "$TR/.git/objects/${TT:0:2}/${TT:2}"
+out=$(cd "$TR" && up check --base "$TA" --active 2>&1); st=$?
+check "check: a base whose tree cannot be read fails the scope step" \
+  "$st|$(grep -cx "ui-proof: FAIL scope: cannot list the UI files changed since $TA" <<<"$out")" "1|1"
+
 . "$HERE/fixtures/darkmem-stores.sh"
 M=$(stores_home "$HOME" "$REPO" proj darkmem local)
 # The profile and the reports live in the mirror too, or the gate is off and

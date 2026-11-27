@@ -146,6 +146,22 @@ sed 's/^[0-9a-f]\{40\}/0000000000000000000000000000000000000000/' "$refs" > "$re
 out=$(stop s-7 'Done.')
 check "stop: a check that cannot run holds instead of passing" "$(decision "$out")" "block"
 check "stop: the hold carries the check's own error" "$(jq -r .reason <<<"$out" | grep -c 'bad --base')" "1"
+# A base whose tree git cannot read: the changed list fails, so the stop is held.
+TR="$TMP/tree-repo"
+git init -q "$TR"
+( cd "$TR" && git config user.email t@example.com && git config user.name t
+  mkdir -p src docs/dforge/ui-ux
+  printf '# UI profile\n\n**Platform:** web\n' > docs/dforge/ui-ux/profile.md
+  printf 'a\n' > src/A.tsx && git add . && git commit -q -m A
+  printf 'b\n' >> src/A.tsx && git commit -qam B )
+TA=$(git -C "$TR" rev-parse HEAD~1)
+TT=$(git -C "$TR" rev-parse "$TA^{tree}")
+rm -f "$TR/.git/objects/${TT:0:2}/${TT:2}"
+TTOP=$(git -C "$TR" rev-parse --show-toplevel)
+printf '%s\n%s\n%s\t%s\n' "$(cd "$TR" && cd "$(git rev-parse --git-common-dir)" && pwd)" "$TTOP" "$TA" "$TTOP" > "$HOME/.claude/dforge/sessions/turns/s-tree.refs"
+out=$(jq -n --arg cwd "$TR" '{hook_event_name:"Stop",session_id:"s-tree",cwd:$cwd,transcript_path:"",stop_hook_active:false,last_assistant_message:"Done."}' | bash "$END")
+check "stop: a base whose tree cannot be read is held" \
+  "$(decision "$out")|$(jq -r .reason <<<"$out" 2>/dev/null | grep -c 'cannot list the UI files changed')" "block|1"
 
 prompt s-9
 for i in $(seq 1 120); do printf '// page\n' > "src/LongGeneratedPageName$i.tsx"; done
