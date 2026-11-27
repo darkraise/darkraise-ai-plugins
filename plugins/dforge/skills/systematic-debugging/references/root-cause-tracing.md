@@ -106,8 +106,8 @@ bash <plugin-root>/skills/systematic-debugging/references/find-polluter.sh 'pack
 
 Runs tests one-by-one, stops at first polluter. Name a path that does not
 exist yet: the script refuses one that already does. It exits 0 when no test
-creates the path, 1 when it names the polluter (or on a usage error), and 2
-when it could not diagnose: the path already exists or no test matches.
+creates the path, 1 only when it names the polluter, and 2 when it could not
+diagnose: a usage error, a path that already exists, or no matching test.
 
 ## Real Example: Empty projectDir
 
