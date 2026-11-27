@@ -119,7 +119,7 @@ newrepo() {
 }
 tscript() { # tscript SID CTX
   mkdir -p "$HOME/.claude/projects/fx"
-  printf '{"type":"assistant","isSidechain":false,"message":{"id":"m1","model":"claude-opus-5-5","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":%s,"output_tokens":1}}}\n' \
+  printf '{"type":"assistant","isSidechain":false,"message":{"id":"m1","model":"claude-opus-5-5","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":%s,"output_tokens":0}}}\n' \
     "$2" > "$HOME/.claude/projects/fx/$1.jsonl"
   printf '%s' "$HOME/.claude/projects/fx/$1.jsonl"
 }
