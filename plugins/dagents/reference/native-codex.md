@@ -173,8 +173,9 @@ agent name. Two routes do answer on a Codex plan, printing the seat as
 `primary=native:<model>/<effort>`:
 
 - `--plan-round <r>` prints the judge floor's pair and `cap=`, from each
-  task's raw total (files+spec+coupling+risk, 0-6) under Claude's bands, never
-  from the weighted routing score.
+  task's raw total (files+spec+coupling+risk, 0-6) under the bands of
+  `review-route`'s `cap_for` (a highest total of 6 gives cap 3, 4 or 5 gives
+  2, anything lower 1), never from the weighted routing score.
 - `--final-fix <file> ...` prints the highest native rank the ledger recorded
   for the tasks whose `**Files:**` blocks name those paths (an escalation
   counts, and an `inline` implementer counts as the Execution pair), raised to

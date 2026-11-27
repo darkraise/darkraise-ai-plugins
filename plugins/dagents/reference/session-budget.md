@@ -82,8 +82,10 @@ own when `CLAUDE_CODE_SESSION_ID` is set, else the directory's), `record?` (the
 directory's record, and a newer transcript exists in the same directory or the
 record names another session: two sessions may share it) or
 `guessed` (no record; the newest transcript for the directory) or, on a Codex
-host, `rollout` (the session's own rollout file). `unknown` means
-apply the count rule on Codex and the phase stops everywhere.
+host, `rollout` (the session's own rollout file). `unknown` is
+never a reason to stop: carry on, as dagents:executing-plans and auto-run.md
+§The budget line say. The session still ends at §Stops and, on Codex, on the
+count rule.
 
 `scripts/task-brief` and `scripts/review-package` print it as their last line,
 so checking before every task and every review costs no extra request.
