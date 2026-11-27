@@ -264,8 +264,8 @@ say() {
       usage: {input_tokens: $n, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 0}}}' >> "$1"
 }
 at() { wc -c < "$1" | tr -d ' '; } # at FILE — the byte offset the next record starts at
-mark() { # mark EVENT TIME PLAN TASK SESSION BYTES [RANGE]
-  printf '%s\t%s\tdforge\t5.1.1\t/plugin\t%s\t%s\t%s\t\t%s\t1\ttask-%s:%s\t%s\t\n' "$2" "$1" "$3" "$4" "$5" "$6" "$1" "$4" "${7:-}"
+mark() { # mark EVENT TIME PLAN TASK SESSION BYTES [RANGE] [DEFERRED]
+  printf '%s\t%s\tdforge\t5.1.1\t/plugin\t%s\t%s\t%s\t\t%s\t1\ttask-%s:%s\t%s\t%s\n' "$2" "$1" "$3" "$4" "$5" "$6" "$1" "$4" "${7:-}" "${8:-}"
 }
 
 # --- inferred_open_only: open rows, no close, a ledger complete line ---
@@ -434,6 +434,19 @@ J=$(node "$REPORT" --markers "$OU/markers.tsv" --transcripts "$OU/proj" --format
 MD=$(node "$REPORT" --markers "$OU/markers.tsv" --transcripts "$OU/proj" 2>/dev/null | tr -d '\r')
 check "outside_unpriced: listed in the json and the markdown" \
   "$(q "$J" '.plans[0].outside.unpriced')|$(grep -cF 'outside tasks: $0.00 (unpriced: claude-unknown-9)' <<<"$MD")" '["claude-unknown-9"]|1'
+
+# --- outside_subagents: one inside a deferred task's slice ---
+DS="$TMP/ds"; f="$DS/proj/d1.jsonl"; mkdir -p "$DS/proj/d1/subagents"
+say "$f" d1 2026-01-01T00:00:05Z 1; c=$(at "$f"); say "$f" d2 2026-01-01T00:00:20Z 10; e=$(at "$f")
+printf '{"agentType": "x:deferred"}\n' > "$DS/proj/d1/subagents/agent-a.meta.json"
+jq -nc '{type: "assistant", isSidechain: true, timestamp: "2026-01-01T00:00:12Z", message: {id: "s-a", model: "claude-opus-5-5",
+  usage: {input_tokens: 70, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 0}}}' > "$DS/proj/d1/subagents/agent-a.jsonl"
+{
+  mark open 2026-01-01T00:00:00Z docs/plans/p.md 6 d1 0; mark close 2026-01-01T00:00:15Z docs/plans/p.md 6 d1 "$c" a..b 1
+  mark open 2026-01-01T00:00:15Z docs/plans/p.md 7 d1 "$c"; mark close 2026-01-01T00:00:25Z docs/plans/p.md 7 d1 "$e" b..c
+} > "$DS/markers.tsv"
+J=$(node "$REPORT" --markers "$DS/markers.tsv" --transcripts "$DS/proj" --format json 2>/dev/null)
+check "outside_subagents: one inside a deferred task's slice is not outside" "$(q "$J" '.plans[0].outside | [.turns, .input]')" "[0,0]"
 
 # --- prices_unreadable ---
 mkdir -p "$TMP/noprices/lib"
