@@ -79,11 +79,12 @@ fi
 # risk-3 task carries the review marker, and the header names the heavy tasks.
 # The lines are computed here so an executing session never re-scores a task.
 # A plan with no Execution line predates it and runs inline by invocation, so
-# it gets the same lines.
+# it gets the same lines, as does a retired `subagent` line, which setup.md
+# runs inline.
 dispatch=0
 exec_line=$(plan_header_line "$src" Execution)
 if ! plan_is_codex "$(plan_header "$src")" \
-   && { [ -z "$exec_line" ] || grep -qE '^\*\*Execution:\*\*[ \t]*`?inline' <<<"$exec_line"; }; then
+   && { [ -z "$exec_line" ] || grep -qE '^\*\*Execution:\*\*[ \t]*`?(inline|subagent)' <<<"$exec_line"; }; then
   dispatch=1
 fi
 heavy=""

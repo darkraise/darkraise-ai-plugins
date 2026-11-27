@@ -100,6 +100,11 @@ brief "$DTMP/plan.md" 3 "$DTMP/b3.md"
 check "a split task with a risk-3 part carries the review marker" "$(sed -n 2p "$DTMP/b3.md")" "**Review:** per-task — risk 3"
 brief --header "$DTMP/plan.md" "$DTMP/h.md"
 check "the header lists the heavy tasks with their scores" "$(tail -n 1 "$DTMP/h.md")" "**Heavy:** Task 2 (total 5, risk 2), Task 3 (total 4, risk 3)"
+sed 's/^\*\*Execution:\*\* inline/**Execution:** subagent/' "$DTMP/plan.md" > "$DTMP/sub.md"
+brief "$DTMP/sub.md" 3 "$DTMP/s3.md"
+check "a subagent-line plan: a risk-3 task carries the review marker" "$(sed -n 2p "$DTMP/s3.md")" "**Review:** per-task — risk 3"
+brief --header "$DTMP/sub.md" "$DTMP/sh.md"
+check "a subagent-line plan: the header lists the heavy tasks" "$(tail -n 1 "$DTMP/sh.md")" "**Heavy:** Task 2 (total 5, risk 2), Task 3 (total 4, risk 3)"
 
 rm -rf "$DTMP"
 
