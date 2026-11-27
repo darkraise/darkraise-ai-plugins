@@ -172,11 +172,14 @@ dir_link_in() {
 }
 
 # mv_plain FROM TO — the rename; merged file by file when both exist. Status
-# 1 when it refused outright; merge_into's per-file refusals leave it 0.
+# 1 when it refused outright; merge_into's per-file refusals leave it 0. A
+# dangling link is present: as FROM it is refused, as TO it meets the link
+# guard.
 mv_plain() {
-  [ -e "$1" ] || return 0
+  [ -e "$1" ] || [ -L "$1" ] || return 0
+  if [ ! -e "$1" ]; then refuse "$1 is a symbolic link to nothing; remove or fix it by hand, then run dagents-migrate again"; return 1; fi
   if [ -L "$(dirname -- "$1")" ] || [ -L "$(dirname -- "$2")" ]; then refuse "$1 or $2 lies in a linked directory; move it by hand, then run dagents-migrate again"; return 1; fi
-  if [ -e "$2" ]; then
+  if [ -e "$2" ] || [ -L "$2" ]; then
     if [ -L "$1" ] || dir_link_in "$2"; then refuse "$1 or $2 is or holds a symbolic link; merge them by hand, then run dagents-migrate again"; return 1; fi
     if [ -d "$1" ] && [ -d "$2" ]; then merge_into "$1" "$2"; else refuse "$1 and $2 both exist and are not both directories; merge them by hand, then run dagents-migrate again"; return 1; fi
     return 0

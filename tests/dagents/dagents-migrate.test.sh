@@ -898,5 +898,22 @@ printf '*.forge\n.forge/\n*.dforge\n' > "$XP/.gitignore"
 HOME="$TMP/kp-home" migrate "$FM" "$XP" > /dev/null 2>&1
 check "an extension pattern keeps its text" "$(cat "$XP/.gitignore")" $'*.forge\n.dagents/\n*.dforge'
 
+# --- a dangling link counts as present ---
+DD="$TMP/dangling-dagents"; repo "$DD"
+mkdir -p "$DD/.forge"
+echo a > "$DD/.forge/a.md"
+ln -s "$TMP/no-such-dir" "$DD/.dagents" 2>/dev/null
+DF="$TMP/dangling-forge"; repo "$DF"; DFT=$(tmp_spelled "$(git -C "$DF" rev-parse --show-toplevel)")
+ln -s "$TMP/no-such-dir" "$DF/.forge" 2>/dev/null
+# A native Windows link needs its target to exist, so Git Bash makes none.
+if [ -L "$DD/.dagents" ] && [ -L "$DF/.forge" ]; then
+  out=$(HOME="$TMP/kp-home" migrate "$FM" "$DD" 2>&1); code=$?
+  check "a dangling .dagents link: refused by the link guard" "$code $(grep -c "holds a symbolic link; merge them by hand" <<<"$out") $(cat "$DD/.forge/a.md")" "1 1 a"
+  out=$(HOME="$TMP/kp-home" migrate "$FM" "$DF" 2>&1); code=$?
+  check "a dangling .forge link: refused" "$code $(grep -cxF "dagents-migrate: refused: $DFT/.forge is a symbolic link to nothing; remove or fix it by hand, then run dagents-migrate again" <<<"$out")" "1 1"
+else
+  printf 'skip - a dangling .dagents or .forge link: this system makes no dangling links\n'
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
