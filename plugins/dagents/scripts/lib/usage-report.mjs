@@ -114,6 +114,41 @@ export function messages(entries, sidechain) {
   return [...byId.values()];
 }
 
+// Main-chain messages of one transcript, each at the offset of its first
+// record with the largest value of each field over all its records: a slice
+// counts a streamed message once, in the slice its first record falls in.
+const streamIndexes = new WeakMap();
+function streamIndex(all) {
+  if (streamIndexes.has(all)) return streamIndexes.get(all);
+  const byId = new Map();
+  for (const { offset, entry: e } of all) {
+    const m = e && e.type === 'assistant' && e.message;
+    if (!m || !m.usage || m.model === '<synthetic>' || e.isSidechain) continue;
+    const id = m.id || e.uuid;
+    const u = usageOf(m.usage);
+    const prev = byId.get(id);
+    if (!prev) byId.set(id, { id, offset, model: m.model, usage: u });
+    else for (const f of FIELDS) prev.usage[f] = Math.max(prev.usage[f], u[f]);
+  }
+  const out = [...byId.values()];
+  streamIndexes.set(all, out);
+  return out;
+}
+
+// The messages of [transcript entries, offset test] slices, one per message id.
+function sliceMessages(parts) {
+  const byId = new Map();
+  for (const [all, inSlice] of parts) {
+    for (const x of streamIndex(all)) {
+      if (!inSlice(x.offset)) continue;
+      const prev = byId.get(x.id);
+      if (!prev) byId.set(x.id, { model: x.model, usage: { ...x.usage } });
+      else for (const f of FIELDS) prev.usage[f] = Math.max(prev.usage[f], x.usage[f]);
+    }
+  }
+  return [...byId.values()];
+}
+
 // Totals of a message list, priced; unpriced models are collected.
 export function total(msgs, prices, unpriced, byModel) {
   const t = emptyUsage();
@@ -597,15 +632,18 @@ export function reportPlan(plan, rows, opts, prices, foreign = new Map()) {
     const files = [...new Set(segs.map((s) => s.file))];
     const unpriced = new Set();
     const entries = [];
+    const parts = [];
     for (const f of files) {
       const all = readEntries(f) || [];
       const spans = mergeIntervals(segs.filter((s) => s.file === f));
       const kept = inTasks.get(f) || [];
       kept.push(...spans);
       inTasks.set(f, kept);
-      entries.push(...all.filter((x) => spans.some((s) => x.offset >= s.start && x.offset < s.end)));
+      const inSlice = (o) => spans.some((s) => o >= s.start && o < s.end);
+      entries.push(...all.filter((x) => inSlice(x.offset)));
+      parts.push([all, inSlice]);
     }
-    const msgs = messages(entries, false);
+    const msgs = sliceMessages(parts);
     const main = total(msgs, prices, unpriced, byModel);
     const named = [...new Set(members.flatMap((t) => planFiles(planText, t.n)))];
     const lm = lookupMetrics(entries, named);
@@ -697,8 +735,8 @@ export function reportPlan(plan, rows, opts, prices, foreign = new Map()) {
   for (const [f, spans] of inTasks) {
     const all = readEntries(f) || [];
     const from = firstOpen.get(f) ?? 0;
-    before += messages(all.filter((x) => x.offset < from), false).length;
-    outsideMsgs.push(...messages(all.filter((x) => x.offset >= from && !spans.some((s) => x.offset >= s.start && x.offset < s.end)), false));
+    before += sliceMessages([[all, (o) => o < from]]).length;
+    outsideMsgs.push(...sliceMessages([[all, (o) => o >= from && !spans.some((s) => o >= s.start && o < s.end)]]));
   }
   const outside = total(outsideMsgs, prices, outsideUnpriced, byModel);
   // A subagent no slice took is outside only when it started after the

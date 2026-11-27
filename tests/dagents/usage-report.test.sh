@@ -159,5 +159,16 @@ printf '# P\n\n### Task 1: one\n\n**Files:**\n- Modify: `é.sh`\n' > "$TMP/nplan
 J=$(node "$REPORT" --markers "$FD/markers.tsv" --transcripts "$FD/proj" --plan "$TMP/nplan/p.md" --repo "$NR" --format json 2>/dev/null)
 check "quality_pairing: a fix commit to a non-ASCII path counts" "$(q "$J" '.plans[0].quality.fixCommits')" "1"
 
+# --- streamed_once: a message whose records a close splits ---
+SO="$TMP/so"; mkdir -p "$SO/proj"; f="$SO/proj/s1.jsonl"
+rec() { # rec FILE TIME OUTPUT — one record of message m1
+  jq -nc --arg t "$2" --argjson o "$3" '{type: "assistant", isSidechain: false, timestamp: $t, message: {id: "m1",
+    model: "claude-opus-5-5", content: [], usage: {input_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: $o}}}' >> "$1"
+}
+rec "$f" 2026-01-01T00:00:01Z 5; c=$(at "$f"); rec "$f" 2026-01-01T00:00:03Z 50
+{ mark open 2026-01-01T00:00:00Z docs/plans/p.md 1 s1 0; mark close 2026-01-01T00:00:02Z docs/plans/p.md 1 s1 "$c" a..b; } > "$SO/markers.tsv"
+J=$(node "$REPORT" --markers "$SO/markers.tsv" --transcripts "$SO/proj" --format json 2>/dev/null)
+check "streamed_once: a message split by a close is counted once" "$(q "$J" '[(.plans[0].tasks[0] | .turns, .output), .plans[0].outside.turns]')" "[1,50,0]"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
