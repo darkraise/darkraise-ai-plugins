@@ -36,12 +36,21 @@ dr_resolve() {
   printf '%s\n' "${out:-/}"
 }
 
+# dr_index_record DIR - the index of DIR's whole worktree, base64. -v tags an
+# assume-unchanged entry in lower case and a skip-worktree entry S, flags
+# --stage alone never prints.
+dr_index_record() {
+  local top
+  top="$(git -C "$1" rev-parse --show-toplevel)" || return 2
+  git -C "$top" ls-files --stage -v -z | base64 | tr -d '\r\n'
+}
+
 dr_snapshot() {
   local root output="$2" index files temp indexfile filesfile filemode
   # The whole worktree, whichever directory of it was given.
   root="$(git -C "$1" rev-parse --show-toplevel)" && root="$(dr_canonical "$root")" || return 2
   temp="$(mktemp "${output}.XXXXXX")" || return 2
-  index="$(git -C "$root" ls-files --stage -z | base64 | tr -d '\r\n')" || { rm -f "$temp"; return 2; }
+  index="$(dr_index_record "$root")" || { rm -f "$temp"; return 2; }
   filemode=$(git -C "$root" config --bool core.filemode) || filemode=false
   files="$({ git -C "$root" ls-tree -r --name-only -z HEAD; git -C "$root" ls-files -c -o --exclude-standard -z; } | sort -zu |
     _dr_snapshot_entries "$root" "$filemode" | jq -Rs 'split("\u0000") | . as $f |

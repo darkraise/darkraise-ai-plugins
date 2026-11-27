@@ -467,7 +467,7 @@ if [ -n "$guard" ]; then
   :
 elif [ "$(grep '^HEAD ' "$DAGENTS_TASK_DIR/refs-before.txt")" != "$(grep '^HEAD ' "$DAGENTS_TASK_DIR/refs-after.txt")" ]; then
   guard='agy changed git refs: HEAD'
-elif [ "$(git -C "$cwd" ls-files --stage -z | base64 | tr -d '\r\n')" != "$(jq -r .index < "$before_snapshot" | tr -d '\r')" ]; then
+elif [ "$(dr_index_record "$cwd")" != "$(jq -r .index < "$before_snapshot" | tr -d '\r')" ]; then
   guard='agy changed the git index'
 fi
 if [ -n "$guard" ] || [ "$writer_stopped" = no ]; then

@@ -51,6 +51,16 @@ printf 'root\n' > "$fixture/work/rootfile.txt"
 dr_task_assert_snapshot "$fixture/sub.json" >/dev/null 2>&1
 check 'subdir_cwd_covers_repo' "$?" 1
 rm -f "$fixture/work/sub/s.txt" "$fixture/work/rootfile.txt" && rmdir "$fixture/work/sub"
+
+# The flags git keeps beside an index entry are part of the snapshot.
+dr_snapshot "$fixture/work" "$fixture/flags.json"
+git -C "$fixture/work" update-index --assume-unchanged base.txt
+dr_task_assert_snapshot "$fixture/flags.json" >/dev/null 2>&1; assumed=$?
+git -C "$fixture/work" update-index --no-assume-unchanged base.txt
+git -C "$fixture/work" update-index --skip-worktree base.txt
+dr_task_assert_snapshot "$fixture/flags.json" >/dev/null 2>&1; skipped=$?
+git -C "$fixture/work" update-index --no-skip-worktree base.txt
+check 'index_flags_recorded' "$assumed:$skipped" 1:1
 (dr_task_open "$fixture/work" task-2 "$fixture/scope.json") >/dev/null 2>&1
 check 'another invocation cannot steal locked worktree' "$?" 2
 dr_task_unlock
