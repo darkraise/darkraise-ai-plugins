@@ -1197,6 +1197,13 @@ describe('review seat write guard', () => {
   }
 
 
+  test('refuses a report whose stat fails with no code while its directory lists it', async ($, on) => {
+    await started($, on, [REVIEW], {
+      files: { [`${STATE}/sdd`]: { text: '', kind: 'dir' }, [WS]: { text: '', kind: 'dir' }, [REVIEW]: { text: 'x' } },
+      statErrors: { [REVIEW]: 'EACCES' },
+    })
+    expect((await write($, 'judge-1', REVIEW)).deny).toMatch(GUARD)
+  })
 
   test('refuses a judge write to anything but the report its dispatch names, and allows that report', async ($, on) => {
     await started($, on)
@@ -1277,8 +1284,10 @@ describe('review seat write guard', () => {
     const LOOSE = '/tmp/task-1-review-prompt.md'
     const EARLIER = `${WS}/task-1-rereview-1-report.md`
     const FILLED = `    Read the implementer's report: ${WS}/task-1-report.md\n    The earlier round is in ${EARLIER}.\n    Write your full report to ${REVIEW} and write nothing else: it is\n`
+    // The directories the prompt file lies in, so a stat agrees with a listing.
+    const DIRS: NonNullable<World['files']> = { [`${STATE}/sdd`]: { text: '', kind: 'dir' }, [WS]: { text: '', kind: 'dir' } }
     const pointed = async ($: Parameters<TestBody>[0], on: On, promptFile: string, files: NonNullable<World['files']>) => {
-      world(on, { tokens: 10_000, agentIds: ['judge-1'], files })
+      world(on, { tokens: 10_000, agentIds: ['judge-1'], files: { ...DIRS, ...files } })
       on('agent.list', () => ({ value: [] }) as never)
       on('fs.read', (_$, e) => {
         const file = files[e.path]
@@ -1291,7 +1300,7 @@ describe('review seat write guard', () => {
 
     test('reads the prompt file when the dispatch\'s own report line names no path', async ($, on) => {
       const files: NonNullable<World['files']> = { [PROMPT]: { text: FILLED } }
-      world(on, { tokens: 10_000, agentIds: ['judge-1'], files })
+      world(on, { tokens: 10_000, agentIds: ['judge-1'], files: { ...DIRS, ...files } })
       on('agent.list', () => ({ value: [] }) as never)
       on('fs.read', (_$, e) => {
         const file = files[e.path]
