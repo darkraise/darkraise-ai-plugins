@@ -394,7 +394,9 @@ jq -nc '{plugin:"codex@openai-codex", min_version:"1.0.3", max_major:1, trust:{c
 printf '```codex-judge\ngpt-6-astra high 2\ngpt-6.1-sol high 2\n```\n' > "$CR/ladder.md"
 BASH_BIN=$(command -v bash)
 for dep in jq timeout head tr sed awk grep cat mktemp rm; do printf '#!%s\nexec "%s" "$@"\n' "$BASH_BIN" "$(command -v "$dep")" > "$CR/bin/$dep"; chmod +x "$CR/bin/$dep"; done
-printf '#!%s\necho "codex-gate usable=true reason=ok review=true lane=true resets_at=- source=cache"\n' "$BASH_BIN" > "$CR/gate"
+# The re-probe after a quota error (--refresh) answers nothing, so no reset
+# is known and the skip takes its 5-hour default.
+printf '#!%s\n[ "${1:-}" = --refresh ] && exit 1\necho "codex-gate usable=true reason=ok review=true lane=true resets_at=- source=cache"\n' "$BASH_BIN" > "$CR/gate"
 git -C "$CR/work" init -q -b main; git -C "$CR/work" commit -q --allow-empty -m base
 printf 'prompt\n' > "$CR/p.txt"
 RUNSTATE="$CR/work/.dagents/sdd/auto-run.json"
