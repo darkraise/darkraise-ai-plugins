@@ -477,16 +477,77 @@ export function gitMessageTexts(command: string): { texts: string[]; isWhole: bo
   return { texts, isWhole }
 }
 
-/** The files a commit or pull request command takes its text from (`git commit -F`, `gh pr create --body-file`); stdin's names are the command's own text. */
-export function gitTextFiles(command: string): string[] {
-  const files: string[] = []
-  for (const one of shellCommands(command)) {
-    if (!isGitWriteCommand(one.words)) continue
-    for (const { kind, value } of messageOptions(one.words)) {
-      if (kind === 'file' && value !== '' && !STDIN_PATH.test(value)) files.push(value)
-    }
+// Whether a directory word names its directory as written: not one that
+// expands, the previous directory (-) or a home directory (~).
+const isSpelled = (word: string) => word !== '-' && !/[$`]/.test(word) && !word.startsWith('~')
+
+// The directory a cd or pushd simple command moves to (a leading `(` read
+// past); null when its words do not spell it out, or for a popd, which returns
+// to a directory they do not name; undefined for any other command.
+function dirChange(words: readonly string[]): string | null | undefined {
+  const all = words[0] === '(' ? words.slice(1) : words
+  const name = (all[0] ?? '').replace(/^\(+/, '')
+  if (name === 'popd') return null
+  if (name !== 'cd' && name !== 'pushd') return undefined
+  const target = all.slice(1).find(word => !/^-[LPe@]+$/.test(word))?.replace(/\)+$/, '')
+  return target === undefined || target === '' || !isSpelled(target) ? null : target
+}
+
+// The -C directories a git command runs in, in order, read before its
+// subcommand (commit's own -C names a commit); null when one is not spelled out.
+function gitDirs(words: readonly string[]): string[] | null {
+  const dirs: string[] = []
+  const git = words.findIndex(word => isProgram(word, 'git'))
+  if (git < 0) return dirs
+  for (let at = git + 1; at < words.length; at++) {
+    const word = words[at] ?? ''
+    if (word === 'commit' || word === 'merge' || word === 'commit-tree') break
+    if (word !== '-C') continue
+    const dir = words[at + 1]
+    if (dir === undefined || !isSpelled(dir)) return null
+    dirs.push(dir)
+    at++
   }
-  return files
+  return dirs
+}
+
+/** A file's path: `base` with each of `parts` applied in turn, an absolute part replacing what came before. */
+export function sourcePath(base: string, parts: readonly string[]): string {
+  return parts.reduce((path, part) => (isAbsolutePath(part) || path === '' ? part : `${path.replace(/[\\/]+$/, '')}/${part}`), base)
+}
+
+/** A file a commit or pull request command takes its text from. */
+export type GitTextSource = {
+  file: string
+  /** The directories the file is read below, in order (cd and pushd targets, git -C values); null when one is not spelled out. */
+  dirs: string[] | null
+}
+
+/**
+ * The files a commit or pull request command takes its text from (`git commit
+ * -F`, `gh pr create --body-file`), each with the
+ * directories it is read below; stdin's names are the command's own text.
+ */
+export function gitTextSources(command: string): GitTextSource[] {
+  const sources: GitTextSource[] = []
+  let dirs: string[] | null = []
+  for (const one of shellCommands(command)) {
+    if (isGitWriteCommand(one.words)) {
+      const own = gitDirs(one.words)
+      const gitRuns = dirs === null || own === null ? null : [...dirs, ...own]
+      for (const { kind, value } of messageOptions(one.words)) {
+        if (kind === 'file' && value !== '' && !STDIN_PATH.test(value)) sources.push({ file: value, dirs: gitRuns })
+      }
+    }
+    const change = dirChange(one.words)
+    if (change !== undefined) dirs = dirs === null || change === null ? null : [...dirs, change]
+  }
+  return sources
+}
+
+/** The files a commit or pull request command takes its text from: each source's file (gitTextSources). */
+export function gitTextFiles(command: string): string[] {
+  return gitTextSources(command).map(source => source.file)
 }
 
 /** Whether a tool by this name writes a pull or merge request or commits files. */
