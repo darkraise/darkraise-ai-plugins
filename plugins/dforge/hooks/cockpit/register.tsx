@@ -691,7 +691,13 @@ export const register: Register = on => {
     await syncTicker($)
 
     return started
-  }).catch(($, e, next) => next(e))
+  }).catch(($, e, next) => {
+    // A check that failed before the spawn refuses what it would refuse in a plan session.
+    if (!next.called && seatDenial(e, true) !== null) {
+      return { deny: `dforge: the seat check could not run (${next.error.message ?? next.error.kind}); the spawn is refused.` }
+    }
+    return next(e)
+  })
 
   // Remote Control clients joining and leaving; the terminal raises neither.
   on('session.attach', async ($, e, next) => {

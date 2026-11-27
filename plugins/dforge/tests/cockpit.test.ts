@@ -1299,6 +1299,26 @@ describe('seat check', () => {
     expect(await ui.find({ type: 'Text', text: /name a seat/ })).toBeUndefined()
   })
 
+  test('refuses an untyped spawn whose seat check could not run', async ($, on) => {
+    // The hook's read of isPlanSession is refused once, so the hook throws
+    // before it calls next; its .catch decides.
+    let failures = 0
+    on('state.get', { plugin: 'dforge', key: 'isPlanSession' } as never, ((_$: unknown, e: unknown, next: (e: unknown) => unknown) => {
+      if (failures > 0) {
+        failures -= 1
+        return { deny: 'the store is down' }
+      }
+      return next(e)
+    }) as never)
+    world(on, { tokens: 10_000 })
+    await $.session.start(START)
+    const spawn = { tool_use_id: 'toolu_1', prompt: 'Check the rows', description: 'Check rows', subagentType: 'general-purpose', provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: false, fork: false } as never
+    failures = 1
+    expect((await $.agent.spawn(spawn)).deny).toMatch(/^dforge: the seat check could not run \(.+\); the spawn is refused\.$/)
+    failures = 1
+    expect((await $.agent.spawn({ ...(spawn as object), tool_use_id: 'toolu_2', subagentType: 'dforge:judge-opus' } as never)).deny).toBeUndefined()
+  })
+
   test('reads the last Process line of a text: fast, the full flow, or none', () => {
     expect(fastModeLine('Process: fast — a one-file fix\n\nOn it.')).toBe('request')
     expect(fastModeLine('`Process: fast`')).toBe('request')
