@@ -87,5 +87,17 @@ check "an owner kill -0 cannot signal: not reclaimed" "$status:$([ -e "$LOCK" ] 
 kill "$live" 2>/dev/null; wait "$live" 2>/dev/null
 rm -rf -- "$LOCK"
 
+# A background child of the locked command must not inherit the flock
+# descriptor, or the lock is held until that child exits.
+if command -v flock >/dev/null 2>&1; then
+  dr_locked "$TMP/b" bash -c 'sleep 30 >/dev/null 2>&1 & echo $! > "$0"' "$TMP/bg.pid"
+  out=$(DR_LOCK_TENTHS=10 dr_locked "$TMP/b" true 2>&1); status=$?
+  check "a background child of the locked command does not keep the lock" "$status:$out" "0:"
+  bg=$(cat "$TMP/bg.pid" 2>/dev/null)
+  [ -z "$bg" ] || kill "$bg" 2>/dev/null
+else
+  printf 'skip - a background child of the locked command does not keep the lock: no flock\n'
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

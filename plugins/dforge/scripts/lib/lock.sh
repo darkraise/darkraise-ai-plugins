@@ -179,7 +179,8 @@ dr_locked() {
         75) echo "dforge: $base is locked by another process" >&2; exit 1 ;;
         *) echo "dforge: cannot lock $base (flock exited $status)" >&2; exit 1 ;;
       esac
-      "$@"
+      # Closed for the command, so a child it leaves running holds no lock.
+      "$@" 9>&-
     ) 9>>"$base.lock"
     return
   fi
