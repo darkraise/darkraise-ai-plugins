@@ -417,11 +417,29 @@ done
 
 # The refusal is the caller's own status, not a generic failure, from every
 # update that follows a cap check or a read.
+# One below the cap, the count and the stop take the lock once: the wrapper
+# logs each lock taken.
+printf '#!/usr/bin/env bash\necho x >> "%s"\nexec flock "$@"\n' "$TMP/flock.log" > "$TMP/count-flock"
+chmod +x "$TMP/count-flock"
 for fn in ar_failure ar_stalled ar_compacted; do
   ar --session s-2 start --spec "$SPEC" --register docs/r.md --force >/dev/null
   ( cd "$REPO" && . "$HERE/../../plugins/dagents/scripts/lib/context.sh" && . "$HERE/../../plugins/dagents/scripts/lib/auto-run.sh" && AR_SESSION=s-1 $fn ) 2>/dev/null
   status=$?
   check "$fn for a session the run left: status 3" "$status:$(field session)" "3:s-2"
+  if command -v flock >/dev/null 2>&1; then
+    case $fn in
+      ar_failure) below='.failures = 1' ;;
+      ar_stalled) below='.stalls = 2' ;;
+      *) below='.phase = "execute" | .compactionsSinceTask = 2' ;;
+    esac
+    jq "$below" "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+    : > "$TMP/flock.log"
+    ( cd "$REPO" && . "$HERE/../../plugins/dagents/scripts/lib/context.sh" && . "$HERE/../../plugins/dagents/scripts/lib/auto-run.sh" && AR_SESSION=s-2 DAGENTS_FLOCK="$TMP/count-flock" $fn ) >/dev/null 2>&1
+    status=$?
+    check "$fn: the cap stop is one locked update" "$status:$(field active):$(wc -l < "$TMP/flock.log" | tr -d ' ')" "5:false:1"
+  else
+    printf 'skip - %s cap stop: no flock on this host\n' "$fn"
+  fi
 done
 
 # A caller that passes the first binding check and then waits for the lock

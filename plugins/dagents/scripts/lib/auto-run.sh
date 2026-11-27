@@ -746,7 +746,7 @@ ar_switch() {
 # the clear is a self-resume, and the AR_RESUME_CAP-th in a row stops the run
 # (return 5).
 ar_clear() {
-  local is_phase=$1 resumes plan
+  local is_phase=$1 plan rc=0
   ar_handoff || return
   # The plan's checkout may hold a block another session left there for
   # another plan; storing its prompt would resume the wrong plan.
@@ -756,13 +756,10 @@ ar_clear() {
     return 4
   fi
   if [ "$is_phase" != 1 ]; then
-    ar_update '.resumes = ((.resumes // 0) + 1)' || return $?
-    resumes=$(ar_get resumes)
-    if [ "${resumes:-0}" -ge "$AR_RESUME_CAP" ]; then
-      ar_stop "$AR_RESUME_CAP self-resumes without a completed task" || return $?
-      echo "auto-run: stopped — $AR_RESUME_CAP self-resumes in a row without a completed task" >&2
-      return 5
-    fi
+    ar_capped '.resumes = ((.resumes // 0) + 1) | cap_stop(.resumes; $cap; "\($cap) self-resumes without a completed task")' \
+      --argjson cap "$AR_RESUME_CAP" || rc=$?
+    [ "$rc" -ne 5 ] || echo "auto-run: stopped — $AR_RESUME_CAP self-resumes in a row without a completed task" >&2
+    [ "$rc" -eq 0 ] || return "$rc"
   fi
   ar_update '.pending = "clear" | .rebind = true | .resumePrompt = $p
     | .launch = (if $m == "" then null else {model: $m, effort: $e} end)' \
@@ -791,6 +788,21 @@ ar_resumed() {
     | if .pending == "resume" then .pending = null else . end'
 }
 
+# ar_capped FILTER [jq options…] — ar_update with FILTER, in which
+# cap_stop(COUNT; CAP; REASON) stops the run once COUNT reaches CAP: the count
+# and the stop are one locked write, so no update lands between them. Returns
+# 5 when this update stopped the run.
+ar_capped() {
+  local filter=$1 at
+  shift
+  at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  ar_update 'def cap_stop($n; $cap; $r): if $n >= $cap
+      then .active = false | .stopped = $r | .stoppedAt = $at | .stoppedKind = null | .pending = null
+      else . end; '"$filter" --arg at "$at" "$@" || return
+  ar_state | ar_jq -e --arg at "$at" '.active == false and .stoppedAt == $at' >/dev/null 2>&1 || return 0
+  return 5
+}
+
 # ar_compacted — book a compaction. One in the final or finish phase sets
 # finalCompacted, after which every budget line of the run says ok. An
 # execute-phase compaction counts toward AR_COMPACTION_CAP, reached without a
@@ -798,58 +810,40 @@ ar_resumed() {
 # window would otherwise loop. --seconds N adds the compaction's duration to
 # totals.compactionSeconds.
 ar_compacted() {
-  local n secs=0
+  local secs=0
   [ "${1:-}" = --seconds ] && secs=$2
-  ar_update '.compactions += 1 | .failures = 0 | .pending = "after-compact"
+  ar_capped '.compactions += 1 | .failures = 0 | .pending = "after-compact"
     | .totals.compactionSeconds = ((.totals.compactionSeconds // 0) + $secs)
     | .finalCompacted = ((.finalCompacted // false) or .phase == "final" or .phase == "finish")
     | if .phase == "execute"
-      then .compactionsSinceTask = ((.compactionsSinceTask // 0) + 1) else . end' --argjson secs "$secs" || return $?
-  n=$(ar_get compactionsSinceTask)
-  if [ "${n:-0}" -ge "$AR_COMPACTION_CAP" ]; then
-    ar_stop "$AR_COMPACTION_CAP compactions without a completed task" || return $?
-    return 5
-  fi
+      then .compactionsSinceTask = ((.compactionsSinceTask // 0) + 1) else . end
+    | cap_stop((.compactionsSinceTask // 0); $cap; "\($cap) compactions without a completed task")' \
+    --argjson secs "$secs" --argjson cap "$AR_COMPACTION_CAP"
 }
 
 ar_failure() { # ar_failure [REASON] — return 5 when this failure stops the run
-  local n
-  ar_update '.failures = ((.failures // 0) + 1)' || return $?
-  n=$(ar_get failures)
-  if [ "${n:-0}" -ge "$AR_FAILURE_CAP" ]; then
-    ar_stop "${1:-the cockpit could not compact or clear}" || return $?
-    return 5
-  fi
+  ar_capped '.failures = ((.failures // 0) + 1) | cap_stop(.failures; $cap; $r)' \
+    --argjson cap "$AR_FAILURE_CAP" --arg r "${1:-the cockpit could not compact or clear}"
 }
 
 # ar_stalled — the cockpit found the run idle with no sentinel answered, and
 # nudged it. The AR_STALL_CAP-th since the last completed task stops the run
 # (return 5).
 ar_stalled() {
-  local n
-  ar_update '.stalls = ((.stalls // 0) + 1) | .stalledAt = $now | .totals.stalls = ((.totals.stalls // 0) + 1)' \
-    --argjson now "$(date +%s)" || return $?
-  n=$(ar_get stalls)
-  if [ "${n:-0}" -ge "$AR_STALL_CAP" ]; then
-    ar_stop "$AR_STALL_CAP stalls without a completed task" || return $?
-    return 5
-  fi
+  ar_capped '.stalls = ((.stalls // 0) + 1) | .stalledAt = $now | .totals.stalls = ((.totals.stalls // 0) + 1)
+    | cap_stop(.stalls; $cap; "\($cap) stalls without a completed task")' \
+    --argjson now "$(date +%s)" --argjson cap "$AR_STALL_CAP"
 }
 
 # ar_api_error [--clear] — count a turn that ended on an API error, apart from
 # stalls; the tenth in a row stops the run (return 5). --clear resets the count.
 ar_api_error() {
-  local n
   if [ "${1:-}" = --clear ]; then
     ar_update '.apiErrors = 0'
     return
   fi
-  ar_update '.apiErrors = ((.apiErrors // 0) + 1) | .totals.apiErrors = ((.totals.apiErrors // 0) + 1)' || return $?
-  n=$(ar_get apiErrors)
-  if [ "${n:-0}" -ge "$AR_API_ERROR_CAP" ]; then
-    ar_stop "$AR_API_ERROR_CAP API errors in a row" || return $?
-    return 5
-  fi
+  ar_capped '.apiErrors = ((.apiErrors // 0) + 1) | .totals.apiErrors = ((.totals.apiErrors // 0) + 1)
+    | cap_stop(.apiErrors; $cap; "\($cap) API errors in a row")' --argjson cap "$AR_API_ERROR_CAP"
 }
 
 ar_decision_add() { # ar_decision_add ID QUESTION OPTIONS REASON TASK
