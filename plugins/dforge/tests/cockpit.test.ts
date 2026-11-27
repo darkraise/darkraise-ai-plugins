@@ -9959,4 +9959,32 @@ describe('the workflow guard', () => {
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     expect(runs.filter(run => GUARD.test(run))).toHaveLength(2)
   })
+
+  test('stops asking after three timed-out checks', async ($, on) => {
+    const runs: string[] = []
+    const clock = world(on, { ...SIGNED_IN, guardFails: 'timeout', processRuns: runs })
+    signedIn(on)
+    await $.session.start(START)
+    for (let i = 0; i < 5; i++) {
+      await clock.advance(60_000)
+      await $.tool.call({ tool: 'Bash', command: 'ls' })
+    }
+    // The first check and three retries; after them "no conflict" stands.
+    expect(runs.filter(run => GUARD.test(run))).toHaveLength(4)
+  })
+
+  test("a retry that finds a conflict stops the session's timers", async ($, on) => {
+    const runs: string[] = []
+    const w: World = { ...SIGNED_IN, guardFails: 'timeout', processRuns: runs }
+    const clock = world(on, w)
+    signedIn(on)
+    await $.session.start(START)
+    w.guardFails = undefined
+    w.guardOut = CONFLICT
+    await clock.advance(60_000)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const from = runs.length
+    await clock.advance(130_000)
+    expect(runs.slice(from).filter(run => !GUARD.test(run))).toEqual([])
+  })
 })

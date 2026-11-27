@@ -437,6 +437,23 @@ let guardCheck: Promise<string | null> | null = null
 
 // How long a check that decided nothing stands as "no conflict" before a hook asks again.
 const GUARD_RETRY_MS = 60_000
+// How many times a check that timed out is asked again; after that "no conflict" stands for the process.
+const GUARD_RETRIES = 3
+let guardRetries = 0
+
+/** Cancels every timer the session armed: another workflow plugin now owns the session. */
+function standDownTimers() {
+  S.watchdog?.cancel()
+  S.watchdog = null
+  S.poll?.cancel()
+  S.poll = null
+  S.ticker?.cancel()
+  S.ticker = null
+  S.autoTimer?.cancel()
+  S.autoTimer = null
+  S.apiErrorTimer?.cancel()
+  S.apiErrorTimer = null
+}
 
 function guardNow($: EngineInterface): Promise<string | null> {
   // A check that timed out decides nothing: it reads as no conflict, and a
@@ -444,6 +461,8 @@ function guardNow($: EngineInterface): Promise<string | null> {
   // that cannot start node never will in this process: no node, no other
   // workflow plugin's check either.
   const retryLater = () => {
+    if (guardRetries >= GUARD_RETRIES) return
+    guardRetries += 1
     $.clock.after(GUARD_RETRY_MS, () => {
       guardCheck = null
     })
@@ -460,6 +479,11 @@ function guardNow($: EngineInterface): Promise<string | null> {
         return guardLine(null, $.plugin.root)
       },
     )
+    .then(line => {
+      // A retry can find the conflict after session.start armed the timers.
+      if (line !== null) standDownTimers()
+      return line
+    })
   return guardCheck
 }
 
@@ -473,10 +497,7 @@ export const register: Register = on => {
     // The check holds for the process: a /clear or /resume fires no
     // session.start, and enabling a plugin takes a new session anyway.
     if ((await guardNow($)) !== null) {
-      S.watchdog?.cancel()
-      S.watchdog = null
-      S.poll?.cancel()
-      S.poll = null
+      standDownTimers()
       return next(e)
     }
     S.permissionMode = null
