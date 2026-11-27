@@ -335,6 +335,13 @@ A run's turn ends only with one of three lines as the last line of the message:
 - `Auto run: clearing` after `scripts/auto-run clear` exits 0;
 - `Auto run: switching` after `scripts/auto-run switch` exits 0.
 
+One more ending carries no sentinel line: a plain end of turn that waits for
+the notification of a background call this session started and must read
+(the §Rulings `scripts/run-api-judge` call, the final review's panel,
+`scripts/ci-mirror` or the integration check). It carries no next-step block
+either. `turn-end.sh` lets a plain stop through while that work is listed
+(`scripts/in-flight`).
+
 A message that ends on a sentinel line carries no next-step block: no launch
 command and no first prompt to paste. `scripts/next-step` still writes the
 block into the handoff, where `scripts/auto-run clear` reads it, and the
@@ -352,9 +359,10 @@ While the run's checkout lies outside the directory the session started in,
 the first prompt, the after-compaction prompt and the Stop hook's hold
 messages say to run every command as `cd '<checkout>' && …`.
 
-Nothing you started may still run in the background. The Stop hook holds any
-other ending, its retries included, up to three times in a row; the fourth
-stops the run (`the turn ended 3 times in a row without its sentinel line`)
+Apart from the wait for a background call above, nothing you started may
+still run in the background. The Stop hook holds any other ending, its
+retries included, up to three times in a row; the fourth stops the run
+(`the turn ended 3 times in a row without its sentinel line`)
 and is held once more to end as Stopping says. The cockpit then compacts, or
 clears the session and binds the new one, and submits the next prompt itself.
 
@@ -402,9 +410,10 @@ cleared session; dforge:handoff does not end the run. In order:
    not be written"` and end as Stopping says.
 4. `scripts/auto-run switch`, which also sets the phase to `execute`. It exits
    4 without an attached plan, or when the first prompt in the plan's handoff
-   names another plan; on exit 4 or any other nonzero exit, stop the run the same
-   way. On exit 0, end the turn with
-   `Auto run: switching` as its last line.
+   names another plan; on exit 4 or any other nonzero exit except 7, stop the
+   run the same way. Exit 7 means the session is in another checkout: run the
+   command it prints, with its `cd '<path>' && …` prefix, again. On exit 0,
+   end the turn with `Auto run: switching` as its last line.
 
 The cockpit then runs `scripts/auto-run clear --phase`, clears the session and
 binds the new one, sends that session's requests on the model and effort of
@@ -510,7 +519,8 @@ notes file handoff step 3 wrote, and
 `scripts/auto-run clear --phase`, and ends the turn with `Auto run: clearing`.
 A commit in handoff step 2 moves HEAD and costs one suite run at finishing's
 first step. `next-step`'s exits 4 and 5 are handled as §Clears says; a nonzero
-`clear --phase` stops the run as §Stopping says. The cleared session arrives
+`clear --phase` other than exit 7 stops the run as §Stopping says; on exit 7,
+run the printed `cd '<path>' && …` command again. The cleared session arrives
 through dforge:resume-execution with phase `finish`, and has no conversation
 behind it: what the final review left open is in the ledger's parked and
 `Ruling:` lines, the `final review residual` register rows, and the
