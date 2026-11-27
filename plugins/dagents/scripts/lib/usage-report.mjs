@@ -485,6 +485,8 @@ function quality(opts, rowsOut, closeRows, planText) {
   if (register) {
     q.deferredRows = register.split(/\r?\n/).filter((l) => /^\|/.test(l) && l.split('|').some((c) => c.trim() === 'deferred')).length;
     const reg = path.basename(opts.register, '.md');
+    // The register's name as a whole token: milestone-1 is not inside milestone-10.
+    const named = new RegExp(`(^|[^A-Za-z0-9_.-])${reg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^A-Za-z0-9_.-])`);
     if (opts.plan) {
       let names = [];
       try { names = fs.readdirSync(path.dirname(opts.plan)).filter((n) => n.endsWith('.md')); } catch { /* none */ }
@@ -492,7 +494,7 @@ function quality(opts, rowsOut, closeRows, planText) {
         const f = path.join(path.dirname(opts.plan), n);
         if (path.resolve(f) === path.resolve(opts.plan)) continue;
         const t = read(f) || '';
-        if (/^\*\*Items:\*\*.*$/m.test(t) && t.split(/\r?\n/).some((l) => l.startsWith('**Items:**') && l.includes(reg))) {
+        if (t.split(/\r?\n/).some((l) => l.startsWith('**Items:**') && named.test(l))) {
           q.followUpTasks += (t.match(/^### Task \d+:/gm) || []).length;
         }
       }
