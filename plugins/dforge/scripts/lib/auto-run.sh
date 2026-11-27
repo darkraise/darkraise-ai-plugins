@@ -382,7 +382,7 @@ ar_start() {
 # _ar_start_bound SPEC REGISTER FORCE ISOLATION PATH — ar_start once the
 # cockpit sees the binding.
 _ar_start_bound() {
-  local spec=$1 register=$2 force=$3 iso=$4 path=$5 top slug base regfile=""
+  local spec=$1 register=$2 force=$3 iso=$4 path=$5 top slug base regfile="" made="" rc
   top=$(git rev-parse --show-toplevel)
   dforge_stores_init "$top"
   if [ -z "$register" ]; then
@@ -395,6 +395,7 @@ _ar_start_bound() {
       mkdir -p "$(dirname "$regfile")" || return 1
       printf '# Auto run: %s\n\n**Source:** items the auto run for `%s` deferred\n**Covers:** %s\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n' \
         "$slug" "$spec" "$spec" > "$regfile" || return 1
+      made=1
     fi
   fi
   base=$(git symbolic-ref --short -q HEAD 2>/dev/null || true)
@@ -413,7 +414,13 @@ _ar_start_bound() {
     totals: {compactionSeconds: 0, holds: 0, stalls: 0, apiErrors: 0, reconcilePrompts: 0, panelFailures: 0},
     isolation: $iso, branch: null, branchBase: null, carried: null,
     version: $version, root: $root
-  }' --arg version "$(ar_plugin_version)" --arg root "$AR_PLUGIN_ROOT" --arg runId "$(date +%s)-$$-$RANDOM" || return $?
+  }' --arg version "$(ar_plugin_version)" --arg root "$AR_PLUGIN_ROOT" --arg runId "$(date +%s)-$$-$RANDOM"
+  rc=$?
+  # A register this start made goes with the refused start.
+  if [ "$rc" -ne 0 ]; then
+    [ -z "$made" ] || rm -f "$regfile"
+    return "$rc"
+  fi
   ar_log start "$spec"
   ar_log bind "$(ar_primary_root)"
   # A register opened at the spec review before the spec existed may still
