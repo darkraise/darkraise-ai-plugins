@@ -5494,8 +5494,9 @@ async function judgeWriteDenial($: EngineInterface, tool: string, e: { agentId?:
 }
 
 // The fields of a git write tool that become a commit's, pull request's or
-// merge request's text.
-const MESSAGE_FIELDS = ['title', 'body', 'message', 'subject', 'commit_message', 'commit_title', 'description']
+// merge request's text: title, body, message, subject and description, alone
+// or after a prefix (commit_message, commit_title, merge_commit_message).
+const MESSAGE_FIELD = /^(?:\w+_)?(?:title|body|message|subject|description)$/
 
 // The refusal for an attribution line: the deny text, and the line the
 // refusals list keeps.
@@ -5520,7 +5521,7 @@ async function attributionLine($: EngineInterface, tool: string, e: object): Pro
     // of /dev/stdin or a pipe would wait on input the command has not yet given.
     let isUnseen = isWhole
     const cwd = await $.session.cwd().catch(() => null)
-    for (const { file, dirs, isWritten } of gitTextSources(command)) {
+    for (const { file, dirs, isWritten } of gitTextSources(command, cwd ?? '')) {
       // The command writes this file before git reads it: the text there now
       // is not git's, and the whole command, which writes the new, is read.
       if (isWritten) {
@@ -5545,8 +5546,8 @@ async function attributionLine($: EngineInterface, tool: string, e: object): Pro
   if (!isGitWriteTool(tool)) return undefined
   // Only the fields that become a commit's, pull request's or merge request's
   // text: a file's content is not attribution.
-  const fields = e as Record<string, unknown>
-  for (const text of MESSAGE_FIELDS.flatMap(name => stringsIn(fields[name]))) {
+  const fields = Object.entries(e).filter(([name]) => MESSAGE_FIELD.test(name))
+  for (const text of fields.flatMap(([, value]) => stringsIn(value))) {
     const line = attributionIn(text)
     if (line !== undefined) return attributionRefusal(line)
   }
