@@ -4,7 +4,8 @@
 # instead of the raw reports.
 #
 # Usage: test-profile [--top N] [--layer NAME=ERE]... [--brief] <report.xml|dir>...
-# Exit: 0 ok; 2 usage, or no test case found in the reports.
+# Exit: 0 ok; 2 usage, reading the reports failed (an awk error, such as an
+# invalid --layer regex), or no test case found in the reports.
 #   --top N           rows in the slowest-files and slowest-tests tables (default 15).
 #   --layer NAME=ERE  classify a test into NAME when its lowercased file or class
 #                     path matches ERE. Repeatable, tried in order; unmatched
@@ -119,6 +120,8 @@ skip != "" { if (index($0, skip)) skip = ""; next }
 }
 END { if (open) emit() }
 ' "${files[@]}" > "$rows"
+awk_rc=$?
+[ "$awk_rc" -eq 0 ] || { echo "test-profile: reading the reports failed (awk exit $awk_rc)" >&2; exit 2; }
 
 grep -q '^case' "$rows" || { echo "test-profile: no <testcase> found in ${#files[@]} report(s)" >&2; exit 2; }
 
