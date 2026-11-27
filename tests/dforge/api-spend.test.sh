@@ -69,6 +69,9 @@ check "the default file is untouched" "$(j '.agentrouter.spent_usd // 0' < "$FIL
 unset DFORGE_API_SPEND_FILE
 printf '{"openai": {"spent_usd": 5' > "$FILE"
 check "a spend file that cannot be read closes every budget" "$(status | grep -c 'open=false .* reason=unreadable$')" "3"
+mkdir -p "$TMP/spenddir"
+check "a directory at the spend path closes every budget" \
+  "$(export DFORGE_API_SPEND_FILE="$TMP/spenddir"; status | grep -c 'open=false .* reason=unreadable$')" "3"
 : > "$FILE"
 bash "$SPEND" add openai 1 2>"$TMP/empty.err"; rc=$?
 check "add to an empty spend file: refused and the file kept" "$rc|$(cat "$TMP/empty.err")|$(wc -c < "$FILE" | tr -d ' ')" "1|api-spend: cannot read $FILE|0"

@@ -32,8 +32,8 @@ api_budget_state() {
   [[ $cap =~ ^[0-9]+(\.[0-9]+)?$ ]] || cap=0
   file=$(api_budget_spend_file)
   spent=0 unreadable=no
-  if [ -f "$file" ]; then
-    spent=$(MSYS_NO_PATHCONV=1 jq -r --arg id "$id" '.[$id].spent_usd // 0 | numbers' < "$file" 2>/dev/null | tr -d '\r')
+  if [ -e "$file" ] || [ -L "$file" ]; then
+    spent=$(MSYS_NO_PATHCONV=1 jq -r --arg id "$id" '.[$id].spent_usd // 0 | numbers' 2>/dev/null < "$file" | tr -d '\r')
     # A spend file that cannot be read closes the budget: reading it as 0 would lift the cap.
     [[ $spent =~ ^[0-9]+(\.[0-9]+)?([eE][-+]?[0-9]+)?$ ]] || { spent=0 unreadable=yes; }
   fi
