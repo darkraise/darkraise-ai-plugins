@@ -970,6 +970,38 @@ check "verdict: a HEAD that moved exits 6" "$rr_rc" "6"
 check "verdict: a HEAD that moved is named" "$(grep -c 'HEAD moved' <<<"$rr_err")" "1"
 rr_git reset -q --hard HEAD~1
 
+# The reviewer prompt ends a cut Minor list with "(<k> more Minor left out)".
+rr_reset
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: pass
+|quality: approved
+|scores: spec 17 / scope 18 / verification 16 / quality 16
+|
+|## Findings
+|- [Minor] app.txt:1 — first nit
+|- [Minor] app.txt:2 — second nit
+|- [Minor] app.txt:3 — third nit
+|(2 more Minor left out)
+REPORT
+vd_round 0
+rr_run verdict docs/plan.md 1
+check "verdict: a (k more Minor left out) line is accepted" \
+  "$rr_rc $(grep '^findings: ' <<<"$rr_out")" "0 findings: 0 Critical, 0 Important, 3 Minor"
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: pass
+|quality: approved
+|scores: spec 17 / scope 18 / verification 16 / quality 16
+|
+|## Findings
+|- [Minor] app.txt:1 — first nit
+|(more Minor left out)
+REPORT
+vd_round 0
+rr_run verdict docs/plan.md 1
+check "verdict: a left-out line with no count exits 5" "$rr_rc" "5"
+
 # A file already changed when the review ran is compared by content.
 rr_reset
 printf 'dirty\n' >> "$RR_REPO/other.txt"

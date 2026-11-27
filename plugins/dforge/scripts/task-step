@@ -826,6 +826,8 @@ parse_report() {
       out[++no] = "C\t" substr($0, 3)
       next
     }
+    # The reviewer prompt ends a cut Minor list with this count line.
+    sect == "Findings" && /^\([1-9][0-9]* more Minor left out\)$/ { next }
     # Anything else under these two headings would be dropped unread, so a
     # line that is neither a bullet nor its indented detail is refused.
     sect == "Findings" || sect == "Cannot verify" {

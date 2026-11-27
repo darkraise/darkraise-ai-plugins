@@ -304,7 +304,8 @@ the ruling seat.
 
 **When `task-step verdict` fails.** Exit 5 means the seat wrote no report,
 or one outside the grammar (a line under Findings or Cannot verify that is
-neither a bullet nor its indented detail, or a `spec: fail`,
+neither a bullet nor its indented detail nor the
+`(<k> more Minor left out)` line, or a `spec: fail`,
 `quality: changes` or `fix round: open` with no Critical or Important
 finding), and stderr says which; exit 6 means a tracked
 file in the reviewed checkout changed during the review, or HEAD moved, and
