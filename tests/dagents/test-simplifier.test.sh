@@ -80,6 +80,8 @@ check "a child suite's time is not its parent's overhead" "$(bash "$PROFILE" --b
 printf '<testsuites><testsuite name="outer" time="%s"><testcase classname="o" name="direct" time="2"/><testsuite name="inner" time="10"><testcase classname="i" name="deep" time="10"/></testsuite></testsuite></testsuites>\n' 13 > "$T/nested.xml"
 check "a parent's own setup is still its overhead" "$(bash "$PROFILE" --brief "$T/nested.xml")" \
   "tests=2 time=12.0s overhead=1.0s slowest10pct=83% fail=0 skip=0 flaky=0 reran=0"
+bash "$PROFILE" --layer unit=unit --layer 'bad=[' "$T/reports/py.xml" >/dev/null 2>&1
+check "an invalid layer regex after a match exits 2" "$?" "2"
 printf '<x/>\n' > "$T/empty.xml"
 bash "$PROFILE" "$T/empty.xml" >/dev/null 2>&1; check "no test case exits 2" "$?" "2"
 
