@@ -288,6 +288,36 @@ check "missing spec: close refused while its register is open" \
   "$RC:$(grep -c '^refused: docs/dforge/registers/gone-reqs.md fails register check:' <<<"$OUT"):$(roadmap_row "$D3/roadmap.md" M1 | cut -f5):$(roadmap_unresolved "$R3" docs/dforge/registers/m1.md | cut -f1,2 | tr '\t' '#')" \
   "1:1:open:docs/dforge/registers/gone-reqs.md#1"
 
+# --- close holds every register's lock; reopen keeps milestones in order ---
+R4="$TMP/repo4"
+git init -q -b main "$R4"
+D4="$R4/docs/dforge"
+mkdir -p "$D4/registers" "$D4/specs"
+printf '# P\n' > "$D4/specs/product.md"
+printf '# E\n' > "$D4/specs/e.md"
+register "$D4/registers/m1.md" docs/dforge/specs/product.md '| 1 | Epic | docs/dforge/specs/e.md | x | done | - |'
+register "$D4/registers/m2.md" docs/dforge/specs/product.md '| 1 | Later | - | x | done | - |'
+register "$D4/registers/e.md" docs/dforge/specs/e.md '| 1 | Requirement | - | - | done | - |'
+cat > "$D4/roadmap.md" <<EOF
+# Shop — roadmap
+
+**Product:** an online shop
+**Spec:** docs/dforge/specs/product.md
+
+| M | Name | Exit criteria | Register | State | Note |
+|---|---|---|---|---|---|
+| M1 | MVP | x | docs/dforge/registers/m1.md | open | - |
+| M2 | Next | x | docs/dforge/registers/m2.md | open | - |
+EOF
+if command -v flock >/dev/null 2>&1; then
+  printf '#!/usr/bin/env bash\nprintf "x\\n" >> "%s"\nexec flock "$@"\n' "$TMP/flock.log" > "$TMP/flock-log"
+  chmod +x "$TMP/flock-log"
+  run env DFORGE_FLOCK="$TMP/flock-log" bash "$RM" close --root "$R4" M1 --note x
+  check "close: holds each register's lock" "$RC:$(wc -l < "$TMP/flock.log" | tr -d ' ')" "0:3"
+else
+  printf "skip - close: holds each register's lock: no flock\n"
+fi
+
 run bash "$RM"
 check "usage: no verb" "$RC" "2"
 run bash "$RM" frobnicate --root "$ROOT"
