@@ -872,6 +872,46 @@ describe('windows paths', () => {
 })
 
 describe('attribution guard', () => {
+  const A6_TRAILER = ['Co', 'authored-by:'].join('-')
+  const A6_AI = `${A6_TRAILER} Claude <noreply@anthropic.com>`
+  const A6_DENY = `dforge: this project keeps AI attribution out of git. Remove "${A6_AI}" and try again.`
+  const A6_GENERATED = `${['Generated', 'with'].join(' ')} [Claude Code](https://claude.com/claude-code)`
+  const A6_FOUND = (command: string) => {
+    const { texts, isWhole } = gitMessageTexts(command)
+    return texts.some(text => attributionIn(text) !== undefined) || (isWhole && attributionIn(command, true) !== undefined)
+  }
+
+  test('A6: refuses a merge or pull request message carrying a trailer and allows a clean one', async ($, on) => {
+    world(on, { ...SIGNED_IN })
+    signedIn(on, {})
+    const forms = (body: string) => [
+      `git merge --no-ff -m "${body === 'x' ? 'x' : `Merge ${body}`}"`,
+      `gh pr merge 12 --squash --body "${body}"`,
+      `gh -R o/r pr create --title x --body "${body}"`,
+    ]
+    const denials: (string | undefined)[] = []
+    for (const command of forms(`x\n\n${A6_AI}`)) denials.push((await $.tool.call({ tool: 'Bash', command })).deny)
+    expect(denials).toEqual([A6_DENY, A6_DENY, A6_DENY])
+    const clean: (string | undefined)[] = []
+    for (const command of forms('x')) clean.push((await $.tool.call({ tool: 'Bash', command })).deny)
+    expect(clean).toEqual([undefined, undefined, undefined])
+  })
+
+  test('A6: judges a commit split by a line continuation or by quotes', async ($, on) => {
+    world(on, { ...SIGNED_IN })
+    signedIn(on, {})
+    const heads = ['git \\\n  commit', "git com''mit"]
+    const denials: (string | undefined)[] = []
+    for (const head of heads) denials.push((await $.tool.call({ tool: 'Bash', command: `${head} -m 'x' -m '${A6_AI}'` })).deny)
+    expect(denials).toEqual([A6_DENY, A6_DENY])
+    const clean: (string | undefined)[] = []
+    for (const head of heads) clean.push((await $.tool.call({ tool: 'Bash', command: `${head} -m 'x'` })).deny)
+    expect(clean).toEqual([undefined, undefined])
+  })
+
+
+
+
   test('finds AI attribution and leaves human co-authors alone', () => {
     expect(attributionIn('fix\n\nCo-Authored-By: Claude Opus <noreply@anthropic.com>')).toMatch(/Co-Authored-By/)
     expect(attributionIn('body\n🤖 Generated with [Claude Code](https://claude.com/claude-code)')).toMatch(/Generated/)
@@ -1165,6 +1205,8 @@ describe('review seat write guard', () => {
     await $.agent.spawn(dispatch(`Review task 1 of the plan. Write your full report to ${named.join(' and ')}, then reply in 10 lines.`, 'dforge:judge-sonnet-high', 1))
     await $.agent.spawn(dispatch('Implement task 1.', 'dforge:impl-sonnet-low', 2))
   }
+
+
 
   test('refuses a judge write to anything but the report its dispatch names, and allows that report', async ($, on) => {
     await started($, on)
