@@ -9,8 +9,8 @@ import path from "node:path";
 import { HttpError } from "./darkmem-client.mjs";
 import { dforgeDir, storesPath, writeApplied } from "./darkmem-config.mjs";
 import {
-  DOC_PREFIX, MAX_ENTRIES_PER_APPEND, RESERVED_DIRS, decodeUtf8, emptyState, ledgerFiles, ledgerPieces, ledgerPlanPath, listDocumentFiles, propertiesFor,
-  sha256, unsupportedPlanDirs, uriToLocal,
+  DOC_PREFIX, MAX_ENTRIES_PER_APPEND, RESERVED_DIRS, caseGroups, decodeUtf8, emptyState, ledgerFiles, ledgerPieces, ledgerPlanPath, listDocumentFiles, propertiesFor,
+  sha256, unsupportedPlanDirs, uriProblem, uriToLocal,
 } from "./darkmem-mirror.mjs";
 import { pullDocuments, pullLedgers } from "./darkmem-pull.mjs";
 
@@ -34,6 +34,14 @@ function readSources(roots) {
       continue;
     }
     documents.push({ uri, buffer, content });
+  }
+  const uris = documents.map(d => d.uri);
+  for (const group of caseGroups(uris)) {
+    problems.push(`${group.join(", ")}: differ only in case, which a case-insensitive file system holds as one file; rename all but one`);
+  }
+  for (const uri of uris) {
+    const problem = uriProblem(uri);
+    if (problem) problems.push(`${uri}: ${problem}, so not every mirror can hold it as a file`);
   }
   for (const { slug, file } of ledgerFiles(roots.workRoot)) {
     const buffer = fs.readFileSync(file);

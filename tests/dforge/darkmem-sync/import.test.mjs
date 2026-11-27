@@ -212,6 +212,17 @@ test("another writer's append during a fresh ledger import is refused, and the w
   assert.doesNotMatch(result.stdout, /recorded documents as applied darkmem/);
 });
 
+test("case twins and names Windows cannot hold refuse the whole import before any write", { skip: process.platform !== "linux" && "needs a case-sensitive file system" }, async t => {
+  const s = await setup(t);
+  for (const name of ["A.md", "a.md", "aux.md"]) write(path.join(s.repo, "docs", "dforge", "specs", name), `# ${name}\n`);
+  const result = await s.importing();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("failed: dforge/specs/A.md, dforge/specs/a.md: differ only in case, which a case-insensitive file system holds as one file; rename all but one"), result.stdout);
+  assert.ok(result.stdout.includes('failed: dforge/specs/aux.md: the name "aux.md" is a Windows device name, so not every mirror can hold it as a file'), result.stdout);
+  assert.match(result.stdout, /note: nothing was imported/);
+  assert.equal(s.stub.db.requests.filter(r => ["POST", "PATCH", "DELETE"].includes(r.method)).length, 0);
+});
+
 test("an import with documents configured local records nothing", async t => {
   const stub = await startStub();
   t.after(() => stub.close());
