@@ -459,7 +459,7 @@ function ledgerUnmarked(ledger, marked, plan, dirs) {
       return { file: b.file, start: b.start, end: b.end, from: inside.length ? ms(inside[0].entry.timestamp) : NaN, to: inside.length ? ms(inside[inside.length - 1].entry.timestamp) : NaN };
     });
     const range = /^commits ([^,)]+)/.exec(m[2]);
-    if (opened && !segs.length) segs.unresolved = true;
+    if (!segs.length) segs.unresolved = true;
     out.push({ n, opens: opened ? opened.opens : [], close: { range: range ? range[1] : '', context: '', time: '', inferred: Boolean(opened) }, segs, unmarked: !opened });
   }
   return out;

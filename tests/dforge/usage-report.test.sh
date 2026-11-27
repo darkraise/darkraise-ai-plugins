@@ -306,6 +306,16 @@ B=$(cd "$HERE/../../plugins/dforge/scripts/lib" && node --input-type=module -e '
 check "plan_files: every part's paths, without line ranges" "$(sed -n 1p <<<"$B")" '["src/a.sh","tests/a.test.sh","src/b.sh"]'
 check "plan_files: a backticked path with a space is kept whole" "$(sed -n 2p <<<"$B")" '["src/My View.tsx"]'
 
+# --- unmarked_ledger_line: a complete task no transcript bounds ---
+UB="$TMP/ub"; mkdir -p "$UB/proj"
+say "$UB/proj/u1.jsonl" u1 2026-01-01T00:00:01Z 5
+{ mark open 2026-01-01T00:00:00Z docs/plans/p.md 1 u1 0; mark close 2026-01-01T00:00:02Z docs/plans/p.md 1 u1 "$(at "$UB/proj/u1.jsonl")" a..b; } > "$UB/markers.tsv"
+printf '# SDD ledger — plan: docs/plans/p.md\nTask 1: complete (commits a..b, unreviewed) — x\nTask 2: complete (commits b..c, unreviewed) — y\n' > "$UB/progress.md"
+J=$(node "$REPORT" --markers "$UB/markers.tsv" --transcripts "$UB/proj" --ledger "$UB/progress.md" --format json 2>/dev/null)
+check "unmarked_ledger_line: a complete task no transcript bounds is unresolved" \
+  "$(q "$J" '.plans[0] | [.completed, ([.tasks[] | [.tasks[0], .label]] | sort), (.excluded | map(select(test("no transcript bounds"))))]')" \
+  '[1,[[1,"marked"],[2,"unresolved"]],["Task 2: no transcript bounds its slice"]]'
+
 # --- wait_matches_job: a launch with no job id is not credited with another job's end ---
 WJ="$TMP/wj"; mkdir -p "$WJ/proj"
 jq -nc '{type: "assistant", isSidechain: false, timestamp: "2026-01-01T00:00:10Z", message: {id: "j1", model: "claude-opus-5-5",
