@@ -215,6 +215,9 @@ variant v1.md '/^## Contracts$/d'
 lint v1.md
 check "missing section: exit 1" "$status" "1"
 has "missing section: named" "$out" "ERROR header: missing '## Contracts' section"
+variant spec-in-task.md '/^\*\*Spec:\*\* `docs\/spec.md`$/d; s/^(### Task 1: First thing)$/\1\n\n**Spec:** `docs\/spec.md`/'
+lint spec-in-task.md
+has "a Spec line inside a task does not stand in for the header's" "$out" "ERROR header: missing **Spec:** line"
 variant v2.md 's#`docs/spec.md`#`docs/nope.md`#'
 lint v2.md
 has "missing Spec path" "$out" "ERROR header: Spec path does not exist: docs/nope.md"

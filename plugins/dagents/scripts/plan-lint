@@ -67,7 +67,7 @@ first_label() { # first_label <label> <unfenced lines>
     if [[ "$candidate" == "**$1:**"* ]]; then printf '%s\n' "$candidate"; return 0; fi
   done <<<"$2"
 }
-header_labels=$(label_lines < "$src")
+header_labels=$(label_lines <<<"$header")
 header_line() { first_label "$1" "$header_labels"; }
 
 # A fenced Host or Routing policy line is an example, not the plan's own.
