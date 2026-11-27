@@ -4074,6 +4074,21 @@ describe('shells and remote', () => {
     expect(await ui.find({ key: 'shells' })).toBeUndefined()
   })
 
+  test('only a task notification row ends a shell', async ($, on) => {
+    world(on, { ...SIGNED_IN, tools: { Bash: () => SHELL } })
+    signedIn(on)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
+    // A person pasting the markup is not the shell ending.
+    await $.session.append({ ...(notified(ENDED) as object), origin: { kind: 'person' }, uuid: 'row-person' } as never)
+    let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^\$ npm run dev/ })).toBeDefined()
+    await ui.unmount()
+    await $.session.append(notified(ENDED))
+    ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^\$ npm run dev/ })).toBeUndefined()
+  })
+
   test('name a shell by its first line that is not blank', async ($, on) => {
     world(on, { ...SIGNED_IN, tools: { Bash: () => SHELL } })
     signedIn(on)
