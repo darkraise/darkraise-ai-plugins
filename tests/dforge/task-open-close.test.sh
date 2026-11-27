@@ -220,6 +220,17 @@ run bash "$CLOSE" docs/plan.md 1 'done: x; verified: y; remaining: none; discove
 check "close: a review text with a newline exits 2 and writes nothing" "$rc|$(cat "$LEDGER")" "2|$LEDGER_BEFORE"
 rm -rf other
 
+# --- --open refuses another checkout's plan and a task number it cannot read ---
+git worktree add -q --detach "$TMP/wt-open" HEAD
+LEDGER_BEFORE=$(cat "$LEDGER")
+out=$(cd "$TMP/wt-open" && bash "$BRIEF" --open "$REPO/docs/plan.md" 2 2>"$TMP/err"); rc=$?
+check "open: a worktree session given the primary's plan exits 2" "$rc|$(cat "$LEDGER")" "2|$LEDGER_BEFORE"
+git worktree remove --force "$TMP/wt-open"
+run bash "$BRIEF" --open docs/plan.md 1x
+check "open: a non-numeric task number exits 2" "$rc|$(grep -c '^Task 1x:' "$LEDGER")" "2|0"
+run bash "$BRIEF" --open docs/plan.md 01
+check "open: 01 opens Task 1" "$(grep -c '^Task 01:' "$LEDGER")|$(grep -c 'task 1: already open' <<<"$out")" "0|1"
+
 # --- auto: one budget line, task-close's own ---
 . "$HERE/fixtures/cockpit-ack.sh"
 cockpit_ack_start "$HOME"

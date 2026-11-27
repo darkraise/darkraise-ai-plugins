@@ -16,8 +16,9 @@
 # Default OUTFILE: <repo-root>/.dforge/sdd/<plan-basename>/task-<N>-brief.md
 # or .../plan-header.md (per plan and per worktree; concurrent runs of the SAME
 # plan in the same working tree share it).
-# Exit: 0 ok; 2 usage, or --open given a plan whose ledger (same basename)
-# names another plan; 3 no such task; 4 an amendment does not apply.
+# Exit: 0 ok; 2 usage, a TASK_NUMBER that is not digits (01 reads as 1), or
+# --open given a plan whose ledger (same basename) names another plan; 3 no
+# such task; 4 an amendment does not apply.
 # Last output line: the session budget line from scripts/context-size.
 set -euo pipefail
 
@@ -41,6 +42,10 @@ plan=$(plan_locate "$1")
 ctx=$(_plan_ctx "$plan")
 dforge_stores_init "$ctx"
 if [ "$header" -eq 1 ]; then n="" given=${2:-}; else n=$2 given=${3:-}; fi
+if [ "$header" -eq 0 ]; then
+  [[ "$n" =~ ^[0-9]+$ ]] || { echo "task-brief: TASK_NUMBER must be a task number: $n" >&2; exit 2; }
+  n=$((10#$n))
+fi
 
 # Two plans with one basename share a ledger directory, so --open checks the
 # ledger's identity line before it writes anything.
