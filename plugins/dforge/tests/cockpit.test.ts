@@ -1081,6 +1081,17 @@ describe('attribution guard', () => {
     expect((await $.tool.call({ tool: 'Bash', command: 'git commit -F ~/msg.txt' })).deny).toBeUndefined()
   })
 
+  test('judges a camelCase or nested message field of a git write tool', async ($, on) => {
+    world(on, { ...SIGNED_IN })
+    signedIn(on, {})
+    const merged = await $.tool.call({ tool: 'mcp__gitlab__merge_merge_request', mergeCommitMessage: `x\n\n${A6_AI}` } as never)
+    expect(merged.deny).toBe(A6_DENY)
+    const nested = await $.tool.call({ tool: 'mcp__github__create_pull_request', pull_request: { title: 'x', body: `x\n\n${A6_AI}` } } as never)
+    expect(nested.deny).toBe(A6_DENY)
+    const clean = await $.tool.call({ tool: 'mcp__gitlab__merge_merge_request', mergeCommitMessage: 'x' } as never)
+    expect(clean.deny).toBeUndefined()
+  })
+
   test('judges only the message fields of a git write tool', async ($, on) => {
     world(on, { ...SIGNED_IN })
     signedIn(on, {})
@@ -1455,6 +1466,16 @@ describe('review seat write guard', () => {
     expect((await write($, 'judge-1', REVIEW)).deny).toBeUndefined()
   })
 
+  test('reads a report path on the line after "Write your full report to"', async ($, on) => {
+    const R1 = `${STATE}/task-1-rereview-1-report.md`
+    const R2 = `${STATE}/task-1-rereview-2-report.md`
+    world(on, { tokens: 10_000, agentIds: ['judge-1'] })
+    on('agent.list', () => ({ value: [] }) as never)
+    await $.session.start(START)
+    await $.agent.spawn(dispatch(`Write your full report to\n${R2}\nThe earlier round is in ${R1}`, 'dforge:judge-opus', 1))
+    expect((await write($, 'judge-1', R1)).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (${R2}); ${R1} is not one.`)
+    expect((await write($, 'judge-1', R2)).deny).toBeUndefined()
+  })
   test('reads a "Report file:" line as the report line', async ($, on) => {
     const M1 = `${STATE}/milestone-M1-audit-report.md`
     const M2 = `${STATE}/milestone-M2-audit-report.md`
@@ -4844,6 +4865,7 @@ describe('discord', () => {
     expect(redact('API_KEY=hunter2 make')).toBe('API_KEY=[hidden] make')
     expect(redact('{"password":"hunter2","api_key": "a\\"b", "n": 1}')).toBe('{"password":[hidden],"api_key": [hidden], "n": 1}')
     expect(redact('curl -d \'{\\"token\\":\\"abc\\"}\' x')).toBe('curl -d \'{\\"token\\":[hidden] x')
+    expect(redact('{\\"password\\":\\"a\\\\\\" b c\\"}')).toBe('{\\"password\\":[hidden]')
     expect(redact('GITHUB_TOKEN=abc123 gh pr list')).toBe('GITHUB_TOKEN=[hidden] gh pr list')
     expect(redact("{'api_key': 'a\\'b', 'n': 1}")).toBe("{'api_key': [hidden], 'n': 1}")
     expect(redact('max_tokens: 4096')).toBe('max_tokens: 4096')
@@ -8189,6 +8211,23 @@ describe('auto run', () => {
       { model: 'sonnet', effort: 'high' },
       { model: 'claude-opus-5-5', effort: 'max', agentId: 'agent-1' },
     ])
+  })
+
+  test('keeps the launch model across a read that finds no run file', async ($, on) => {
+    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
+    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]', effortLevel: 'max' }, autoFile: files[AUTO] }
+    const clock = world(on, w)
+    const sent = sentSteps(on)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    const kept = files[AUTO]!
+    delete files[AUTO]
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    files[AUTO] = kept
+    await drain($.turn.step({ turnId: 't2', index: 0, model: 'claude-opus-5-5', effort: 'max', messageCount: 1 }))
+    expect(sent[sent.length - 1]).toEqual({ model: 'sonnet', effort: 'high' })
   })
 
   for (const how of ['/model', 'a stopped run'] as const) {

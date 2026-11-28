@@ -71,8 +71,9 @@ const SECRETS: [RegExp, string][] = [
   [/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|$)/g, '[private key]'],
   [/\beyJ[\w-]+\.[\w-]+\.[\w-]+/g, '[token]'],
   // A key may end its own quoting (JSON's "password": or an escaped \"password\":) before the separator,
-  // and an escaped value (\"a b c\") runs to its closing \", spaces included.
-  [/\b(\w*(?:api[_-]?key|token|secret|password|passwd|pwd)\\?["']?\s*[=:]\s*)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\\"(?:[^"\\]|\\[^"])*\\"\S*|\S+)/gi, '$1[hidden]'],
+  // and an escaped value (\"a b c\") runs to its closing \", spaces included; an
+  // escaped backslash before an escaped quote (\\\") is inside the value.
+  [/\b(\w*(?:api[_-]?key|token|secret|password|passwd|pwd)\\?["']?\s*[=:]\s*)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\\"(?:\\\\\\"|[^"\\]|\\[^"])*\\"\S*|\S+)/gi, '$1[hidden]'],
   [/https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\/\S+/g, '[webhook]'],
 ]
 

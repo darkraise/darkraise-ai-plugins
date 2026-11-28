@@ -262,7 +262,7 @@ const PROMPT_PATH = pathShape('-prompt\\.md')
 // your report to" or "Report file:", its phrase free to wrap: the text after
 // it, to its sentence's or line's end.
 const REPORT_LINES =
-  /(?:^|\n|[.!?][ \t]+)[ \t]*(?:[->][ \t]*)?(?:\*\*)?(?:Write\s+your\s+(?:full\s+)?report\s+to|Report\s+file:)(?:\*\*)?[ \t]+(\S[^\n]*?)(?=\.(?:\s|$)|\n|$)/g
+  /(?:^|\n|[.!?][ \t]+)[ \t]*(?:[->][ \t]*)?(?:\*\*)?(?:Write\s+your\s+(?:full\s+)?report\s+to(?:\*\*)?\s+|Report\s+file:(?:\*\*)?[ \t]+)(\S[^\n]*?)(?=\.(?:\s|$)|\n|$)/g
 // How many main-turn context readings the forecast keeps.
 const TURN_READINGS = 12
 const STORE_URL = 'notifyUrl'
@@ -3358,7 +3358,9 @@ async function syncAutoRun($: EngineInterface) {
   if (before?.active === true && now?.active !== true) {
     S.offerRanKey = null
     S.offerDirStamp = null
-    S.launch = null
+    // Only a read that shows the run stopped drops the launch model: a failed
+    // read, or no run file, says nothing about the run.
+    if (now !== null) S.launch = null
   }
   if (before?.active === true && now !== null && !now.active && now.stopped !== null) {
     await notify($, { kind: 'blocked', title: '⛔ Auto run stopped', detail: now.stopped, isPlain: true })
@@ -4062,14 +4064,17 @@ async function readResumeOffer(
   }
   const stamp = stamps.length === dirs.length ? stamps.join('\t') : null
   if (!isFull && stamp !== null && stamp === S.offerDirStamp) return
-  S.offerDirStamp = stamp
   const now = await $.clock.now()
   const fresh = (await offerHandoffs($, dirs)).filter(one => now - one.at < RESUME_WITHIN).sort((a, b) => b.at - a.at)
   if (fresh.length === 0) {
+    S.offerDirStamp = stamp
     if ((await read($, resumeOffer)) !== null) await update($, resumeOffer, () => null)
     return
   }
-  if ((await read($, isPlanSession)) || (await read($, autoRun))?.active) return
+  if ((await read($, isPlanSession)) || (await read($, autoRun))?.active) {
+    S.offerDirStamp = stamp
+    return
+  }
   const claims = new Map<string, OfferClaim>()
   const claimKeys: string[] = []
   for (const key of new Set(fresh.map(one => one.key))) {
@@ -4083,7 +4088,10 @@ async function readResumeOffer(
   }
   const handoffKeys = fresh.map(one => `${one.path}=${one.mtime}`)
   const runKey = [...handoffKeys, ...claimKeys, ...(await offerTimes($, docs, places, fresh.map(one => one.subject)))].join('\t')
-  if (S.isOfferRunning || S.offerRanKey === runKey) return
+  // A scan that meets a running chain is not stored: the next call scans again.
+  if (S.isOfferRunning) return
+  S.offerDirStamp = stamp
+  if (S.offerRanKey === runKey) return
   S.offerRanKey = runKey
   S.isOfferRunning = true
   const epoch = S.offerEpoch
@@ -5255,6 +5263,8 @@ async function readPlace($: EngineInterface) {
   // A cd into another repository moves its primary checkout too.
   if (S.where.checkout !== was) {
     S.offerEpoch += 1
+    // The offer was read for the other checkout: on a return, the same handoffs must be read again.
+    S.offerRanKey = null
     await readPrimary($)
   }
 }
@@ -5628,9 +5638,18 @@ async function judgeWriteDenial($: EngineInterface, tool: string, e: { agentId?:
 }
 
 // The fields of a git write tool that become a commit's, pull request's or
-// merge request's text: title, body, message, subject and description, alone
-// or after a prefix (commit_message, commit_title, merge_commit_message).
-const MESSAGE_FIELD = /^(?:\w+_)?(?:title|body|message|subject|description)$/
+// merge request's text: title, body, message, subject and description, alone,
+// after a prefix (commit_message, merge_commit_message) or ending a camelCase
+// name (mergeCommitMessage).
+const MESSAGE_FIELD = /(?:^|_)(?:title|body|message|subject|description)$|[a-z](?:Title|Body|Message|Subject|Description)$/
+
+// The strings of a git write tool's message fields, at any depth (a
+// pull_request object's body too).
+function messageTexts(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(messageTexts)
+  if (typeof value !== 'object' || value === null) return []
+  return Object.entries(value).flatMap(([name, inner]) => (MESSAGE_FIELD.test(name) ? stringsIn(inner) : messageTexts(inner)))
+}
 
 // The refusal for an attribution line: the deny text, and the line the
 // refusals list keeps.
@@ -5683,8 +5702,7 @@ async function attributionLine($: EngineInterface, tool: string, e: object): Pro
   if (!isGitWriteTool(tool)) return undefined
   // Only the fields that become a commit's, pull request's or merge request's
   // text: a file's content is not attribution.
-  const fields = Object.entries(e).filter(([name]) => MESSAGE_FIELD.test(name))
-  for (const text of fields.flatMap(([, value]) => stringsIn(value))) {
+  for (const text of messageTexts(e)) {
     const line = attributionIn(text)
     if (line !== undefined) return attributionRefusal(line)
   }
