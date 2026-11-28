@@ -89,6 +89,7 @@ export const windowsSeconds = {
   'tests/dforge/register.test.sh': 45,
   'tests/dforge/repo-audit.test.sh': 80,
   'tests/dforge/retained-review-data.acceptance.test.sh': 50,
+  'tests/dforge/review-3c81c7d6-fixes.acceptance.test.sh': 60,
   'tests/dforge/review-depth-qa.acceptance.test.sh': 288,
   'tests/dforge/review-depth.acceptance.test.sh': 115,
   'tests/dforge/review-panel.test.sh': 70,
