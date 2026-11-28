@@ -103,11 +103,13 @@ if [ -f "$stamp" ]; then
   # session, terminal blocks included (they write no handoff).
   turn_record=$(ending_turn_record "$session_id")
   # A roadmap outside git has no turn-start version: the closed count
-  # turn-start.sh recorded stands in for it.
-  closed_last="" closed_mirror=""
+  # turn-start.sh recorded stands in for it, when it was read from this
+  # roadmap.
+  closed_last="" closed_mirror="" closed_docs=""
   if [ "$docs_store" != local ] && [ -n "$docs" ] && [ -f "$docs/roadmap.md" ]; then
     . "${SCRIPT_DIR}/lib/roadmap.sh"
-    closed_last=$(tr -d '\r' 2>/dev/null < "$stamp.closed")
+    IFS=$'\t' read -r closed_last closed_docs < <(tr -d '\r' 2>/dev/null < "$stamp.closed") || :
+    [ "$closed_docs" = "$docs" ] || closed_last=""
     closed_mirror=$(roadmap_rows "$docs/roadmap.md" | awk -F'\t' '$5 == "closed"' | grep -c . || true)
   fi
   changed_here() { # FILE

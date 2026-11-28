@@ -39,8 +39,10 @@ else
   rm -f "$stamp.refs.tmp" "$stamp.refs" 2>/dev/null || true
 fi
 # A roadmap kept outside git (darkmem documents) has no start-of-turn version
-# in git: turn-end.sh compares its closed count with this one. In a subshell,
-# since roots.sh exits on a malformed store config.
+# in git: turn-end.sh compares its closed count with this one, beside the
+# documents directory it was read from, so a stop in another repository never
+# compares two roadmaps. In a subshell, since roots.sh exits on a malformed
+# store config.
 rm -f "$stamp.closed" 2>/dev/null || true
 if [ -n "$cwd" ]; then
   (
@@ -50,8 +52,10 @@ if [ -n "$cwd" ]; then
     . "$lib/roots.sh"
     dforge_stores_init "$root" 2>/dev/null
     [ "$_DFORGE_DOCS_STORE" != local ] && [ -n "$_DFORGE_DOCS_ROOT" ] && [ -f "$_DFORGE_DOCS_ROOT/roadmap.md" ] || exit 0
+    docs=$_DFORGE_DOCS_ROOT
     . "$lib/roadmap.sh"
-    roadmap_rows "$_DFORGE_DOCS_ROOT/roadmap.md" | awk -F'\t' '$5 == "closed"' | grep -c . > "$stamp.closed"
+    closed=$(roadmap_rows "$docs/roadmap.md" | awk -F'\t' '$5 == "closed"' | grep -c .)
+    printf '%s\t%s\n' "$closed" "$docs" > "$stamp.closed"
   ) 2>/dev/null
 fi
 find "$turns_dir" -maxdepth 1 -type f -mtime +7 -delete 2>/dev/null || true

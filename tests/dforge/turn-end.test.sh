@@ -612,6 +612,19 @@ sleep 1
 sed 's/| M2 | Two | \(.*\) | open |/| M2 | Two | \1 | closed |/' "$DMM/dforge/roadmap.md" > "$TMP/roadmap.md" && mv "$TMP/roadmap.md" "$DMM/dforge/roadmap.md"
 out=$(stop_at s-dm0 "$DMR" 'M2 closed.' 2>"$TMP/dm0.err")
 check "darkmem documents: a milestone closed in a session's first turn is held" "$(decision "$out")|$(wc -c < "$TMP/dm0.err" | tr -d ' ')" "block|0"
+# A count taken at a prompt in another repository is never compared with
+# this one's roadmap.
+cp "$HOME/.dforge/config.json" "$TMP/dm1.config"; cp "$HOME/.dforge/stores.json" "$TMP/dm1.stores"
+DMR2="$TMP/dm-roadmap-2"; git init -q "$DMR2"
+DMM2=$(stores_home "$HOME" "$DMR2" proj10 darkmem local)
+cat "$TMP/dm1.config" "$HOME/.dforge/config.json" | jq -s '.[0] * .[1]' > "$TMP/dm.json" && mv "$TMP/dm.json" "$HOME/.dforge/config.json"
+cat "$TMP/dm1.stores" "$HOME/.dforge/stores.json" | jq -s '.[0] * .[1]' > "$TMP/dm.json" && mv "$TMP/dm.json" "$HOME/.dforge/stores.json"
+mkdir -p "$DMM2/dforge"
+{ printf '# Roadmap\n\n| M | Name | Exit | Register | State | Note |\n|---|---|---|---|---|---|\n'; milestone M1 One open; } > "$DMM2/dforge/roadmap.md"
+sleep 1; prompt s-dmx "$DMR2"
+sleep 1
+milestone M5 Five open >> "$DMM/dforge/roadmap.md"
+check "darkmem documents: a count from another repository's roadmap holds nothing" "$(stop_at s-dmx "$DMR" 'Added M5.')" ""
 rm -f "$HOME/.dforge/config.json" "$HOME/.dforge/stores.json"
 
 # A transition turn is released by the block next-step wrote, by finishing's
