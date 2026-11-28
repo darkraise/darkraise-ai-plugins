@@ -543,12 +543,15 @@ work is done, so a handoff is not held for a proof the next session will run.
 A `SubagentStop` hook (matcher
 `^(dagents:)?impl-(haiku|(sonnet|opus|fable)-(low|medium|high|xhigh|max))$`,
 30 s timeout) runs `scripts/impl-stop-gate`. It blocks a `DONE` or
-`DONE_WITH_CONCERNS` stop whose reply has no `Report: <absolute path>` line,
-whose report file is missing, lacks `## Discovered issues (not fixed)` or
-`## Assumptions made`, or whose last `## Verified` section holds no command
-bullet. A report whose first non-empty line begins `# UI proof:` passes
-without those sections. Every other stop passes; after two blocks the next
-distinct failing stop passes, as does any stop after five fires.
+`DONE_WITH_CONCERNS` stop whose reply has no `Report: <path>` line (the last
+such line counts), whose path is not absolute, whose report file is missing,
+lacks `## Discovered issues (not fixed)` or `## Assumptions made`, or whose
+last `## Verified` section holds no command bullet. A report whose first
+non-empty line begins `# UI proof:` passes without those sections. After a
+block, the agent's next stop is checked the same way even with no
+`**Status:**` line, unless it says BLOCKED or NEEDS_CONTEXT. Every other stop
+passes; after two blocks the next distinct failing stop passes, as does any
+stop after five fires.
 
 ### Fast mode
 
@@ -1047,7 +1050,8 @@ codex plugin add dagents@darkraise
 Register the repository root (its Git URL or a checkout's absolute path), not
 the catalog file, so root discovery selects `.agents/plugins/marketplace.json`.
 The Codex manifest declares no hooks, so the cockpit and the Stop hooks do not
-run there; see [native-codex.md](reference/native-codex.md).
+run there; for how dagents runs on Codex, see
+[native-codex.md](reference/native-codex.md).
 
 An installed copy stays at the version it was installed at. To take a new
 release, run `claude plugin update dagents@darkraise` and start a new session
@@ -1298,8 +1302,10 @@ node scripts/test-all.mjs --plugin dagents
 ```
 
 Run it from the repository root. It runs every `tests/dagents/*.test.sh` and
-`*.acceptance.sh` suite and, when the `claude` CLI is on PATH,
-`claude plugin test plugins/dagents` for `plugins/dagents/tests/*.test.ts`.
+`*.acceptance.sh` suite; when the `claude` CLI is on PATH and the host is not
+Windows, `claude plugin test plugins/dagents` for
+`plugins/dagents/tests/*.test.ts`; and, when `tsc` is on PATH and Claude Code
+has generated the mod's types, `tsc --noEmit -p plugins/dagents`.
 
 Requires `node`, `jq` and `git`, plus the `claude` CLI for the cockpit tests. No model calls: the executor suites run against a stub
 `codex` on `PATH` and a synthetic roster, never the real CLI.
