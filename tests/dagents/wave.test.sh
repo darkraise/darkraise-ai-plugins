@@ -263,6 +263,27 @@ case "$(uname -s)" in
     git -C "$NLWT" branch -f sdd/plan/task-1 HEAD
     run status docs/plan.md 1 "$BASE"
     check "worktree list: a path with a newline names its worktree whole" "$(count_in "$out" "worktree $GTMP/wt-nl"$'\n'"x")" "1"
+    # One worktree's path holds another's whole path between newlines.
+    SR="$TMP/seen"
+    git init -q -b main "$SR"
+    mkdir -p "$SR/docs" && cp "$REPO/docs/plan.md" "$SR/docs/plan.md"
+    git -C "$SR" add -A && git -C "$SR" commit -qm base
+    SBASE=$(git -C "$SR" rev-parse HEAD)
+    SB="$GTMP/sb"
+    SA="$GTMP/sa"$'\n'"$SB"$'\n'"c"
+    seen_task() { # seen_task <N> <worktree> <file>
+      git -C "$SR" worktree add -q --detach "$2" main
+      (cd "$2" && bash "$WAVE" enter "$SR/docs/plan.md" "$1" "$SBASE" >/dev/null)
+      printf '%s\n' "$1" > "$2/$3"
+      git -C "$2" add -A && git -C "$2" commit -qm "task $1"
+      git -C "$2" branch -f "sdd/plan/task-$1" HEAD
+    }
+    seen_task 2 "$SA" b.txt
+    seen_task 3 "$SB" c.txt
+    (cd "$SR" && bash "$WAVE" merge docs/plan.md 2 "$SBASE" && bash "$WAVE" merge docs/plan.md 3 "$SBASE") >/dev/null 2>&1
+    out=$(cd "$SR" && bash "$WAVE" clean docs/plan.md 2 "$SBASE" 2>&1)
+    check "clean: a worktree whose path sits inside another's between newlines is removed" \
+      "$(count_in "$out" "removed $SB"):$([ -d "$SB" ] && echo yes || echo no)" "1:no"
     ;;
 esac
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
