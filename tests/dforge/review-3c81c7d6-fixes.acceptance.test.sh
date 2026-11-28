@@ -215,7 +215,7 @@ else
 #!/usr/bin/env bash
 buf=$(mktemp)
 "$SHIM_REAL_AWK" "$@" > "$buf"; rc=$?
-if grep -q 'dforge:' "$buf"; then
+if [ "$SHIM_STALL" = awk ] && grep -q 'dforge:' "$buf"; then
   size=$(wc -c < "$buf")
   head -c $((size / 2)) "$buf"
   : > "$SHIM_FLAG"
@@ -228,18 +228,18 @@ EOF
   cat > "$SHIM/mv" <<'EOF'
 #!/usr/bin/env bash
 for last; do :; done
-case $last in
-  */plans/active.md) : > "$SHIM_FLAG"; sleep 120; exit 1 ;;
+case $SHIM_STALL:$last in
+  mv:*/plans/active.md) : > "$SHIM_FLAG"; sleep 120; exit 1 ;;
 esac
 exec "$SHIM_REAL_MV" "$@"
 EOF
   chmod +x "$SHIM/awk" "$SHIM/mv"
 
-  killed_run() { # killed_run NAME — migrate the legacy repository NAME under the shims, killed once the shim stalls
+  killed_run() { # killed_run NAME STALLER — migrate the legacy repository NAME under the shims, killed once STALLER (awk or mv) stalls
     local dir=$TMP/$1 flag=$TMP/$1.flag i pid
     make_legacy "$dir"
     rm -f "$flag"
-    PATH="$SHIM:$PATH" SHIM_REAL_AWK=$REAL_AWK SHIM_REAL_MV=$REAL_MV SHIM_FLAG=$flag setsid bash "$S/dforge-migrate" "$dir" >/dev/null 2>&1 &
+    PATH="$SHIM:$PATH" SHIM_REAL_AWK=$REAL_AWK SHIM_REAL_MV=$REAL_MV SHIM_FLAG=$flag SHIM_STALL=$2 setsid bash "$S/dforge-migrate" "$dir" >/dev/null 2>&1 &
     pid=$!
     PIDS_TO_KILL="$PIDS_TO_KILL -$pid"
     for i in $(seq 1 300); do [ -e "$flag" ] && break; sleep 0.1; done
@@ -252,11 +252,11 @@ EOF
     got=$(cat "$1/$PLAN_REL" 2>/dev/null; printf x)
     if [ "$got" = "$OLD" ]; then echo old; elif [ "$got" = "$NEW" ]; then echo new; else echo "other ($(wc -c < "$1/$PLAN_REL" 2>/dev/null) bytes)"; fi
   }
-  killed_run mig-awk-kill
+  killed_run mig-awk-kill awk
   check "A9: the rewrite was reached before the kill (awk stalled)" "$KILL_REACHED" "yes"
   case "$(plan_state "$TMP/mig-awk-kill")" in old | new) r=ok ;; *) r=$(plan_state "$TMP/mig-awk-kill") ;; esac
   check "A9: a plan rewrite killed while its text is half produced leaves the plan's old or new content" "$r" "ok"
-  killed_run mig-mv-kill
+  killed_run mig-mv-kill mv
   check "A9: the rewrite was reached before the kill (mv stalled)" "$KILL_REACHED" "yes"
   case "$(plan_state "$TMP/mig-mv-kill")" in old | new) r=ok ;; *) r=$(plan_state "$TMP/mig-mv-kill") ;; esac
   check "A9: a plan rewrite killed just before it lands leaves the plan's old or new content" "$r" "ok"
