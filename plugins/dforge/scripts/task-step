@@ -860,7 +860,7 @@ parse_report() {
 # task's state file, so a path outside the work tree or a hash that is no
 # object id gets no command: the session runs these lines as printed.
 restore_hints() {
-  local root p h line rmode nmode nh q link
+  local root p h line rmode nmode nh q link x
   root=$(git -C "$1" rev-parse --show-toplevel | tr -d '\r')
   while IFS= read -r line; do
     [ -n "$line" ] || continue
@@ -898,8 +898,10 @@ restore_hints() {
     elif ! [[ $h =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]; then
       printf '  restore: none: the recorded content hash is no object id; restore it by hand\n'
     elif git -C "$root" cat-file -e "$h" 2>/dev/null; then
-      printf '  restore: rm -f -- %q && git -C %q cat-file --filters --path=%q %q > %q && mv -f -- %q %q\n' \
-        "$root/$p.dforge-restore" "$root" "$p" "$h" "$root/$p.dforge-restore" "$root/$p.dforge-restore" "$root/$p"
+      x=""
+      [ "$rmode" != 100755 ] || x=$(printf ' && chmod +x -- %q' "$root/$p.dforge-restore")
+      printf '  restore: rm -f -- %q && git -C %q cat-file --filters --path=%q %q > %q%s && mv -f -- %q %q\n' \
+        "$root/$p.dforge-restore" "$root" "$p" "$h" "$root/$p.dforge-restore" "$x" "$root/$p.dforge-restore" "$root/$p"
     else
       printf '  restore: none: its content at review time (%s) was not stored; restore it by hand\n' "$h"
     fi

@@ -1104,6 +1104,26 @@ REPORT
   check "verdict: a mode-only change to a file dirty at review time exits 6" "$rr_rc $(grep -cx 'other.txt' <<<"$rr_err")" "6 1"
   chmod -x "$RR_REPO/other.txt"
   rr_git checkout -- other.txt
+  # A restore brings back the executable bit the snapshot recorded.
+  rr_reset
+  chmod +x "$RR_REPO/other.txt"
+  printf 'dirty\n' >> "$RR_REPO/other.txt"
+  rr_run review docs/plan.md 1
+  vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: pass
+|quality: approved
+|scores: spec 17 / scope 18 / verification 16 / quality 16
+REPORT
+  printf 'more\n' >> "$RR_REPO/other.txt"
+  rr_run verdict docs/plan.md 1
+  restore=$(grep -A1 -x 'other.txt' <<<"$rr_err" | sed -n 's/^  restore: //p')
+  (cd "$RR_REPO" && bash -c "$restore" >/dev/null 2>&1)
+  rr_run verdict docs/plan.md 1
+  check "verdict: a restored executable file keeps its mode and passes" \
+    "$rr_rc $([ -x "$RR_REPO/other.txt" ] && echo x) $(tail -n 1 "$RR_REPO/other.txt")" "0 x dirty"
+  chmod -x "$RR_REPO/other.txt"
+  rr_git checkout -- other.txt
   # A restore line never writes through a link swapped in after the review.
   rr_reset
   printf 'dirty\n' >> "$RR_REPO/other.txt"
