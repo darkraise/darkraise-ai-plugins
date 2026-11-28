@@ -556,6 +556,29 @@ rewrite_moved() {
 # gives, as next-step keys a handoff: the plan's or draft's basename from its
 # subject, else adhoc-legacy-<marker at, else mtime>. AS, in a dry run, is the
 # path FILE takes once its state directory moves; the lines name it.
+# killed_after_link FILE TARGET — whether TARGET already holds what renaming
+# FILE would write: a run killed between the link and the removal below
+# leaves both names, and the rerun only has to remove FILE.
+killed_after_link() {
+  local same=1
+  [ -f "$2" ] && [ ! -L "$2" ] || return 1
+  rewrite_moved "$1" "$(older_spellings "$1")" "$2" || return 1
+  cmp -s -- "$rewritten" "$2" && same=0
+  rm -f -- "$rewritten"
+  return "$same"
+}
+
+# copy_new SRC DST — SRC's bytes and mode to DST, for a file system without
+# hard links. DST is claimed under noclobber, so an existing name is refused
+# as the link refuses it.
+copy_new() {
+  local mode
+  ( set -C; : > "$2" ) 2>/dev/null || return 1
+  if ! cat -- "$1" > "$2"; then rm -f -- "$2"; return 1; fi
+  mode=$(stat -c %a -- "$1" 2>/dev/null || stat -f %Lp -- "$1" 2>/dev/null) && chmod "$mode" -- "$2" 2>/dev/null
+  return 0
+}
+
 migrate_latest() {
   local f=$1 as=${2:-$1} m kind subject at key target word
   m=$(marker_of "$f")
@@ -585,6 +608,9 @@ migrate_latest() {
   # a link out of its checkout.
   if ! writable "${f%/*/*/*}" "$f"; then
     refuse "$f is reached through a symbolic link; rename it to $key.md by hand"
+  elif [ "$dry" -eq 0 ] && [ "$as" = "$f" ] && killed_after_link "$f" "$target"; then
+    if rm -f -- "$f"; then done_move "$as" "$target"
+    else refuse "could not remove $f once it was linked to $target; remove it by hand"; fi
   elif [ -e "$target" ] || [ -L "$target" ] \
     || { [ "$as" != "$f" ] && { [ -e "${f%/*}/$key.md" ] || [ -L "${f%/*}/$key.md" ]; }; }; then
     refuse "$as is the handoff for $key, and $target already exists; keep one by hand, then run dagents-migrate again"
@@ -596,7 +622,7 @@ migrate_latest() {
     refuse "could not rewrite $f to name $target; it is left as it was"
   # A hard link fails on an existing name, so a <key>.md another session
   # writes after the test above is never replaced, as mv would replace it.
-  elif ! ln -- "$rewritten" "$target" 2>/dev/null; then
+  elif ! { ln -- "$rewritten" "$target" 2>/dev/null || copy_new "$rewritten" "$target"; }; then
     rm -f -- "$rewritten"
     if [ -e "$target" ] || [ -L "$target" ]; then
       refuse "$as is the handoff for $key, and $target already exists; keep one by hand, then run dagents-migrate again"

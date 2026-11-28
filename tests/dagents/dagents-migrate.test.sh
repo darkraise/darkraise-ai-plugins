@@ -958,6 +958,37 @@ HOME="$TMP/rh-home" migrate "$FM" "$R" > /dev/null 2>&1
 NEW="$RT/.dagents/handoff/adhoc-legacy-1700001500.md"
 check "an interrupted handoff rename: a rerun leaves it naming itself" "$(exists "$R/.dagents/handoff/latest.md") $(grep -c 'latest\.md' "$NEW" 2>&1)" "no 0"
 
+# --- a rename killed between its link and its removal is finished by a rerun ---
+R="$TMP/krepo"; repo "$R"; RT=$(git -C "$R" rev-parse --show-toplevel)
+mkdir -p "$R/.dagents/handoff"
+old_block 'session=- done=0 closed=0 subject=- at=1700001600' > "$R/.dagents/handoff/latest.md"
+KS="$TMP/kill-rm"; mkdir -p "$KS"
+printf '#!/bin/sh\nfor a in "$@"; do case $a in */latest.md) kill -KILL $PPID; exit 137 ;; esac; done\nexec "%s" "$@"\n' "$(command -v rm)" > "$KS/rm"
+chmod +x "$KS/rm"
+HOME="$TMP/rh-home" PATH="$KS:$PATH" migrate "$FM" "$R" > /dev/null 2>&1
+NEW="$RT/.dagents/handoff/adhoc-legacy-1700001600.md"
+before="$(exists "$R/.dagents/handoff/latest.md") $(exists "$NEW")"
+out=$(HOME="$TMP/rh-home" migrate "$FM" "$R"); code=$?
+check "a rename killed after its link: a rerun removes latest.md" \
+  "$before|$code $(exists "$R/.dagents/handoff/latest.md") $(grep -c 'latest\.md' "$NEW" 2>&1) $(grep -c 'refused' <<<"$out")" "yes yes|0 no 0 0"
+
+# --- a handoff directory without hard links still renames ---
+R="$TMP/nlrepo2"; repo "$R"; RT=$(git -C "$R" rev-parse --show-toplevel)
+mkdir -p "$R/.dagents/handoff"
+old_block 'session=- done=0 closed=0 subject=- at=1700001700' > "$R/.dagents/handoff/latest.md"
+chmod 600 "$R/.dagents/handoff/latest.md"
+NS="$TMP/no-ln"; mkdir -p "$NS"
+printf '#!/bin/sh\necho "ln: failed to create hard link: Operation not permitted" >&2\nexit 1\n' > "$NS/ln"
+chmod +x "$NS/ln"
+out=$(HOME="$TMP/rh-home" PATH="$NS:$PATH" migrate "$FM" "$R"); code=$?
+NEW="$RT/.dagents/handoff/adhoc-legacy-1700001700.md"
+check "no hard links: the handoff is renamed" \
+  "$code $(exists "$R/.dagents/handoff/latest.md") $(grep -c 'latest\.md' "$NEW" 2>&1) $(grep -c 'refused' <<<"$out")" "0 no 0 0"
+case "$(uname -s)" in
+  MINGW* | MSYS* | CYGWIN*) printf 'skip - no hard links: the mode is kept (Windows has no file modes)\n' ;;
+  *) check "no hard links: the mode is kept" "$(ls -l "$NEW" | cut -c1-10)" "-rw-------" ;;
+esac
+
 # --- a worktree whose path holds a newline ---
 case "$(uname -s)" in
   MINGW* | MSYS* | CYGWIN*) printf 'skip - worktree list: a worktree whose path holds a newline is migrated (Windows file names cannot hold a newline)\n' ;;
