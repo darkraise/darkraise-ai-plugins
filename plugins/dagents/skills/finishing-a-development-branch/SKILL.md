@@ -322,8 +322,8 @@ prose note is not written. In the same commit as the index line:
   `(deferred by the auto run)`, even when a completed task also cites it, is set with
   `scripts/register set <register> <id> deferred --note "deferred by the auto run: <the line's Ruling>[; partial commits <a7>..<b7> | ; unmerged task ref <ref>]"`
   instead, with the line's `partial commits` or `unmerged task ref` clause when it has one,
-  whichever finish action runs this step, never `done` or `verify`; a row
-  already `done` or `n/a` is left as it is;
+  whichever finish action runs this step, never `done` or `verify`, even over
+  a `done`; any other `done` or `n/a` row is left as it is;
 - add a row for every `minor (deferred)` line, every `parked` line, every
   complete line's `discovered:` field that is not `none`, and every final-review
   finding you left for your human partner, with
