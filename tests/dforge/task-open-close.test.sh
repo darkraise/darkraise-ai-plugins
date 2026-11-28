@@ -271,6 +271,16 @@ run bash "$BRIEF" --open docs/auto-plan.md 1
 CLAUDE_CODE_SESSION_ID=s-tc run bash "$CLOSE" docs/auto-plan.md 1 "$CP"
 check "auto: task-close prints one budget line (A13)" \
   "$rc|$(grep -c '^budget' <<<"$out")|$(tail -n 1 <<<"$out" | cut -c1-12)" "0|1|budget (auto"
+# A task-complete that fails with any status but 5 leaves the completion
+# unrecorded: task-close says so and exits 1.
+KIT="$TMP/kit"; mkdir -p "$KIT"; cp -R "$P/scripts" "$P/.claude-plugin" "$KIT/"
+printf '#!/usr/bin/env bash\ncase $1 in task-complete) exit 7 ;; *) exit 0 ;; esac\n' > "$KIT/scripts/auto-run"
+sed '/^### Task 2/,$d; s/^# Open Close Fixture$/# Open Close Fixture B/' docs/plan.md > docs/auto-plan-b.md
+git add docs/auto-plan-b.md && git commit -qm "docs: auto fixture b"
+run bash "$BRIEF" --open docs/auto-plan-b.md 1
+CLAUDE_CODE_SESSION_ID=s-tc run bash "$KIT/scripts/task-close" docs/auto-plan-b.md 1 "$CP"
+check "auto: a task-complete that exits 7 closes with exit 1" \
+  "$rc|$(grep -c 'task-complete exited 7; the run did not record this completion' <<<"$out")" "1|1"
 bash "$P/scripts/auto-run" --session s-tc stop >/dev/null 2>&1
 git checkout -q -
 
