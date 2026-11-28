@@ -219,9 +219,14 @@ printf 'session=s-gone\nat=%s\n' "$(date +%s)" > "$OC/.dforge/handoff/claims/adh
 oc_ctx=$(oc_payload startup | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
 check "A10 count: a gone session's claim still counts" "$(grep -c '^2 open handoffs ' <<<"$oc_ctx")" "1"
 notimeout_path() { # PATH with no timeout or gtimeout: a directory holding one is stood in for by links to its other programs
-  local d f m out='' IFS=:
+  local d f m out='' keep IFS=:
+  # Only a directory of a tool the hook runs is linked, and any other holding a
+  # timeout is dropped: on Windows that is System32, thousands of files that
+  # Git Bash copies one by one.
+  keep=$(for f in bash jq git node awk sed find; do dirname "$(type -P "$f")"; done)
   for d in $PATH; do
     if [ -x "$d/timeout" ] || [ -x "$d/gtimeout" ]; then
+      grep -qxF -- "$d" <<<"$keep" || continue
       m="$TMP/notimeout/$(printf '%s' "$d" | tr -c 'A-Za-z0-9' '_')"
       mkdir -p "$m"
       for f in "$d"/*; do case ${f##*/} in timeout | gtimeout | timeout.exe) ;; *) ln -s "$f" "$m/" 2>/dev/null ;; esac; done
