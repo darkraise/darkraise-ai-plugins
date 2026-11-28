@@ -320,6 +320,10 @@ B=$(cd "$HERE/../../plugins/dforge/scripts/lib" && node --input-type=module -e '
   console.log(JSON.stringify(planFiles(t, 2)));' 2>&1)
 check "plan_files: every part's paths, without line ranges" "$(sed -n 1p <<<"$B")" '["src/a.sh","tests/a.test.sh","src/b.sh"]'
 check "plan_files: a backticked path with a space is kept whole" "$(sed -n 2p <<<"$B")" '["src/My View.tsx"]'
+B=$(cd "$HERE/../../plugins/dforge/scripts/lib" && node --input-type=module -e '
+  import { planFiles } from "./usage-report.mjs";
+  console.log(JSON.stringify(planFiles(["### Task 1: one", "", "**Files:**", "- Read: `src/a.sh`", "- Modify: `src/b.sh`", ""].join("\n"), 1)));' 2>&1)
+check "plan_files: a Read line names a file of the task" "$B" '["src/a.sh","src/b.sh"]'
 
 # --- unmarked_ledger_line: a complete task no transcript bounds ---
 UB="$TMP/ub"; mkdir -p "$UB/proj"
