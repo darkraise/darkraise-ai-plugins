@@ -1403,6 +1403,23 @@ rr_run verdict docs/plan.md 1
 check "verdict without --rereview after a rereview exits 6" "$rr_rc $(grep -c -- '--rereview 1' <<<"$rr_err")" "6 1"
 rr_run verdict docs/plan.md 1 --rereview 2
 check "verdict --rereview 2 at round 1 exits 6" "$rr_rc" "6"
+# A review run again past round 0 is read by a plain verdict, never by the
+# round's older re-review report.
+cp "$RR_WS/task-1-step.json" "$RR_TMP/state1.r1"
+cp "$RR_WS/progress.md" "$RR_TMP/progress.r1"
+rr_run review docs/plan.md 1
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: pass
+|quality: approved
+|scores: spec 17 / scope 18 / verification 16 / quality 16
+REPORT
+rr_run verdict docs/plan.md 1 --rereview 1
+check "verdict --rereview after a review rerun at round 1 exits 6" "$rr_rc $(grep -c 'without --rereview' <<<"$rr_err")" "6 1"
+rr_run verdict docs/plan.md 1
+check "verdict after a review rerun at round 1 reads the fresh report" "$rr_rc $(head -n 1 <<<"$rr_out")" "0 task 1: verdict from $RR_WS/task-1-review-report.md"
+cp "$RR_TMP/state1.r1" "$RR_WS/task-1-step.json"
+cp "$RR_TMP/progress.r1" "$RR_WS/progress.md"
 vd_round() { # vd_round <round> — the step file at the round a verdict's flag names
   jq --argjson r "$1" '.round = $r' "$RR_WS/task-1-step.json" > "$RR_WS/task-1-step.json.tmp" && mv "$RR_WS/task-1-step.json.tmp" "$RR_WS/task-1-step.json"
 }
