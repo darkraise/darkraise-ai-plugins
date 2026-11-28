@@ -325,7 +325,7 @@ UI files.
 
 **The upstream workflow ships in-plugin.** The fork carries the full skill
 set — brainstorming through finishing-a-development-branch — frozen at upstream
-6.3.0, so no other plugin is required: the Acceptance QA and UI walkthrough seat
+6.3.0, so no other plugin is required: the Acceptance QA seat
 (`impl-sonnet-high`) preloads `dforge:verification-before-completion` through
 its `skills:` frontmatter, while the three judges, which only read and write
 their report, carry no `skills:` key (`agents/judge-*.md`); writing-plans and
@@ -493,8 +493,9 @@ background work or a timer runs: none of those stops claims the UI work is
 done, so a handoff is not held for a proof the next session will run.
 
 A `SubagentStop` hook (matcher `^(dforge:)?impl-sonnet-high$`, 30 s timeout)
-runs `scripts/impl-stop-gate`. When the seat's reply ends with a
-`Report: <path>` line, it blocks the stop while that path is not absolute,
+runs `scripts/impl-stop-gate`. When the seat's reply names a report on a
+`Report: <path>` line (the last such line counts, wherever it stands), it
+blocks the stop while that path is not absolute,
 the file does not exist, or its first non-empty line is not `## Verdict` (an
 Acceptance QA report) or `# UI proof:` (a UI walkthrough's proof report).
 Every other stop passes; after two blocks the next distinct failing stop
@@ -1431,8 +1432,11 @@ node scripts/test-all.mjs
 
 Run it from the repository root. It runs every `tests/dforge/*.test.sh` and
 `*.acceptance.sh` suite, the root and dflow `node:test` suites,
-`scripts/validate-repository.mjs`, and, when the `claude` CLI is on PATH,
-`claude plugin test plugins/dforge` for `plugins/dforge/tests/*.test.ts`.
+`scripts/validate-repository.mjs`; when the `claude` CLI is on PATH and the
+host is not Windows, `claude plugin test plugins/dforge` (for
+`plugins/dforge/tests/*.test.ts`) and `claude plugin test plugins/dflow`; and,
+when `tsc` is on PATH and Claude Code has generated the mod's types,
+`tsc --noEmit -p plugins/dforge`.
 
 Requires `node`, `jq` and `git`, plus the `claude` CLI for the cockpit tests. No model calls: the reviewer suites run against a stub
 `codex` plugin, a stub `agy` and a synthetic roster, never the real CLIs.
