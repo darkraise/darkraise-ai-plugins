@@ -4,7 +4,8 @@
 #   The test command (default `npm test`) is split on spaces and run with
 #   each test file as its last argument.
 # Example: ./find-polluter.sh 'packages/core/.git' 'src/**/*.test.ts' 'npx vitest run'
-# Exit: 0 every test clean, 1 polluter found, 2 could not diagnose (usage
+# Exit: 0 no polluter among the runs (the last line says how many failed),
+# 1 polluter found, 2 could not diagnose (usage
 # error, pollution already present, no matching tests, a test command that
 # cannot run, or every test run failing)
 
@@ -55,6 +56,7 @@ echo ""
 
 COUNT=0
 ANY_PASSED=no
+FAILED=0
 LAST_RC=0
 # Read line by line so a path with a space stays one file; a here-string
 # keeps the loop in this shell, so exit 1 below ends the script.
@@ -69,6 +71,7 @@ while IFS= read -r TEST_FILE; do
   if [ "$RC" -eq 0 ]; then
     ANY_PASSED=yes
   else
+    FAILED=$((FAILED + 1))
     echo "[$COUNT/$TOTAL] exit $RC"
   fi
   if [ "$RC" -eq 126 ] || [ "$RC" -eq 127 ]; then
@@ -77,7 +80,7 @@ while IFS= read -r TEST_FILE; do
   fi
 
   # Check if pollution appeared
-  if [ -e "$POLLUTION_CHECK" ]; then
+  if [ -e "$POLLUTION_CHECK" ] || [ -L "$POLLUTION_CHECK" ]; then
     echo ""
     echo "🎯 FOUND POLLUTER!"
     echo "   Test: $TEST_FILE"
@@ -100,5 +103,9 @@ if [ "$ANY_PASSED" = no ]; then
 fi
 
 echo ""
-echo "✅ No polluter found - all tests clean!"
+if [ "$FAILED" -gt 0 ]; then
+  echo "No polluter found, but $FAILED of $TOTAL runs failed; no polluter among the ones that ran. A failed run may have stopped before its polluting code."
+else
+  echo "✅ No polluter found - all tests clean!"
+fi
 exit 0

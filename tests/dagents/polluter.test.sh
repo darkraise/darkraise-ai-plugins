@@ -54,5 +54,18 @@ out=$(cd "$TMP/r" && POLLUTER_ARGS="$TMP/args" bash "$SCRIPT" pollution 'src/**/
 check 'the third argument names the test command' \
   "$rc|$(grep -c 'Test: ./src/a.test.ts' <<<"$out")|$(cat "$TMP/args" 2>/dev/null)|$(( $(wc -l < "$TMP/calls" | tr -d ' ') - before ))" \
   "1|1|--flag ./src/a.test.ts|0"
+fresh; mkdir -p "$TMP/r/src"; touch "$TMP/r/src/a.test.ts" "$TMP/r/src/b.test.ts"
+printf '%s\n' '#!/usr/bin/env bash' 'case "$*" in *b.test.ts) exit 1 ;; esac' > "$TMP/bin/half"; chmod +x "$TMP/bin/half"
+out=$(cd "$TMP/r" && bash "$SCRIPT" pollution 'src/**/*.test.ts' "$TMP/bin/half"); rc=$?
+check 'a run with some failing tests is not reported all clean' \
+  "$rc|$(grep -cF 'all tests clean' <<<"$out")|$(grep -c '1 of 2 runs failed' <<<"$out")" "0|0|1"
+fresh; mkdir -p "$TMP/r/src"; touch "$TMP/r/src/a.test.ts"
+if ln -s "$TMP/none" "$TMP/probe-link" 2>/dev/null && [ -L "$TMP/probe-link" ]; then
+  printf '%s\n' '#!/usr/bin/env bash' 'ln -s /nonexistent-polluter-target pollution' > "$TMP/bin/linker"; chmod +x "$TMP/bin/linker"
+  out=$(cd "$TMP/r" && bash "$SCRIPT" pollution 'src/**/*.test.ts' "$TMP/bin/linker"); rc=$?
+  check 'a dangling link the test leaves is the pollution' "$rc|$(grep -c 'FOUND POLLUTER' <<<"$out")" "1|1"
+else
+  printf 'skip - a dangling link the test leaves: this system makes no dangling links\n'
+fi
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

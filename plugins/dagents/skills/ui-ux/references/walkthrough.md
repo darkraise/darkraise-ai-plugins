@@ -94,7 +94,9 @@ stamp drops a judge line for another fingerprint, judge again.
 ````
 
 - `**Contract:**` is the spec's path, or `touch` with a `## Delta` section
-  above `## Results` (`contract-template.md` §The touch delta).
+  above `## Results` (`contract-template.md` §The touch delta), or, at
+  feature depth on brainstorming's bounded path (no spec), the report's own
+  path, with its `## UI/UX contract` section above `## Results`.
 - One row per contract ID (per Delta ID at touch depth), `OP-` IDs included.
 - `pass` and `deviation` rows cite at least one screenshot or test name.
 - A `deviation` note starts `cites:` and names the user's answer, the profile
@@ -123,7 +125,7 @@ Subagent (judge seat):
     is unproven until a screenshot you opened or a test you read shows it.
 
     **Criteria:** [PLUGIN_ROOT]/criteria/ui-ux-proof.md
-    **Contract:** [SPEC_PATH and its "## UI/UX contract", or the report's "## Delta"]
+    **Contract:** [SPEC_PATH and its "## UI/UX contract", or the report's "## Delta", or the report's own "## UI/UX contract"]
     **Report:** [REPORT_PATH]
     **Evidence:** every file the report cites, under [EVIDENCE_DIR], and the state boards the contract names
     **Fingerprint:** [FINGERPRINT]
