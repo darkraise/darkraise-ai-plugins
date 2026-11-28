@@ -103,7 +103,8 @@ skip != "" { if (index($0, skip)) skip = ""; next }
     if (d > 0) {
       if ((has[d] || kids[d]) && st[d] > sum[d]) printf "overhead\t%.6f\n", st[d] - sum[d]
       d--
-      if (d > 0) { sum[d] += st[d + 1]; kids[d] = 1 }
+      # A child with no time attribute still took the time of its cases.
+      if (d > 0) { sum[d] += (st[d + 1] > sum[d + 1] ? st[d + 1] : sum[d + 1]); kids[d] = 1 }
     }
   } else if (name == "testcase") {
     if (open) emit()
