@@ -281,7 +281,13 @@ run_row() { # run_row <model> <effort> <seconds> <log-prefix>; sets agy_rc
 }
 
 # own_path TOP: --out relative to TOP, or nothing when it lies outside TOP.
-own_path() { case "$out_real" in "$1"/*) printf '%s' "${out_real#"$1"/}" ;; esac; }
+# Both sides in native form: under Git Bash --out arrives as /tmp/... while
+# the snapshot root comes from git as C:/..., and a mixed pair never matches.
+own_path() {
+  local o t
+  o=$(dr_native_path "$out_real") t=$(dr_native_path "$1")
+  case "$o" in "$t"/*) printf '%s' "${o#"$t"/}" ;; esac
+}
 
 # newer_files TOP: the files under TOP changed since the marker, relative to
 # TOP. .git has its own checks, the dforge state directory is where a parallel
