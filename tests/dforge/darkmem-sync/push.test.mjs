@@ -930,15 +930,21 @@ test("a lost checkpoint answer retried behind another handoff of its workstream 
   assert.equal(bodies.filter(body => body === second).length, 1);
 });
 
-test("a checkpoint filed on a finished plan's workstream leaves it closed", async t => {
+test("a checkpoint filed on a finished plan's workstream reaches another mirror", async t => {
   const s = await setup(t);
   write(path.join(s.docsRoot, "plans", "p1.md"), "# p1\n");
   write(path.join(s.docsRoot, "plans", "completed.md"), "- `docs/dforge/plans/p1.md` — merged\n");
   write(path.join(s.workRoot, "sdd", "p1", "progress.md"), "# SDD ledger — plan: docs/dforge/plans/p1.md\nTask 1: complete (abc)\n");
-  write(path.join(s.workRoot, "handoff", "p1.md"), "# Handoff\n\n## State\n- Plan: `docs/dforge/plans/p1.md`; ledger: `x`\n");
+  const note = "# Handoff\n\n## State\n- Plan: `docs/dforge/plans/p1.md`; ledger: `x`\n<!-- next-step: kind=plan key=p1 session=- done=1 closed=0 subject=docs/dforge/plans/p1.md at=1795000000 -->\n";
+  write(path.join(s.workRoot, "handoff", "p1.md"), note);
   const result = await s.push();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   const p1 = s.stub.db.workstreams.find(w => w.key === "p1");
-  assert.equal(p1.state, "closed");
+  assert.equal(p1.state, "open", "a closed workstream is never pulled, so its new checkpoint would reach no mirror");
   assert.deepEqual(p1.entries.filter(e => e.kind === "checkpoint").length, 1);
+  const other = makeRepo();
+  const home2 = makeHome({ repo: other, url: s.stub.url });
+  const pulled = await run(["pull"], { cwd: other, env: home2.env });
+  assert.equal(pulled.code, 0, pulled.stdout + pulled.stderr);
+  assert.equal(read(path.join(home2.workRoot, "handoff", "p1.md")), note);
 });
