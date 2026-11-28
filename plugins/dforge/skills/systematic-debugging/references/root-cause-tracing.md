@@ -116,7 +116,10 @@ Name a path that does not exist yet: the script refuses one that already
 does. It exits 0 when no test creates the path, 1 only when it names the
 polluter, and 2 when it could not diagnose: a usage error, a path that already
 exists, no matching test, a test command that cannot run (exit 126 or 127), or
-every test run failing, which usually means the command is wrong.
+every test run failing, which usually means the command is wrong. When
+some runs failed, its exit 0 line says how many: a failed run may have
+stopped before its polluting code. Tests under `node_modules` and `.git` are
+never run, even when the pattern names them.
 
 ## Real Example: Empty projectDir
 
