@@ -4017,11 +4017,11 @@ async function readWhere($: EngineInterface) {
   }
   S.where.host = (await $.env.get('HOSTNAME')) || (await firstLine(['hostname']))
   S.where.tmux = (await $.env.get('TMUX')) ? await firstLine(['tmux', 'display-message', '-p', '#S']) : null
-  await readPrimary($)
+  S.where.primary = await primaryNow($)
 }
 
 // The primary checkout of the repository the session is in now.
-async function readPrimary($: EngineInterface) {
+async function primaryNow($: EngineInterface): Promise<string | null> {
   const firstLine = async (argv: string[]) => {
     try {
       const ran = await $.process.run(argv, { timeoutMs: 2000 })
@@ -4037,7 +4037,7 @@ async function readPrimary($: EngineInterface) {
   // has none here either.
   const common = await firstLine(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'])
   const parent = common === null ? '' : common.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '')
-  S.where.primary = parent === '' ? null : await firstLine(['git', '-C', parent, 'rev-parse', '--show-toplevel'])
+  return parent === '' ? null : await firstLine(['git', '-C', parent, 'rev-parse', '--show-toplevel'])
 }
 
 // The context crossed its handoff budget: said once per crossing.
@@ -4735,14 +4735,17 @@ async function readPlace($: EngineInterface) {
     // No working directory on this host: the strip starts at the branch.
   }
   const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { timeoutMs: 2000 }).catch(() => null)
-  const was = S.where.checkout
-  S.where.checkout = top?.exitCode === 0 ? (top.stdout.split('\n')[0] ?? '').trim() || null : null
-  // A cd into another repository moves its primary checkout too.
-  if (S.where.checkout !== was) {
+  const checkout = top?.exitCode === 0 ? (top.stdout.split('\n')[0] ?? '').trim() || null : null
+  // A cd into another repository moves its primary checkout too. Both change
+  // together, so a read between the two never pairs one repository's checkout
+  // with another's primary (autoRunText records the pair).
+  if (checkout !== S.where.checkout) {
     S.offerEpoch += 1
     // The offer was read for the other checkout: on a return, the same handoffs must be read again.
     S.offerRanKey = null
-    await readPrimary($)
+    const primary = await primaryNow($)
+    S.where.checkout = checkout
+    S.where.primary = primary
   }
 }
 
