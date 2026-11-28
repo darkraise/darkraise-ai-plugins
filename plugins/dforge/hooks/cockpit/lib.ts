@@ -184,7 +184,55 @@ export function attributionIn(text: string, isAnywhere = false): string | undefi
 
 /** Whether a shell command writes a commit, a merge or a pull request. */
 export function writesGitText(command: string): boolean {
-  return shellCommands(command).some(one => isGitWriteCommand(one.words))
+  return judgedCommands(command).some(one => isGitWriteCommand(one.words))
+}
+
+// The shells whose -c operand is a command, and how deep commands nested in
+// commands are read.
+const SHELLS = ['sh', 'bash', 'zsh', 'dash', 'ksh']
+const NEST_DEPTH = 4
+
+// The command texts a simple command runs inside it: a shell's -c operand,
+// an eval's words (unless they are already a git write, read in place), and
+// each $(…) or `…` body in its words.
+function nestedTexts(words: readonly string[]): string[] {
+  const texts: string[] = []
+  const head = words.findIndex(word => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word))
+  const name = head < 0 ? '' : (words[head] ?? '')
+  if (SHELLS.some(shell => isProgram(name, shell))) {
+    const flag = words.findIndex((word, at) => at > head && /^-[A-Za-z]*c[A-Za-z]*$/.test(word))
+    const operand = flag < 0 ? undefined : words[flag + 1]
+    if (operand !== undefined) texts.push(operand)
+  }
+  if (name === 'eval' && !isGitWriteCommand(words)) texts.push(words.slice(head + 1).join(' '))
+  for (const word of words) {
+    for (let i = 0; i < word.length; i++) {
+      if (word[i] === '$' && word[i + 1] === '(' && word[i + 2] !== '(') {
+        const end = substEnd(word, i + 2)
+        texts.push(word.slice(i + 2, word[end - 1] === ')' ? end - 1 : end))
+        i = end - 1
+      } else if (word[i] === '`') {
+        const end = backtickEnd(word, i)
+        texts.push(word.slice(i + 1, word[end - 1] === '`' ? end - 1 : end))
+        i = end - 1
+      }
+    }
+  }
+  return texts
+}
+
+/**
+ * A shell command's simple commands, each with the subshell parentheses around
+ * it taken off and followed by the commands nested in it (nestedTexts), so
+ * `(git commit …)`, `bash -c "git commit …"` and `out=$(git commit …)` are
+ * judged as the git commands they run.
+ */
+export function judgedCommands(src: string, depth = 0): { raw: string; words: string[] }[] {
+  return shellCommands(src).flatMap(one => {
+    const words = subshellEdges(one.words, Number.POSITIVE_INFINITY).words
+    const nested = depth < NEST_DEPTH ? nestedTexts(words).flatMap(text => judgedCommands(text, depth + 1)) : []
+    return [{ raw: one.raw, words }, ...nested]
+  })
 }
 
 // A program word by its last path segment, so `/usr/bin/git` is git.
@@ -450,7 +498,7 @@ function messageOptions(words: readonly string[]): { kind: MessageKind; value: s
 export function gitMessageTexts(command: string): { texts: string[]; isWhole: boolean } {
   const texts: string[] = []
   let isWhole = false
-  const all = shellCommands(command)
+  const all = judgedCommands(command)
   for (const one of all) {
     if (!isGitWriteCommand(one.words)) continue
     for (const { kind, value, at, valueAt } of messageOptions(one.words)) {
@@ -599,33 +647,39 @@ export type GitTextSource = {
 export function gitTextSources(command: string, cwd = ''): GitTextSource[] {
   const sources: GitTextSource[] = []
   const written: string[] = []
-  let dirs: string[] | null = []
-  // The directories in force where each open subshell began: a cd inside one
-  // ends with it.
-  const outer: (string[] | null)[] = []
-  for (const one of shellCommands(command)) {
-    const { words, opens, closes } = subshellEdges(one.words, outer.length)
-    for (let n = 0; n < opens; n++) outer.push(dirs)
-    if (isGitWriteCommand(words)) {
-      const own = gitDirs(words)
-      const gitRuns = dirs === null || own === null ? null : [...dirs, ...own]
-      for (const { kind, value } of messageOptions(words)) {
-        const cat = kind === 'text' ? CAT_FILE.exec(value)?.[1] : undefined
-        // A substitution runs where the shell is: git -C moves only git.
-        const source = kind === 'file' && value !== '' && !STDIN_PATH.test(value) ? { file: value, dirs: gitRuns } : cat === undefined ? undefined : { file: cat, dirs }
-        if (source === undefined) continue
-        const key = sourceKey(cwd, source.dirs, source.file)
-        sources.push({ ...source, isWritten: key !== null && written.includes(key) })
+  // A nested command (nestedTexts) starts in the directories in force where
+  // it appears, and a cd inside it ends with it.
+  const walk = (text: string, start: string[] | null, depth: number) => {
+    let dirs = start
+    // The directories in force where each open subshell began: a cd inside one
+    // ends with it.
+    const outer: (string[] | null)[] = []
+    for (const one of shellCommands(text)) {
+      const { words, opens, closes } = subshellEdges(one.words, outer.length)
+      for (let n = 0; n < opens; n++) outer.push(dirs)
+      if (isGitWriteCommand(words)) {
+        const own = gitDirs(words)
+        const gitRuns = dirs === null || own === null ? null : [...dirs, ...own]
+        for (const { kind, value } of messageOptions(words)) {
+          const cat = kind === 'text' ? CAT_FILE.exec(value)?.[1] : undefined
+          // A substitution runs where the shell is: git -C moves only git.
+          const source = kind === 'file' && value !== '' && !STDIN_PATH.test(value) ? { file: value, dirs: gitRuns } : cat === undefined ? undefined : { file: cat, dirs }
+          if (source === undefined) continue
+          const key = sourceKey(cwd, source.dirs, source.file)
+          sources.push({ ...source, isWritten: key !== null && written.includes(key) })
+        }
       }
+      if (depth < NEST_DEPTH) for (const body of nestedTexts(words)) walk(body, dirs, depth + 1)
+      for (const file of writtenFiles(words)) {
+        const key = sourceKey(cwd, dirs, file)
+        if (key !== null) written.push(key)
+      }
+      const change = dirChange(words)
+      if (change !== undefined) dirs = dirs === null || change === null ? null : [...dirs, change]
+      for (let n = 0; n < closes; n++) dirs = outer.pop() ?? dirs
     }
-    for (const file of writtenFiles(words)) {
-      const key = sourceKey(cwd, dirs, file)
-      if (key !== null) written.push(key)
-    }
-    const change = dirChange(words)
-    if (change !== undefined) dirs = dirs === null || change === null ? null : [...dirs, change]
-    for (let n = 0; n < closes; n++) dirs = outer.pop() ?? dirs
   }
+  walk(command, [], 0)
   return sources
 }
 
