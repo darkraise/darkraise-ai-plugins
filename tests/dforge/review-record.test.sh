@@ -72,6 +72,12 @@ out=$(cd "$TOP" && bash "$P/scripts/review-record" retain "$PLAN"); rc=$?
 check "A7/A13: no --from: the worktree ledger is found past a stale one" "$rc:$out" "0:$REVIEW"
 check "A7/A13: no --from: the record comes from the worktree ledger" "$(cat "$REVIEW" 2>/dev/null)" "$want"
 
+. "$HERE/fixtures/git-without-z.sh"
+git_without_z "$TMP/noz"
+rm -f "$REVIEW"
+out=$(cd "$TOP" && PATH="$TMP/noz:$PATH" bash "$P/scripts/review-record" retain "$PLAN"); rc=$?
+check "worktree list: a git without -z still finds the worktree ledger" "$rc:$out:$(cat "$REVIEW" 2>/dev/null)" "0:$REVIEW:$want"
+
 printf 'stale\n' > "$REVIEW"
 (cd "$TOP" && bash "$P/scripts/review-record" retain "$PLAN" >/dev/null)
 check "A9: a rerun replaces the record" "$(cat "$REVIEW" 2>/dev/null)" "$want"

@@ -403,7 +403,7 @@ legacy_handoffs() {
       case $wt in 'worktree '*) wt=${wt#worktree } ;; *) continue ;; esac
       f="$(dforge_dir state "$(_dforge_path "$wt")")/handoff/latest.md"
       if [ -f "$f" ] || [ -L "$f" ]; then printf '%s\n' "$f"; fi
-    done < <(g -C "$root" worktree list --porcelain -z 2>/dev/null)
+    done < <(dr_worktree_list g -C "$root" 2>/dev/null)
     f="${_DFORGE_LEDGER_ROOT%/*}/handoff/latest.md"
     if [ "$_DFORGE_PROGRESS_STORE" = darkmem ] && { [ -f "$f" ] || [ -L "$f" ]; }; then printf '%s\n' "$f"; fi
   )
@@ -538,7 +538,7 @@ fi
 while IFS= read -r -d '' wt; do
   case $wt in 'worktree '*) wt=${wt#worktree } ;; *) continue ;; esac
   [ -n "$wt" ] && [ -d "$wt" ] && checkouts+=("$wt")
-done < <(g -C "$root" worktree list --porcelain -z 2>/dev/null)
+done < <(dr_worktree_list g -C "$root" 2>/dev/null)
 [ ${#checkouts[@]} -gt 0 ] || checkouts=("$root")
 
 for wt in "${checkouts[@]}"; do

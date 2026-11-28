@@ -830,5 +830,22 @@ case "$(uname -s)" in
       "$code:$(cat "$NW/.dforge/sdd/p/progress.md" 2>/dev/null):$(exists "$NW/.superpowers")" "0:ledger:no"
     ;;
 esac
+
+# --- a git that refuses worktree list -z (before 2.36) ---
+. "$HERE/fixtures/git-without-z.sh"
+git_without_z "$TMP/noz"
+ZR="$TMP/zrepo"; repo "$ZR"
+ZH="$TMP/zh"; git -C "$ZR" worktree add -q -b zh "$ZH"
+ZHT=$(tmp_spelled "$(git -C "$ZH" rev-parse --show-toplevel)")
+mkdir -p "$ZH/.dforge/handoff"
+marked plan docs/dforge/plans/z1.md 1700002000 > "$ZH/.dforge/handoff/latest.md"
+legacy=$(cd "$ZR" && PATH="$TMP/noz:$PATH" migrate "$FM" --legacy-handoffs)
+check "worktree list: a git without -z still names a worktree's legacy handoff" "$legacy" "$(printf '%s\t%s' "$ZHT/.dforge/handoff/latest.md" docs/dforge/plans/z1.md)"
+ZW="$TMP/zw"; git -C "$ZR" worktree add -q -b zw "$ZW"
+mkdir -p "$ZW/.superpowers/sdd/p"
+echo ledger > "$ZW/.superpowers/sdd/p/progress.md"
+out=$(PATH="$TMP/noz:$PATH" migrate "$FM" "$ZR" 2>&1); code=$?
+check "worktree list: a git without -z still migrates a linked worktree" \
+  "$code:$(cat "$ZW/.dforge/sdd/p/progress.md" 2>/dev/null):$(exists "$ZW/.superpowers")" "0:ledger:no"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

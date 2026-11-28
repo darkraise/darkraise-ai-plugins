@@ -59,7 +59,7 @@ retain() {
     while IFS= read -r -d '' wt; do
       case $wt in 'worktree '*) wt=${wt#worktree } ;; *) continue ;; esac
       [ -n "$wt" ] && dirs+=("$wt")
-    done < <(git -C "$(dr_native_path "$top")" worktree list --porcelain -z 2>/dev/null)
+    done < <(dr_worktree_list git -C "$(dr_native_path "$top")" 2>/dev/null)
   fi
 
   for dir in "${dirs[@]}"; do
