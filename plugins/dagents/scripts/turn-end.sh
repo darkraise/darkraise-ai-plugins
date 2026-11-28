@@ -168,8 +168,9 @@ if [ -n "$auto_pending" ]; then
   case $holds in '' | *[!0-9]*) holds=0 ;; esac
   holds=$((holds + 1))
   # A count that cannot be kept would hold forever: treat it as the cap.
+  unkept=""
   if ! { mkdir -p "$(dirname "$stamp")" && printf '%s\n' "$holds" > "$stamp.holds"; } 2>/dev/null; then
-    holds=$((AUTO_HOLD_CAP + 1))
+    holds=$((AUTO_HOLD_CAP + 1)) unkept=1
   fi
   (cd "$root" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" total holds >/dev/null 2>&1) || true
   # One hold past the cap stops the run; a retry after it passes, so a stop
@@ -183,6 +184,9 @@ if [ -n "$auto_pending" ]; then
     if (cd "$root" 2>/dev/null && AR_RESOLVE=local bash "${SCRIPT_DIR}/auto-run" --session "$session_id" stop --reason "$why" >/dev/null 2>&1); then
       rm -f "$stamp.holds" 2>/dev/null
       hold "The auto run stopped: ${why}. End as reference/auto-run.md §Stopping says." "dagents: the auto run stopped (${why})"
+    elif [ -n "$unkept" ] && [ "$is_retry" = true ]; then
+      # No count and no stop: every retry would land here again.
+      exit 0
     else
       hold "The auto run could not be stopped: ${why}. Run \`bash \"${root_shown}/scripts/auto-run\" stop --reason \"${why}\"\` yourself, then end as reference/auto-run.md §Stopping says." "dagents: the auto run could not be stopped (${why})"
     fi
@@ -219,16 +223,22 @@ ledger="" clean=0
 [ -d "$sdd" ] || sdd=""
 ws="$(dagents_dir state "$root")/sdd"
 # A plan whose last task open (the primary's usage markers) names another
-# session is that session's work, however recent its ledger.
+# session is that session's work, however recent its ledger, while that task
+# has no close and that session is live. A closed task, or a session gone
+# since (a handoff, /clear, /resume), leaves the plan to whoever continues it.
 um_primary=$(stamp_root 2>/dev/null) && [ -n "$um_primary" ] || um_primary=$root
 markers="$(dagents_dir state "$um_primary")/sdd/usage-markers.tsv"
+. "${SCRIPT_DIR}/lib/session-live.sh"
 opened_elsewhere() { # LEDGER
   local owner
   [ -f "$markers" ] || return 1
   owner=$(tr -d '\r' < "$markers" | NAME=$(basename "$(dirname "$1")") awk -F'\t' '
-    $2 == "open" { p = $6; sub(/.*\//, "", p); sub(/\.md$/, "", p); if (p == ENVIRON["NAME"]) o = $8 }
+    { p = $6; sub(/.*\//, "", p); sub(/\.md$/, "", p) }
+    p != ENVIRON["NAME"] { next }
+    $2 == "open" { o = $8; t = $7 }
+    $2 == "close" && $7 == t { o = "" }
     END { print o }')
-  [ -n "$owner" ] && [ "$owner" != "$session_id" ]
+  [ -n "$owner" ] && [ "$owner" != "$session_id" ] && ! session_gone "$owner"
 }
 while IFS= read -r candidate; do
   [ -n "$candidate" ] || continue
