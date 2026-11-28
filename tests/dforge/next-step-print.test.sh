@@ -399,6 +399,11 @@ git -C "$L" checkout -q main
 latest
 check "kept detached: an unmerged commit exits 0" "$status" 0
 has "kept detached: an unmerged commit prints the stored block" "$out" "**Next:**"
+main_before=$(git -C "$L" rev-parse HEAD)
+git -C "$L" merge -q --ff-only "$sha"
+latest
+check "kept detached: a fast-forward merge onto a branch exits 6" "$status" 6
+git -C "$L" reset -q --hard "$main_before"
 git -C "$L" merge -q --no-ff -m merge "$sha"
 latest
 check "kept detached: a merged commit exits 6" "$status" 6
