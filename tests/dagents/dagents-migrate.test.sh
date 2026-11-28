@@ -968,6 +968,11 @@ chmod +x "$KS/rm"
 HOME="$TMP/rh-home" PATH="$KS:$PATH" migrate "$FM" "$R" > /dev/null 2>&1
 NEW="$RT/.dagents/handoff/adhoc-legacy-1700001600.md"
 before="$(exists "$R/.dagents/handoff/latest.md") $(exists "$NEW")"
+# A dry run says what the real run does, and writes nothing.
+listing=$(find "$R" -path "$R/.git" -prune -o -print | LC_ALL=C sort)
+dry=$(HOME="$TMP/rh-home" migrate "$FM" --dry-run "$R"); code=$?
+check "a rename killed after its link, dry: would move latest.md, writes nothing" \
+  "$code $(grep -c "^would move .*/latest\.md -> .*/adhoc-legacy-1700001600\.md$" <<<"$dry") $(grep -c 'refused' <<<"$dry") $( [ "$(find "$R" -path "$R/.git" -prune -o -print | LC_ALL=C sort)" = "$listing" ] && echo same || echo changed)" "0 1 0 same"
 out=$(HOME="$TMP/rh-home" migrate "$FM" "$R"); code=$?
 check "a rename killed after its link: a rerun removes latest.md" \
   "$before|$code $(exists "$R/.dagents/handoff/latest.md") $(grep -c 'latest\.md' "$NEW" 2>&1) $(grep -c 'refused' <<<"$out")" "yes yes|0 no 0 0"
