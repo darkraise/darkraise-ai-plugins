@@ -744,7 +744,7 @@ jq -n --arg c "$RA" '{cwd: $c}' > "$BYID"
 o1=$(stop_in "$RA" s-h 'Done.')
 jq -n --arg c "$RB" '{cwd: $c}' > "$BYID"
 o2=$(stop_in "$RA" s-h 'Done.')
-check "binding: the hold message names the checkout (A44)" "$(has_reason "$o1" "cd '$RB' &&"):$(has_reason "$o2" "cd '")" "true:false"
+check "binding: the hold message names the checkout (A44)" "$(has_reason "$o1" "cd '$(git -C "$RB" rev-parse --show-toplevel | tr -d '\r')' &&"):$(has_reason "$o2" "cd '")" "true:false"
 rm -f "$BYID"
 
 (cd "$RA" && bash "$AR" --session s-h start --spec docs/a.md --register docs/r.md >/dev/null)

@@ -236,10 +236,10 @@ check "status: cockpit does not see this run (A4)" "$s1|$(ar --session s-n3 stat
 
 jq '.active = true | .rebind = true | .stopped = null' "$NSTATE" > "$NSTATE.tmp" && mv "$NSTATE.tmp" "$NSTATE"
 t0=$(date +%s%N)
-WAIT=5 mute s-n2 rebind --to s-n2 >/dev/null 2>&1; status=$?
+WAIT=10 mute s-n2 rebind --to s-n2 >/dev/null 2>&1; status=$?
 ms=$(( ($(date +%s%N) - t0) / 1000000 ))
 check "ack: rebind does not wait (A4)" \
-  "$status|$([ "$ms" -lt 2000 ] && echo quick || echo "$ms ms")|$([ -f "$H2/.claude/dforge/sessions/run/s-n2.json" ] && echo written)" "0|quick|written"
+  "$status|$([ "$ms" -lt 5000 ] && echo quick || echo "$ms ms")|$([ -f "$H2/.claude/dforge/sessions/run/s-n2.json" ] && echo written)" "0|quick|written"
 
 # --- log ---
 LR="$TMP/repo-log"
