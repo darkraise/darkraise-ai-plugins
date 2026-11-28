@@ -1046,6 +1046,34 @@ check "verdict: a hash that is no object id gets no command" \
 check "verdict: and its text is printed nowhere" "$(grep -c 'pwned' <<<"$rr_err")" "0"
 rr_git checkout -- other.txt
 
+# jq.exe cannot open the POSIX form of a temporary path. These stand-ins
+# refuse a path under PTMP unless cygpath -m turned it into //…, which names
+# the same file here.
+NJ="$RR_TMP/native-jq"; PTMP="$RR_TMP/ptmp"
+mkdir -p "$NJ" "$PTMP"
+{ printf '#!/usr/bin/env bash\n'
+  printf 'for a in "$@"; do case $a in %q/*) printf "jq: error: Could not open %%s\\n" "$a" >&2; exit 2 ;; esac; done\n' "$PTMP"
+  printf 'exec %q "$@"\n' "$(command -v jq)"; } > "$NJ/jq"
+{ printf '#!/usr/bin/env bash\n'
+  printf 'p=${!#}\n'
+  printf 'if [ "$1" = -m ]; then case $p in %q/*) p=/$p ;; esac; fi\n' "$PTMP"
+  printf 'printf "%%s\\n" "$p"\n'; } > "$NJ/cygpath"
+chmod +x "$NJ/jq" "$NJ/cygpath"
+rr_reset
+printf 'dirty\n' >> "$RR_REPO/other.txt"
+rr_run review docs/plan.md 1
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: pass
+|quality: approved
+|scores: spec 17 / scope 18 / verification 16 / quality 16
+REPORT
+printf 'more\n' >> "$RR_REPO/other.txt"
+PATH="$NJ:$PATH" TMPDIR="$PTMP" rr_run verdict docs/plan.md 1
+check "verdict: under jq.exe a file dirty at review time is never restored from HEAD" \
+  "$rr_rc:$(grep -c 'checkout -- other.txt' <<<"$rr_err"):$(grep -A1 -x 'other.txt' <<<"$rr_err" | grep -c 'cat-file')" "6:0:1"
+rr_git checkout -- other.txt
+
 # A name git quotes, and a mode-only change, still reach the check.
 if ! command -v cygpath >/dev/null 2>&1; then
   rr_reset
