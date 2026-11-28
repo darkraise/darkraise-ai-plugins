@@ -122,8 +122,8 @@ Subagent (dforge:judge-sonnet-high; dforge:judge-opus for a subtle concurrency f
 ```
 
 **Placeholders:**
-- `[BRIEF_FILE]` — the task brief file (same file the implementer worked from)
-- `[FINDINGS]` — the fix message's bullets, one per open finding; task-step rereview fills them in
+- `[BRIEF_FILE]` — the task brief file (same file the implementer worked from); the final review's fix wave names the spec
+- `[FINDINGS]` — the fix message's bullets, one per open finding; task-step rereview fills them in, and the final review's fix wave gives its confirmed findings without the `DEFERRED:` ones
 - `[IMPLEMENTER_REPORT_FILE]` — the implementer's report file (fix reports appended)
 - `[REPORT_FILE]` — REQUIRED: the file this judge writes its report to, `<workspace>/task-<N>-rereview-<R>-report.md`; `task-step rereview` fills it, and the final review's fix wave names `<workspace>/final-rereview-report.md`
 - `[FIX_BASE_SHA]` — the head the previous review saw

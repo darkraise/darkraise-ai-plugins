@@ -50,7 +50,12 @@ runs it with `bash -c`), so it carries the step's context. The step's
 `working-directory:` (GitLab's `cd` in `before_script`, Azure's
 `workingDirectory:`), or a `cd <dir>` earlier in the same block, becomes a
 `cd <dir> && ` prefix. The non-secret `env:` values the job or the step sets
-(GitLab's and Azure's `variables:`) become `NAME=value ` prefixes.
+(GitLab's and Azure's `variables:`) follow it, so the command reads
+`cd <dir> && NAME=value <command>`: a `NAME=value ` prefix sets the variable
+for the one simple command after it, so it goes after the `cd`, never before.
+When the kept line is a compound one (`a && b`, a pipeline), export the values
+instead: `cd <dir> && export NAME=value && a && b`. Quote a value that holds a
+space or a shell character, as `NAME='a b'`.
 
 Note whether the workflow's `on:` declares `workflow_dispatch`. Only such a
 workflow can be started early.

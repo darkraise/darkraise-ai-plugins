@@ -304,8 +304,9 @@ the ruling seat.
 
 **When `task-step verdict` fails.** Exit 5 means the seat wrote no report,
 or one outside the grammar (a line under Findings or Cannot verify that is
-neither a bullet nor its indented detail nor the
-`(<k> more Minor left out)` line, or a `spec: fail`,
+neither a bullet nor its indented detail nor, under Findings, the
+`(<k> more Minor left out)` line; a finding line under any other heading;
+or a `spec: fail`,
 `quality: changes` or `fix round: open` with no Critical or Important
 finding), and stderr says which; exit 6 means a tracked
 file in the reviewed checkout changed during the review, or HEAD moved, and
@@ -313,9 +314,15 @@ stderr names the files and the checkout. On exit 6 a mismatch proves drift,
 not authorship: a review seat can write only its report, so a change is
 usually another writer's. Read `git -C <checkout> diff -- <file>` for each
 named file and run a file's `restore:` command only when the review seat made
-that change, and nothing broader. Keep every other change as it is, name it to
-your human partner (in an auto run, on the pending list), and re-dispatch once
-the checkout is quiet. A file that was already dirty at review time
+that change, and nothing broader. Keep every other change as it is and name it
+to your human partner (in an auto run, on the pending list). The verdict
+compares the checkout with the snapshot the review step recorded, so a kept
+change, or a moved HEAD, fails every later verdict until that snapshot is
+taken again: once the checkout is quiet, run `task-step review PLAN_FILE N`
+again before the re-dispatch. It records the checkout as it now is and removes
+the old report, its prompt file is the one to re-dispatch, and the verdict
+after it is a plain `verdict`, without `--rereview`, at any round. A file that
+was already dirty at review time
 holds uncommitted edits HEAD lacks, so `git checkout --` would discard them.
 Then, either way, log `Task <N>: Ruling: review seat <seat> <wrote no
 report | wrote a malformed report | changed <files>> —
