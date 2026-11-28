@@ -167,7 +167,7 @@ case $cmd in
             if [ -z "$accepted" ]; then
               failed verdicts "$id is unverifiable and the report has no **Accepted by:** line quoting the user"
             elif ! grep -qE "(^|[^A-Za-z0-9-])$id([^A-Za-z0-9-]|$)" <<<"$accepted" \
-                 && { [ "$unv" -gt 1 ] || ! grep -vqE "(^|[^A-Za-z0-9-])(UI|UX|OP)-[0-9A-Za-z]+" <<<"$accepted"; }; then
+                 && { [ "$unv" -gt 1 ] || ! grep -vqE "(^|[^A-Za-z0-9-])(UI|UX|OP)-[0-9]+([^A-Za-z0-9-]|$)" <<<"$accepted"; }; then
               failed verdicts "$id is unverifiable and no **Accepted by:** line names it; with several unverifiable rows each needs its own, for example **Accepted by:** $id: \"<the user's words>\""
             fi ;;
           *) failed verdicts "$id has the unknown verdict \"$verdict\" (pass, deviation, fail or unverifiable)" ;;
