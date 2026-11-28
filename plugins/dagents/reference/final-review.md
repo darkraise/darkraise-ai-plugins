@@ -66,9 +66,10 @@ it is the branch head. QA's own tests reach an independent reader in the scoped
 re-review instead (Fixing what it finds). While QA runs, make no commit of
 your own: QA commits on this branch. On a `Host: codex` plan whose judge
 restrictions are instruction-only ([native-codex.md](native-codex.md)
-§Dispatch and review), step 0.5 dispatches QA only after step 2's review and
-its after-snapshot, since that review needs no concurrent writer; steps 1 and
-2 then read the branch head.
+§Dispatch and review), step 0.5 dispatches QA only after step 1's review and
+lens seats, and step 2's round when it runs, have finished and their
+after-snapshot is taken, since those reviews need no concurrent writer; steps
+1 and 2 then read the branch head.
 
 0. **Gates.** Before the gates, run
    `bash <plugin-root>/scripts/ci-mirror PLAN_FILE`, in the background when it
@@ -434,7 +435,9 @@ the re-review. Then run exactly one scoped re-review of the fix wave
 its `[IMPLEMENTER_REPORT_FILE]` being that file, its `[REPORT_FILE]`
 being `<workspace>/final-rereview-report.md`, its `[BRIEF_FILE]` the spec's
 path, whose Acceptance statements are what QA's tests answer, and its
-`[FINDINGS]` the fix wave's input report paths as given above). When QA committed tests, FIX_BASE is the
+`[FINDINGS]` the confirmed findings the fix wave took from those reports, one
+line each, leaving out the dedupe report's rejected findings and every
+`DEFERRED:` finding). When QA committed tests, FIX_BASE is the
 review's HEAD (the `Acceptance QA: dispatched` SHA), so the range holds QA's
 commits too: the final reviewers never saw them. When no confirmed finding
 needs a fix wave but QA committed tests, still run that one scoped re-review
@@ -458,7 +461,8 @@ rejection upheld, or the ruling seat parking it), or one step 0.5 left to a
 deferred task, is the one edit allowed on an acceptance test. First run
 `scripts/register add <register> "A<n>: <statement>" --state deferred --note "<the upheld rejection>"`,
 `<register>` chosen or opened as step 0.5's `PARK` says; then mark that test
-skipped with a reason naming the row id that add printed; then commit both.
+skipped with a reason naming the new row's id (`add` prints nothing: it is
+the register's last row); then commit both.
 Finishing's test run is then green and the statement is not lost.
 
 **Redundant tests.** A `[lens:test-quality]` finding on a redundant test goes

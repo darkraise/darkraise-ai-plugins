@@ -230,14 +230,21 @@ A run's turn ends only with one of three lines as the last line of the message:
 - `Auto run: clearing` after `scripts/auto-run clear` exits 0;
 - `Auto run: switching` after `scripts/auto-run switch` exits 0.
 
+One more ending carries no sentinel line: a plain end of turn that waits for
+the notification of a background call this session started and must read,
+such as a `task-step verdict` or suite run of a task's review, the final
+review's Codex runner, `scripts/ci-mirror` or the integration check. It
+carries no next-step block either. `turn-end.sh` lets a plain stop through
+while that work is listed (`scripts/in-flight`).
+
 `scripts/auto-run pending` prints `compact`, `after-compact`, `handoff`,
 `clear`, `resume`, `switch` or `none`. `handoff` is a
 compaction that left too much
 behind; it stays until `scripts/auto-run clear` turns it into `clear`, and the
 Stop hook holds a turn that tries to end before that.
 
-Nothing you started may still run in the background. The Stop hook holds any
-other ending, its retries included, up to three times in a row; the fourth
+Apart from the wait for a background call above, nothing you started may
+still run in the background. The Stop hook holds any other ending, its retries included, up to three times in a row; the fourth
 stops the run (`the turn ended 3 times in a row without its sentinel line`)
 and is held once more to end as Stopping says. The cockpit then compacts, or
 clears the session and binds the new one, and submits the next prompt itself.
@@ -284,8 +291,10 @@ cleared session; dagents:handoff does not end the run. In order:
    not be written"` and end as Stopping says.
 4. `scripts/auto-run switch`, which also sets the phase to `execute`. It exits
    4 without an attached plan, or when the first prompt in the plan's handoff
-   names another plan; on exit 4 or any other nonzero exit, stop the run the same
-   way. On exit 0, end the turn with
+   names another plan; on exit 4 or any other nonzero exit except 5, stop the
+   run the same way. Exit 5 means another live session holds the plan's
+   handoff and the run has already stopped: report the holder and end as
+   Stopping says. On exit 0, end the turn with
    `Auto run: switching` as its last line.
 
 The cockpit then runs `scripts/auto-run clear --phase`, clears the session and
