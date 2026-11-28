@@ -829,15 +829,29 @@ old_block 'session=- done=0 closed=0 subject=- at=1700001700' > "$R/.dforge/hand
 chmod 600 "$R/.dforge/handoff/latest.md"
 NS="$TMP/no-ln"; mkdir -p "$NS"
 printf '#!/bin/sh\necho "ln: failed to create hard link: Operation not permitted" >&2\nexit 1\n' > "$NS/ln"
-chmod +x "$NS/ln"
-out=$(HOME="$TMP/rh-home" PATH="$NS:$PATH" migrate "$FM" "$R"); code=$?
+# Records the target's mode each time cat runs once the target exists: the
+# copy's own write included, so the mode right after the create is seen.
+printf '#!/bin/sh\nif [ -e "$WATCH" ]; then ls -l "$WATCH" | cut -c1-10 >> "$WATCH_LOG"; fi\nexec "%s" "$@"\n' "$(command -v cat)" > "$NS/cat"
+chmod +x "$NS/ln" "$NS/cat"
 NEW="$RT/.dforge/handoff/adhoc-legacy-1700001700.md"
+out=$(HOME="$TMP/rh-home" PATH="$NS:$PATH" WATCH="$NEW" WATCH_LOG="$TMP/watch.log" migrate "$FM" "$R"); code=$?
 check "no hard links: the handoff is renamed" \
   "$code $(exists "$R/.dforge/handoff/latest.md") $(grep -c 'latest\.md' "$NEW" 2>&1) $(grep -c 'refused' <<<"$out")" "0 no 0 0"
 case "$(uname -s)" in
   MINGW* | MSYS* | CYGWIN*) printf 'skip - no hard links: the mode is kept (Windows has no file modes)\n' ;;
-  *) check "no hard links: the mode is kept" "$(ls -l "$NEW" | cut -c1-10)" "-rw-------" ;;
+  *) check "no hard links: the mode is kept" "$(ls -l "$NEW" | cut -c1-10)" "-rw-------"
+     check "no hard links: a 0600 handoff's copy is never wider while it is written" \
+       "$(grep -c . "$TMP/watch.log" 2>/dev/null | sed 's/^[1-9][0-9]*$/seen/'):$(grep -vcx -- '-rw-------' "$TMP/watch.log" 2>/dev/null)" "seen:0" ;;
 esac
+R="$TMP/nlrepo3"; repo "$R"; RT=$(git -C "$R" rev-parse --show-toplevel)
+mkdir -p "$R/.dforge/handoff"
+old_block 'session=- done=0 closed=0 subject=- at=1700001800' > "$R/.dforge/handoff/latest.md"
+CS="$TMP/no-chmod"; mkdir -p "$CS"; cp "$NS/ln" "$CS/ln"
+printf '#!/bin/sh\necho "chmod: refused by the test" >&2\nexit 1\n' > "$CS/chmod"
+chmod +x "$CS/chmod"
+out=$(HOME="$TMP/rh-home" PATH="$CS:$PATH" migrate "$FM" "$R"); code=$?
+check "no hard links: a copy whose mode cannot be set is removed" \
+  "$code $(exists "$R/.dforge/handoff/latest.md") $(exists "$RT/.dforge/handoff/adhoc-legacy-1700001800.md") $(grep -c 'could not move' <<<"$out")" "1 yes no 1"
 
 # --- a dry run names a mirror handoff an older home still holds ---
 OH="$TMP/oh-home"; mkdir -p "$OH/.dr-forge/mirror/p/work/handoff"
