@@ -1497,7 +1497,7 @@ vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
 |scores: spec 7 / scope 15 / verification 12 / quality 9
 |
 |## Issues
-|- [Important] app.txt:2 — filed under the wrong heading
+|- Important: app.txt:2 — filed under the wrong heading
 |
 |## Findings
 |- [Minor] app.txt:5 — naming
@@ -1505,6 +1505,10 @@ REPORT
 vd_round 0
 rr_run verdict docs/plan.md 1
 check "verdict: spec fail with no Critical or Important finding exits 5" "$rr_rc $(grep -c 'no Critical or Important finding' <<<"$rr_err")" "5 1"
+sed 's/^- Important: app.txt:2/- [Important] app.txt:2/' "$RR_WS/task-1-review-report.md" > "$RR_TMP/issues.md" \
+  && mv "$RR_TMP/issues.md" "$RR_WS/task-1-review-report.md"
+rr_run verdict docs/plan.md 1
+check "verdict: a finding line under another heading exits 5" "$rr_rc $(grep -c 'under ## Issues, not ## Findings' <<<"$rr_err")" "5 1"
 vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
 |## Verdict
 |spec: fail
@@ -1565,6 +1569,30 @@ REPORT
 vd_round 0
 rr_run verdict docs/plan.md 1
 check "verdict: a misspelled Findings heading exits 5" "$rr_rc $(grep -c '## Findings:' <<<"$rr_err")" "5 1"
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: pass
+|quality: approved
+|scores: spec 17 / scope 18 / verification 16 / quality 16
+|
+|## Fidnings
+|- [Critical] app.txt:2 — wrong value
+REPORT
+vd_round 0
+rr_run verdict docs/plan.md 1
+check "verdict: a finding line under a transposed Findings heading exits 5" "$rr_rc $(grep -c 'not ## Findings' <<<"$rr_err")" "5 1"
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: pass
+|quality: approved
+|scores: spec 17 / scope 18 / verification 16 / quality 16
+|
+|### Findings
+|- [Critical] app.txt:2 — wrong value
+REPORT
+vd_round 0
+rr_run verdict docs/plan.md 1
+check "verdict: a finding line under a Findings heading at the wrong level exits 5" "$rr_rc $(grep -c 'not ## Findings' <<<"$rr_err")" "5 1"
 vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
 |## Verdict
 |spec: pass

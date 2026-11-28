@@ -1257,6 +1257,11 @@ parse_report() {
       if (sect == "Codex findings") codex_at = nsect
       next
     }
+    # A finding under any other heading, a near miss or a ### Findings
+    # included, would be read by no rule.
+    sect != "Findings" && /^- \[(Critical|Important|Minor)\] / {
+      err("line " NR " is a finding line under ## " sect ", not ## Findings: " $0)
+    }
     sect == "Verdict" {
       if ($0 !~ /^[^:]+: .+$/) next
       key = $0; sub(/: .*$/, "", key)
