@@ -1265,7 +1265,19 @@ roots=$(cd "$GREPO" && bash -c '. "$1/lib/plan.sh"; dagents_stores_init "$2" 2>/
 # Read as its readers read it, line by line: no fragment of the path is a root.
 check "worktree list: a path with a newline gives no bogus root" \
   "$(grep -c "$TMP/roots" <<<"$roots"):$(awk -F'\t' '$1 !~ /^(\/|[A-Za-z]:)/' <<<"$roots" | grep -c .)" "0:0"
+check "worktree list: beside a newline path the docs root and the primary are listed" \
+  "$(sed -n 1p <<<"$roots" | cut -f2):$(awk -F'\t' '$2 == "" && $1 ~ /\/routing$/' <<<"$roots" | grep -c .)" "docs/dagents:2"
 git -C "$GREPO" worktree remove --force "$NLW"
 git -C "$GREPO" branch -q -D roots-newline
+
+# --- a git that refuses worktree list -z (before 2.36) ---
+. "$HERE/fixtures/git-without-z.sh"
+git_without_z "$TMP/noz"
+PLW="$TMP/roots-plain"
+git -C "$GREPO" worktree add -q -b roots-plain "$PLW"
+roots=$(cd "$GREPO" && PATH="$TMP/noz:$PATH" bash -c '. "$1/lib/plan.sh"; dagents_stores_init "$2" 2>/dev/null; eval "$(sed -n "/^_plan_roots() {\$/,/^}\$/p" "$1/next-step")"; _plan_roots "$2"' _ "$HERE/../../plugins/dagents/scripts" "$GREPO" 2>&1)
+check "worktree list: a git without -z still lists a worktree as a plan root" "$(awk -F'\t' '$2 == "" && $1 ~ /\/roots-plain$/' <<<"$roots" | grep -c .)" "1"
+git -C "$GREPO" worktree remove --force "$PLW"
+git -C "$GREPO" branch -q -D roots-plain
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

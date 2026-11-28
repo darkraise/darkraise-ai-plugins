@@ -123,6 +123,10 @@ task 4 b.txt
 run status docs/plan.md 2 "$BASE"
 has "status: a committed task" "$out" "Task 2: ref sdd/plan/task-2"
 has "status: names its worktree" "$out" "merged no; worktree $GTMP/wt-2"
+. "$HERE/fixtures/git-without-z.sh"
+git_without_z "$TMP/noz"
+PATH="$TMP/noz:$PATH" run status docs/plan.md 2 "$BASE"
+has "worktree list: a git without -z still names the task's worktree" "$out" "merged no; worktree $GTMP/wt-2"
 
 # --- merge ---
 printf 'dirty\n' >> a.txt

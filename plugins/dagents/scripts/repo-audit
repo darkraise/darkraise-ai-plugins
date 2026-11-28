@@ -60,7 +60,7 @@ while IFS= read -r -d '' field; do
     detached) wt_line="$wt_line (detached)" ;;
     prunable*) wt_line="$wt_line — prunable" ;;
   esac
-done < <(git worktree list --porcelain -z)
+done < <(dr_worktree_list git)
 [ -z "$wt_line" ] || printf '%s\n' "$wt_line"
 
 dirty=$(git status --short)
@@ -279,7 +279,7 @@ while IFS= read -r -d '' field; do
     'worktree '*) skip_unusable "$wt" "$wprune"; wt=${field#worktree } wprune="" ;;
     prunable*) wprune=prunable ;;
   esac
-done < <(git -C "$(dr_native_path "$root")" worktree list --porcelain -z 2>/dev/null)
+done < <(dr_worktree_list git -C "$(dr_native_path "$root")" 2>/dev/null)
 skip_unusable "$wt" "$wprune"
 [ "$listed" -eq 1 ] || echo "- none"
 

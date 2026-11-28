@@ -492,10 +492,12 @@ report_dforge() {
 legacy_handoffs() {
   (
     dagents_stores_init "$root" || exit 2
-    while IFS= read -r wt; do
+    # NUL-separated fields: a worktree path may hold a newline.
+    while IFS= read -r -d '' wt; do
+      case $wt in 'worktree '*) wt=${wt#worktree } ;; *) continue ;; esac
       f="$(dagents_dir state "$(_dagents_path "$wt")")/handoff/latest.md"
       if [ -f "$f" ] || [ -L "$f" ]; then printf '%s\n' "$f"; fi
-    done < <(g -C "$root" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p')
+    done < <(dr_worktree_list g -C "$root" 2>/dev/null)
   )
 }
 
@@ -621,9 +623,11 @@ if [ "$legacy_only" -eq 1 ]; then
   exit 0
 fi
 
-while IFS= read -r wt; do
+# NUL-separated fields: a worktree path may hold a newline.
+while IFS= read -r -d '' wt; do
+  case $wt in 'worktree '*) wt=${wt#worktree } ;; *) continue ;; esac
   [ -n "$wt" ] && [ -d "$wt" ] && checkouts+=("$wt")
-done < <(g -C "$root" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p')
+done < <(dr_worktree_list g -C "$root" 2>/dev/null)
 [ ${#checkouts[@]} -gt 0 ] || checkouts=("$root")
 
 # A dforge 5 plan, or a dforge run still holding the project, stops the whole

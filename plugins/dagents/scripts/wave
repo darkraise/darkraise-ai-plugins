@@ -90,7 +90,7 @@ worktrees_holding() {
         fi
         path="" ;;
     esac
-  done < <(git worktree list --porcelain -z; printf '\0')
+  done < <(dr_worktree_list git; printf '\0')
 }
 
 case $cmd in

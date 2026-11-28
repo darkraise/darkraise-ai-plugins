@@ -206,6 +206,11 @@ has "A10: marked stored" "$HSEC" "- stored (kind adhoc is not recomputed)"
 has "A10: its stored status" "$HSEC" "- **Status:** a10 status"
 check "A10: a checkout with no handoff gets no entry" "$(grep -cF -- "$NOH_ROOT" <<<"$HSEC")" "0"
 has "A10: a missing worktree is skipped" "$HSEC" "- skipped \`$GONE_ROOT\`: prunable or missing"
+. "$HERE/fixtures/git-without-z.sh"
+git_without_z "$TMP/noz"
+PATH="$TMP/noz:$PATH" run "$REPO"
+has "worktree list: a git without -z still lists the worktrees" "$(sed -n '/^## Worktrees/,/^## /p' <<<"$out")" "[a10]"
+has "worktree list: a git without -z still skips a missing worktree" "$(sed -n '/^## Handoff/,/^## /p' <<<"$out")" "- skipped \`$GONE_ROOT\`: prunable or missing"
 git -C "$REPO" worktree remove --force "$A10"; git -C "$REPO" worktree remove --force "$NOH"; git -C "$REPO" worktree prune
 
 # --- keyed handoffs: listing, claims and cleanup (spec A10, A16, A20) ---
