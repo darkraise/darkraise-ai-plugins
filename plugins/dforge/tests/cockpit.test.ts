@@ -6513,6 +6513,21 @@ describe('resume offer', () => {
     expect(await band.find({ type: 'Text', text: /Next: Resume at Task 5$/ })).toBeDefined()
   })
 
+  test('a tool call while a run is in flight scans the handoff directory again', async ($, on) => {
+    const DIR = HANDOFF.replace(/\/[^/]*$/, '')
+    let lists = 0
+    on('fs.list', { path: DIR } as never, ((_$: unknown, e: unknown, next: (e: unknown) => unknown) => {
+      lists += 1
+      return next(e)
+    }) as never)
+    const w = await begin($, on, RESUMABLE, { w: { nextStepOuts: ['hang'] }, more: { [DIR]: { text: '', kind: 'dir', mtimeMs: 500_000 } } })
+    w.files[DIR] = { ...w.files[DIR]!, mtimeMs: 600_000 }
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const scanned = lists
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(lists).toBe(scanned + 1)
+  })
+
   test('never awaits a run, nor starts a second while one is in flight', async ($, on) => {
     const w = await begin($, on, RESUMABLE, { w: { nextStepOuts: ['hang'] } })
     w.files[HANDOFF] = { ...w.files[HANDOFF]!, mtimeMs: 950_000 }
