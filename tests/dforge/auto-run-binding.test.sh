@@ -135,6 +135,18 @@ out2=$(a --session s-x cd-prefix); s2=$?
 rm -f "$REC"
 out3=$(a --session s-x cd-prefix); s3=$?
 check "cd-prefix: outside the starting directory" "$out1|$s1|$out2|$s2|$out3|$s3" "cd '$REPO' && |0||0||0"
+# Another spelling of the same directory (an 8.3 short name under Git Bash, a
+# symlink here) is still the starting directory.
+if ln -s "$(dirname "$REPO")" "$TMP/alias" 2>/dev/null && [ -L "$TMP/alias" ]; then
+  jq -n --arg c "$TMP/alias" '{cwd: $c}' > "$REC"
+  out4=$(a --session s-x cd-prefix); s4=$?
+  jq -n --arg c "$TMP/alias/$(basename "$REPO")" '{cwd: $c}' > "$REC"
+  out5=$(a --session s-x cd-prefix); s5=$?
+  rm -f "$REC"
+  check "cd-prefix: another spelling of the starting directory needs no cd" "$out4|$s4|$out5|$s5" "|0||0"
+else
+  printf 'skip - cd-prefix: another spelling needs a symlink this system does not make\n'
+fi
 
 mkdir -p "$REPO/docs"
 printf '# P\n\n### Task 1: One\n' > "$REPO/docs/wplan.md"

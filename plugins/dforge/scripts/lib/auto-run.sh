@@ -123,10 +123,21 @@ ar_cd_prefix() {
   cwd=$(ar_jq -r '.cwd // empty | strings' < "$rec" 2>/dev/null) || return 0
   [ -n "$cwd" ] || return 0
   [ -n "$checkout" ] || checkout=$(ar_checkout) || return 0
+  local d=$checkout up
   cwd=$(dr_native_path "$cwd")
   case $(dr_native_path "$checkout") in
     "$cwd" | "$cwd"/*) return 0 ;;
   esac
+  # Another spelling of the same directory (an 8.3 short name under Git Bash,
+  # a symlink) matches by identity: the checkout or one of its parents.
+  if [ -d "$cwd" ]; then
+    while [ -n "$d" ]; do
+      [ "$d" -ef "$cwd" ] && return 0
+      up=${d%/*}
+      [ "$up" != "$d" ] || break
+      d=$up
+    done
+  fi
   printf 'cd %s && ' "$(_ar_quote "$checkout")"
 }
 
