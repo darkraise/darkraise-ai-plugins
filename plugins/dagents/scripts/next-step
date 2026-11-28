@@ -480,7 +480,9 @@ if [ "$latest_mode" -eq 1 ]; then
       # then contains it with no merge.
       on_kept=0
       case $m_branch in
-        detached:*) [ "$(git -C "$primary" rev-parse --verify --quiet HEAD 2>/dev/null | tr -d '\r')" != "$(git -C "$primary" rev-parse --verify --quiet "$kept_ref" 2>/dev/null | tr -d '\r')" ] || on_kept=1 ;;
+        # A branch fast-forwarded onto the commit holds it merged.
+        detached:*) git -C "$primary" symbolic-ref -q HEAD >/dev/null 2>&1 \
+          || [ "$(git -C "$primary" rev-parse --verify --quiet HEAD 2>/dev/null | tr -d '\r')" != "$(git -C "$primary" rev-parse --verify --quiet "$kept_ref" 2>/dev/null | tr -d '\r')" ] || on_kept=1 ;;
         *) [ "$(git -C "$primary" symbolic-ref --short -q HEAD 2>/dev/null | tr -d '\r')" != "$m_branch" ] || on_kept=1 ;;
       esac
       [ "$on_kept" -eq 1 ] || ! git -C "$primary" merge-base --is-ancestor "$kept_ref" HEAD 2>/dev/null || gone "the kept branch $m_branch is merged"
