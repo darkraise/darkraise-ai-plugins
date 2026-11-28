@@ -478,6 +478,18 @@ J=$(node "$REPORT" --markers "$AR/markers.tsv" --transcripts "$AR" --from-archiv
 check "archive_inferred: a task the markers record is not inferred again" \
   "$(q "$J" '[.plans[] | select(.plan == "2026-11-01-alpha.md") | .tasks[].tasks[]]')" "[2]"
 
+# --- archive_two_repos: a marker holds back only its own repository's archive task ---
+AT="$TMP/at"; mkdir -p "$AT/ra/.dforge/sdd" "$AT/proj-ra" "$AT/arch/-rb"
+say "$AT/proj-ra/ra-s.jsonl" ra-m 2026-01-01T00:00:01Z 5
+{ mark open 2026-01-01T00:00:00Z docs/plans/p.md 1 ra-s 0
+  mark close 2026-01-01T00:00:02Z docs/plans/p.md 1 ra-s "$(at "$AT/proj-ra/ra-s.jsonl")" a..b; } > "$AT/ra/.dforge/sdd/usage-markers.tsv"
+printf 'session\tproject\nb1\t%s\n' "$AT/rb" > "$AT/arch/manifest.tsv"
+say "$AT/arch/-rb/b1.jsonl" bo 2026-01-02T10:01:00Z 1 "" "bash /p/scripts/task-brief --open docs/plans/p.md 1"
+say "$AT/arch/-rb/b1.jsonl" bc 2026-01-02T10:01:30Z 1 "" "bash /p/scripts/task-close docs/plans/p.md 1 x"
+J=$(node "$REPORT" --markers "$AT/ra/.dforge/sdd/usage-markers.tsv" --transcripts "$AT/proj-ra" --from-archive "$AT/arch" --format json 2>/dev/null)
+check "archive_two_repos: the other repository's archive task is kept" \
+  "$(q "$J" '[.plans[] | (.repo // "" | gsub("\\\\"; "/") | sub(".*/"; ""))] | sort')" '["ra","rb"]'
+
 # --- splits_and_all_plans: one plan path in two repositories ---
 TR="$TMP/tr"
 for r in ra rb; do
