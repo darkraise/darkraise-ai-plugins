@@ -106,9 +106,13 @@ export function refreshContext(context) {
 
 export function leftoverLines(cfg) {
   if (cfg.documents.applied !== "darkmem" || !cfg.worktreeRoot) return [];
-  return [path.join(cfg.worktreeRoot, "docs", "dforge")]
-    .filter(dir => fs.existsSync(dir))
-    .map(dir => `darkmem-sync reconcile: ${dir} is not read while documents are applied darkmem`);
+  const dir = path.join(cfg.worktreeRoot, "docs", "dforge");
+  if (!fs.existsSync(dir)) return [];
+  const line = `darkmem-sync reconcile: ${dir} is not read while documents are applied darkmem`;
+  // A move killed between its record and git rm leaves the directory tracked.
+  const tracked = runGit(cfg.worktreeRoot, ["ls-files", "-z", "--", "docs/dforge"]);
+  if (tracked.status !== 0 || !tracked.stdout) return [line];
+  return [`${line}; it is still tracked: run git rm -r docs/dforge in ${cfg.worktreeRoot} and commit`];
 }
 
 // Every checkout's top level. A failed listing is a problem: reading the
@@ -473,7 +477,7 @@ async function documentsToDarkmem(context) {
       writeApplied(context.env, cfg.repoRoot, { documents: "local" }, where);
     } catch (error) {
       if (!(error instanceof ConfigError) && typeof error?.code !== "string") throw error;
-      details.push(`the record of the move could not be set back to local: ${error.message}; documents stay applied darkmem, and docs/dforge is not read`);
+      details.push(`the record of the move could not be set back to local: ${error.message}; it still says documents are applied darkmem, so ${rel} is not read`);
     }
     return { moved: false, reason: `git rm failed: ${removed.stderr.trim()}`, details };
   }

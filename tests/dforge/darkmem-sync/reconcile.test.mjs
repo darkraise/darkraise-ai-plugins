@@ -255,6 +255,17 @@ test("a docs directory left in the checkout while documents are applied darkmem 
   assert.equal(result.stdout, `darkmem-sync reconcile: ${path.join(repo, "docs", "dforge")} is not read while documents are applied darkmem\n`);
 });
 
+test("a docs directory still tracked while documents are applied darkmem names the git rm that finishes the move", async () => {
+  const repo = makeRepo();
+  write(path.join(repo, "docs", "dforge", "specs", "a.md"), "# A\n");
+  git(repo, "add", "-A");
+  git(repo, "commit", "-q", "-m", "docs");
+  const { env } = mapped(repo, { entry: { progressSource: "local" }, stores: { documents: "darkmem", progress: "local" } });
+  const result = await reconcile(repo, env);
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.stdout, `darkmem-sync reconcile: ${path.join(repo, "docs", "dforge")} is not read while documents are applied darkmem; it is still tracked: run git rm -r docs/dforge in ${repo} and commit\n`);
+});
+
 // A repository whose committed docs/dforge holds `files` (name -> content),
 // mapped with documents configured darkmem; progress stays local. `stores` is
 // the stores.json record (null: none); `stub` is passed to startStub.
