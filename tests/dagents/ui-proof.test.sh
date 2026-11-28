@@ -172,6 +172,11 @@ report 2026-10-24-t touch "$PASSROW"
 out=$(up stamp "$PROOFS/2026-10-24-t.md")
 check "stamp: reports the fingerprint" "$(grep -c "^ui-proof: stamped $(up fingerprint)" <<<"$out")" "1"
 check "stamp: writes one fingerprint line under Contract" "$(grep -A1 '^\*\*Contract:\*\*' "$PROOFS/2026-10-24-t.md" | grep -c '^\*\*Fingerprint:\*\*')" "1"
+NOMV="$TMP/no-mv"; mkdir -p "$NOMV"; printf '#!/bin/sh\nexit 1\n' > "$NOMV/mv"; chmod +x "$NOMV/mv"
+before=$(cat "$PROOFS/2026-10-24-t.md")
+out=$(PATH="$NOMV:$PATH" up stamp "$PROOFS/2026-10-24-t.md" 2>&1); st=$?
+check "stamp: a report it cannot write exits 2 and stamps nothing" \
+  "$st|$(grep -c 'stamped' <<<"$out")|$(grep -c 'cannot write' <<<"$out")|$([ "$(cat "$PROOFS/2026-10-24-t.md")" = "$before" ] && echo same)" "2|0|1|same"
 printf '# UI proof: f\n\n```\n**Contract:** touch\n```\n' > "$PROOFS/fenced.md"
 out=$(up stamp "$PROOFS/fenced.md" 2>&1 >/dev/null); st=$?
 check "stamp: a Contract line only inside a fence is refused" "$st|$out" "2|ui-proof: the report has no **Contract:** line to stamp beside"
@@ -222,6 +227,7 @@ check "verdicts: a missing screenshot fails" "$(try '| UX-1 | pass | .dagents/ui
 check "verdicts: a test name is evidence" "$(try '| UX-1 | pass | A12: escape closes the dialog | |')" "0"
 check "verdicts: unverifiable without acceptance fails" "$(try '| UX-1 | unverifiable | - | no emulator here |')" "1"
 check "verdicts: unverifiable with the user's acceptance passes" "$(try '| UX-1 | unverifiable | - | no emulator here |' '**Accepted by:** "ship it without the Android run"')" "0"
+check "accepted: a word like UI-kit is no ID" "$(try '| UX-1 | unverifiable | - | no emulator here |' '**Accepted by:** "ship it, the UI-kit page can wait"')" "0"
 check "accepted: an empty acceptance does not cover an unverifiable row" "$(try '| UX-1 | unverifiable | - | no emulator here |' '**Accepted by:**')" "1"
 check "accepted: an acceptance naming another ID does not cover the row" "$(try '| UX-1 | unverifiable | - | no emulator here |' '**Accepted by:** UX-2: "fine without the emulator"')" "1"
 check "verdicts: an unknown verdict fails" "$(try '| UX-1 | ok | .dagents/ui-ux/t/a.png | |')" "1"
