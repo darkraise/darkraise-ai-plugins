@@ -35,7 +35,7 @@ export const windowsSeconds = {
   'tests/dforge/auto-default.test.sh': 10,
   'tests/dforge/auto-run-binding.test.sh': 269,
   'tests/dforge/auto-run-budget.test.sh': 263,
-  'tests/dforge/auto-run-cleanup-and-long-runs.acceptance.test.sh': 900,
+  'tests/dforge/auto-run-cleanup-and-long-runs.acceptance.test.sh': 1200,
   'tests/dforge/auto-run-preflight.test.sh': 10,
   'tests/dforge/auto-run-skills.test.sh': 10,
   'tests/dforge/auto-run-worktree-setting-qa.acceptance.test.sh': 760,
@@ -76,7 +76,7 @@ export const windowsSeconds = {
   'tests/dforge/lock.test.sh': 10,
   'tests/dforge/measured-proposals.acceptance.test.sh': 535,
   'tests/dforge/next-session-routing.acceptance.test.sh': 495,
-  'tests/dforge/next-step.test.sh': 765,
+  'tests/dforge/next-step.test.sh': 1000,
   'tests/dforge/next-step-print.test.sh': 210,
   'tests/dforge/per-worktree-handoff.acceptance.test.sh': 700,
   'tests/dforge/plan-amend.test.sh': 390,
@@ -100,7 +100,7 @@ export const windowsSeconds = {
   'tests/dforge/roots.test.sh': 84,
   'tests/dforge/handoff.test.sh': 30,
   'tests/dforge/parallel-session-handoff.acceptance.test.sh': 239,
-  'tests/dforge/parallel-session-handoff-qa.acceptance.test.sh': 700,
+  'tests/dforge/parallel-session-handoff-qa.acceptance.test.sh': 900,
   'tests/dforge/session-live.test.sh': 10,
   'tests/dforge/route.test.sh': 120,
   'tests/dforge/seats.test.sh': 10,
@@ -258,18 +258,20 @@ export const windowsSeconds = {
 // dforge's efficiency-measurement passed 600 s at about two thirds of its cases
 // and once took 1065 s, and dagents' took 409 s on one runner and over 600 s
 // on another.
-// Both parallel-session-handoff-qa suites took 560 s to over 600 s there.
+// Both parallel-session-handoff-qa suites took 560 s to over 600 s there, and
+// dforge's passed 900 s in run 46102284217, as next-step passed 1000 s and
+// auto-run-cleanup-and-long-runs 1200 s; their limits and weights follow.
 export const suiteSeconds = {
   'tests/dforge/efficiency-measurement.acceptance.test.sh': 1400,
   'tests/dagents/efficiency-measurement.acceptance.test.sh': 900,
-  'tests/dforge/parallel-session-handoff-qa.acceptance.test.sh': 900,
+  'tests/dforge/parallel-session-handoff-qa.acceptance.test.sh': 1300,
   'tests/dagents/parallel-session-handoff-qa.acceptance.test.sh': 900,
   'tests/dforge/plan-lint.test.sh': 1200,
   'tests/dforge/speed-and-cost-followups.acceptance.test.sh': 1200,
   'tests/dforge/task-loop-steps.acceptance.test.sh': 1200,
   'tests/dforge/task-step-base.test.sh': 1200,
   'tests/dforge/task-step.test.sh': 900,
-  'tests/dforge/next-step.test.sh': 1000,
+  'tests/dforge/next-step.test.sh': 1500,
   'tests/dforge/auto-run.test.sh': 2150,
   'tests/dforge/measured-proposals.acceptance.test.sh': 900,
   'tests/dforge/next-session-routing.acceptance.test.sh': 650,
@@ -290,7 +292,7 @@ export const suiteSeconds = {
   'tests/dforge/plugin-review-fixes.acceptance.test.sh': 650,
   'tests/dagents/auto-run-worktree-setting-qa.acceptance.test.sh': 900,
   'tests/dforge/auto-run-worktree-setting-qa.acceptance.test.sh': 1000,
-  'tests/dforge/auto-run-cleanup-and-long-runs.acceptance.test.sh': 1200,
+  'tests/dforge/auto-run-cleanup-and-long-runs.acceptance.test.sh': 1600,
 };
 // faster-plans takes about 20 minutes on a Windows runner, more than a shard
 // can hold beside anything else, so it runs as three parts of its tests.
