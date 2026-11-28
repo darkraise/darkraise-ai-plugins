@@ -44,7 +44,7 @@ bash "<plugin-root>/scripts/run-review-panel" --kind task|plan|final \
 - It prints each runner's own status line,
   `<id>-judge <model>/<effort> status=OK|FALLBACK|SKIPPED|TIMEOUT|FAILED exit=<n> out=<path> evidence=<e>`,
   with ` reason=<token>` on every line that is not `OK`, and
-  ` until=<epoch>` after `reason=quota` when agy named the quota's reset,
+  ` until=<epoch>` after `reason=quota` when the runner knows the quota's reset,
   then
   `panel tier=heavy lists=<n>`, where `<n>` counts the `OK` and `FALLBACK`
   lines.
