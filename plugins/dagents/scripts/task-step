@@ -1258,8 +1258,9 @@ parse_report() {
       next
     }
     # A finding under any other heading, a near miss or a ### Findings
-    # included, would be read by no rule.
-    sect != "Findings" && /^- \[(Critical|Important|Minor)\] / {
+    # included, would be read by no rule. A re-review verdict line may copy
+    # the tagged form of the fix message it answers.
+    sect != "Findings" && sect != "Finding verdicts" && /^- \[(Critical|Important|Minor)\] / {
       err("line " NR " is a finding line under ## " sect ", not ## Findings: " $0)
     }
     sect == "Verdict" {
