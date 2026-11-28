@@ -368,7 +368,7 @@ export function planFiles(planText, n) {
     }
     if (fence) continue;
     if (/^### /.test(l)) break;
-    const head = /^\*\*Files:\*\*/.exec(l) || /^\s*- (?:Create|Modify|Test|Delete)(?:\s*\([^)]*\))?:/.exec(l);
+    const head = /^\*\*Files:\*\*/.exec(l) || /^\s*- (?:Create|Modify|Test|Delete|Read)(?:\s*\([^)]*\))?:/.exec(l);
     if (!head) continue;
     const ticks = [...l.matchAll(/`([^`]+)`/g)].map((x) => x[1].trim());
     for (const p of ticks.length ? ticks : (l.slice(head[0].length).match(/[\w./-]+\.\w+/g) || [])) {
