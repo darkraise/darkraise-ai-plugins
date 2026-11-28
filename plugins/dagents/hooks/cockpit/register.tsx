@@ -2694,6 +2694,10 @@ const S = {
   // cleared into: that session's main-loop requests go out on them, so the
   // person's settings never change. Kept outside $.state, which /clear wipes.
   launch: null as { session: string; model: string; effort: Effort | null } | null,
+  // Where this session's run was last read: a cd into another repository
+  // moves the primary, and the run is still read, and auto-run still called,
+  // there. dagents keeps no run binding to name it.
+  runPlace: null as { primary: string; checkout: string } | null,
   // When background work began deferring the pending stage; null while nothing
   // does or a turn is live.
   autoDeferredSince: null as number | null,
@@ -2974,12 +2978,27 @@ async function endWait($: EngineInterface, id: string, outcome: string) {
   if (kind === 'background') await settleBackground($)
 }
 
-// The auto run state file in the primary checkout; null when there is none.
+// The auto run state file in the primary checkout, or, when that holds no run
+// of this session's, the one in the primary where its run was last read; null
+// when there is none.
 async function autoRunText($: EngineInterface): Promise<string | null> {
   const root = S.where.primary ?? (await read($, place))?.root ?? null
-  if (root === null) return null
-  const text = await $.fs.read(`${root}/.dagents/sdd/auto-run.json`).catch(() => null)
-  return typeof text === 'string' ? text : null
+  const stateAt = async (dir: string) => {
+    const text = await $.fs.read(`${dir}/.dagents/sdd/auto-run.json`).catch(() => null)
+    return typeof text === 'string' ? text : null
+  }
+  const local = root === null ? null : await stateAt(root)
+  const id = await $.session.id()
+  const mine = local === null ? null : autoRunFor(local, id)
+  const kept = S.runPlace?.primary ?? null
+  if (kept !== null && kept !== root && (mine === null || !mine.active)) {
+    const there = await stateAt(kept)
+    const theirs = there === null ? null : autoRunFor(there, id)
+    // A run of this session's that ended here must not hide the active one kept there.
+    if (theirs !== null && (mine === null || theirs.active)) return there
+  }
+  if (mine !== null && root !== null) S.runPlace = { primary: root, checkout: S.where.checkout ?? root }
+  return local
 }
 
 // The auto run state file's run, as the run bound to this session; null when
@@ -3019,7 +3038,9 @@ async function isSessionAlive($: EngineInterface, sid: string): Promise<boolean 
 async function autoRunCall($: EngineInterface, sessionId: string, args: string[]): Promise<number> {
   const session = S.where.checkout
   const isGone = session !== null && session !== S.where.primary && (await $.fs.stat(session).catch(() => null))?.kind !== 'dir'
-  const checkout = (isGone ? S.where.primary : session) ?? S.where.primary ?? '.'
+  const run = S.runPlace
+  const isElsewhere = run !== null && run.primary !== S.where.primary
+  const checkout = (isElsewhere ? run.checkout : (isGone ? S.where.primary : session) ?? S.where.primary) ?? '.'
   // The directory travels in argv: no cockpit call passes $.process.run a cwd.
   const argv = ['bash', '-c', 'cd -- "$1" && shift && exec bash "$@"', 'auto-run', checkout, `${$.plugin.root}/scripts/auto-run`, '--session', sessionId, ...args]
   const ran = await $.process.run(argv, { timeoutMs: 15_000 }).catch(() => null)

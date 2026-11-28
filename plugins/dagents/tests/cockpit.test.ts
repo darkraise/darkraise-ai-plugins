@@ -322,6 +322,8 @@ type World = {
   submitFailures?: number
   /** Each scripts/auto-run call, after the script's path. */
   autoRuns?: string[]
+  /** The directory each scripts/auto-run call ran in. */
+  autoRunDirs?: string[]
   /** The session transcript's text, which the cockpit reads the tail of. */
   transcript?: string
   /** The exit code of an auto-run command, by its command word; 0 unless said. */
@@ -538,6 +540,7 @@ function world(on: On, w: World) {
     if (argv.includes(script)) {
       const call = argv.slice(argv.indexOf(script) + script.length)
       w.autoRuns?.push(call)
+      w.autoRunDirs?.push(e.argv[4] ?? '')
       const words = call.split(' ')
       const word = words[2] ?? ''
       const exitCode = w.autoRunExits?.[word] ?? 0
@@ -7367,6 +7370,52 @@ describe('auto run', () => {
       { model: 'sonnet', effort: 'high' },
       { model: 'claude-opus-5-5', effort: 'max', agentId: 'agent-1' },
     ])
+  })
+
+  test('a cd into another repository keeps the run and its launch model', async ($, on) => {
+    const DEPOT = '/home/me/code/depot'
+    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
+    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]', effortLevel: 'max' }, autoFile: files[AUTO] }
+    let cwd = '/home/me/code/shop/web'
+    const clock = world(on, w)
+    const sent = sentSteps(on)
+    signedIn(on, files, undefined, '/home/me/code/shop', () => cwd)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.commands).toEqual(['/clear'])
+    cwd = DEPOT
+    w.checkout = DEPOT
+    w.primary = DEPOT
+    await $.tool.call({ tool: 'Bash', command: `cd ${DEPOT}` } as never)
+    await clock.advance(2_000)
+    await settle(clock)
+    await drain($.turn.step({ turnId: 't2', index: 0, model: 'claude-opus-5-5', effort: 'max', messageCount: 1 }))
+    expect(sent[sent.length - 1]).toEqual({ model: 'sonnet', effort: 'high' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Auto run · execute/ })).toBeDefined()
+  })
+
+  test('a cd into another repository keeps auto-run calls in the run\'s primary', async ($, on) => {
+    const DEPOT = '/home/me/code/depot'
+    const files = autoFiles({ pending: 'compact' })
+    const w: World = { ...SIGNED_IN, autoRuns: [], autoRunDirs: [], compacts: [], prompts: [], autoFile: files[AUTO] }
+    let cwd = '/home/me/code/shop/web'
+    const clock = world(on, w)
+    signedIn(on, files, undefined, '/home/me/code/shop', () => cwd)
+    await $.session.start(START)
+    await clock.advance(2_000)
+    await settle(clock)
+    cwd = DEPOT
+    w.checkout = DEPOT
+    w.primary = DEPOT
+    await $.tool.call({ tool: 'Bash', command: `cd ${DEPOT}` } as never)
+    const from = w.autoRunDirs!.length
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    const after = w.autoRunDirs!.slice(from)
+    expect(after.length).toBeGreaterThan(0)
+    expect(after.filter(dir => dir !== '/home/me/code/shop')).toEqual([])
   })
 
   for (const how of ['/model', 'a stopped run'] as const) {
