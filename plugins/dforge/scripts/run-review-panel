@@ -114,9 +114,12 @@ command -v setsid >/dev/null 2>&1 && have_setsid=true
 [ -z "${PANEL_NO_SETSID:-}" ] || have_setsid=false
 
 # A gate under setsid leads its own process group, which is killed if a
-# signal to the panel arrives while the panel waits on it.
-gate_pid=''
-trap '[ -z "$gate_pid" ] || kill -KILL -- "-$gate_pid" 2>/dev/null; exit 130' INT TERM
+# signal to the panel arrives while the panel waits on it; with no setsid the
+# gate (or the timeout that runs it, which passes TERM on) gets TERM. The gate
+# runs in the background in every branch: bash runs this trap during a wait,
+# but only after a foreground command ends.
+gate_pid='' gate_sig=KILL
+trap '[ -z "$gate_pid" ] || kill -"$gate_sig" -- "$gate_pid" 2>/dev/null; exit 130' INT TERM
 
 open_ids=() lines_by_id=()
 bound=0
@@ -141,15 +144,20 @@ for id in $ids; do
   if [ -n "$gate" ]; then
     if [ -n "$DFORGE_TIMEOUT" ] && [ "$have_setsid" = true ]; then
       setsid "$DFORGE_TIMEOUT" -k 5 "$gate_secs" bash "$gate" > "$out_dir/$id.gate.out" 2> "$out_dir/$id.gate.log" < /dev/null &
-      gate_pid=$!
-      wait "$gate_pid"
-      case $? in 124 | 137) kill -KILL -- "-$gate_pid" 2>/dev/null ;; esac
-      gate_pid=''
-    elif [ -n "$DFORGE_TIMEOUT" ]; then
-      "$DFORGE_TIMEOUT" -k 5 "$gate_secs" bash "$gate" > "$out_dir/$id.gate.out" 2> "$out_dir/$id.gate.log"
+      gate_group=$!
+      gate_pid=-$gate_group gate_sig=KILL
+      wait "$gate_group"
+      case $? in 124 | 137) kill -KILL -- "-$gate_group" 2>/dev/null ;; esac
     else
-      bash "$gate" > "$out_dir/$id.gate.out" 2> "$out_dir/$id.gate.log"
+      if [ -n "$DFORGE_TIMEOUT" ]; then
+        "$DFORGE_TIMEOUT" -k 5 "$gate_secs" bash "$gate" > "$out_dir/$id.gate.out" 2> "$out_dir/$id.gate.log" < /dev/null &
+      else
+        bash "$gate" > "$out_dir/$id.gate.out" 2> "$out_dir/$id.gate.log" < /dev/null &
+      fi
+      gate_pid=$! gate_sig=TERM
+      wait "$gate_pid"
     fi
+    gate_pid=''
     line=$(tail -1 "$out_dir/$id.gate.out" 2>/dev/null | tr -d '\r')
     rm -f "$out_dir/$id.gate.out"
   fi

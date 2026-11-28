@@ -271,7 +271,7 @@ CODEX_STATUS=FAILED PANEL_BOUND_SECONDS=3 PANEL_AGY_RUNNER="$TMP/hang-runner" qp
 check "failures_book_total: a FAILED and a TIMEOUT line add 2 panel failures" \
   "$(grep -c -e ' status=FAILED ' -e ' status=TIMEOUT ' <<<"$out"):$(jq -r .totals.panelFailures "$QS")" "2:2"
 PANEL_CODEX_RUNNER="$TMP/codex-denied-runner" qpanel
-check "failures_book_total: a reason=denied line counts too" "$(jq -r .totals.panelFailures "$QS")" "3"
+check "failures_book_total: a FAILED line with reason=denied counts as one failure" "$(jq -r .totals.panelFailures "$QS")" "3"
 qpanel
 check "failures_book_total: OK lines add nothing" "$(jq -r .totals.panelFailures "$QS")" "3"
 runrepo '{"active":true,"session":"s2","phase":"execute","decisions":[],"rulings":[]}'
@@ -299,6 +299,23 @@ t0=$(date +%s)
 PANEL_GATE_SECONDS=1 PANEL_AGY_GATE="$TMP/stuck-gate" panel --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "gate_call_bounded" "$(head -1 <<<"$out")" "agy-judge none/none status=SKIPPED exit=0 out=- evidence=none reason=gate"
 check "gate_call_bounded: the panel returns within 15 s" "$([ $(( $(date +%s) - t0 )) -le 15 ] && echo inside || echo over)" "inside"
+
+# --- term_during_gate: with no setsid a TERM ends the panel while a gate runs ---
+printf '%s\n' '#!/usr/bin/env bash' "printf '%s\\n' \$\$ > '$TMP/slow-gate.pid'; printf '%s\\n' \$\$ >> '$TMP/children'" 'exec sleep 30' > "$TMP/term-gate"
+chmod +x "$TMP/term-gate"; rm -f "$TMP/slow-gate.pid"
+PANEL_NO_SETSID=1 PANEL_GATE_SECONDS=30 PANEL_AGY_GATE="$TMP/term-gate" bash "$PANEL" --cwd "$TMP/work" --out-dir "$TMP/out" \
+  --kind task --tier heavy --prompt "$TMP/prompt.md" >/dev/null 2>&1 &
+pp=$!
+for _ in $(seq 1 100); do [ -s "$TMP/slow-gate.pid" ] && break; sleep 0.1; done
+gp=$(cat "$TMP/slow-gate.pid" 2>/dev/null)
+kill -TERM "$pp" 2>/dev/null
+for _ in $(seq 1 50); do kill -0 "$pp" 2>/dev/null || break; sleep 0.1; done
+ended=$(kill -0 "$pp" 2>/dev/null && echo running || echo ended)
+for _ in $(seq 1 20); do [ -n "$gp" ] && kill -0 "$gp" 2>/dev/null || break; sleep 0.1; done
+check "term_during_gate: the panel ends within 5 s and stops the gate" \
+  "$ended:$([ -n "$gp" ] && kill -0 "$gp" 2>/dev/null && echo alive || echo gone)" "ended:gone"
+kill -KILL "$pp" 2>/dev/null; wait "$pp" 2>/dev/null
+[ -z "$gp" ] || kill -KILL "$gp" 2>/dev/null
 
 # --- gate_child_reaped: a gate's child outlives a timeout that signals only the gate ---
 # The stub timeout behaves as uutils' does: TERM, then KILL, to the command alone.
