@@ -895,8 +895,12 @@ describe('attribution guard', () => {
       [`git commit -m x --trai "${A6_AI}"`, true],
       [`gh pr merge 12 -m --body "x\n\n${A6_AI}"`, true],
       [`gh pr merge 12 -dm -b "x\n\n${A6_AI}"`, true],
+      [`git commit --m "fix\n\n${A6_AI}"`, true],
+      [`git commit --me="fix\n\n${A6_AI}"`, true],
+      [`git commit -m x --tr "${A6_AI}"`, true],
       ['git commit -amfix', false],
       ['git commit --mess=fix', false],
+      ['git commit --m fix', false],
     ]
     expect(cases.filter(([command, want]) => A6_FOUND(command) !== want).map(([command]) => command)).toEqual([])
   })
@@ -1000,6 +1004,45 @@ describe('attribution guard', () => {
     const clean: (string | undefined)[] = []
     for (const command of [...inline('x'), ...fromFile]) clean.push((await $.tool.call({ tool: 'Bash', command })).deny)
     expect(clean).toEqual(Array(7).fill(undefined))
+  })
+
+  test('judges git by its subcommand, and reads the whole command for a message file whose name expands', async ($, on) => {
+    expect(writesGitText('git -c user.name=x -C sub commit -m y')).toBe(true)
+    expect(writesGitText('git log --grep commit')).toBe(false)
+    world(on, { ...SIGNED_IN })
+    signedIn(on, {})
+    const commands = [`cd "$ROOT" && git grep -F commit -- '*.sh'`, 'git -C "$ROOT" grep -F merge', 'cd "$WT" && git commit -F "$MSG"']
+    const denials: (string | undefined)[] = []
+    for (const command of commands) denials.push((await $.tool.call({ tool: 'Bash', command })).deny)
+    expect(denials).toEqual([undefined, undefined, undefined])
+  })
+
+  test('follows a cd behind a shell keyword and a subshell closed before a redirection', async ($, on) => {
+    const WEB = '/home/me/code/shop/web'
+    const files: NonNullable<World['files']> = { [`${WEB}/msg.txt`]: { text: `fix\n\n${A6_AI}\n` }, [`${WEB}/sub/msg.txt`]: { text: 'fix\n' } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    const top = '(cd sub && make) > log && git commit -F msg.txt'
+    const inSub = ['{ cd sub; git commit -F msg.txt; }', 'if cd sub; then git commit -F msg.txt; fi']
+    expect((await $.tool.call({ tool: 'Bash', command: top })).deny).toBe(A6_DENY)
+    const read: (string | undefined)[] = []
+    for (const command of inSub) read.push((await $.tool.call({ tool: 'Bash', command })).deny)
+    expect(read).toEqual([undefined, undefined])
+    files[`${WEB}/msg.txt`] = { text: 'fix\n' }
+    files[`${WEB}/sub/msg.txt`] = { text: `fix\n\n${A6_AI}\n` }
+    expect((await $.tool.call({ tool: 'Bash', command: top })).deny).toBeUndefined()
+    const denials: (string | undefined)[] = []
+    for (const command of inSub) denials.push((await $.tool.call({ tool: 'Bash', command })).deny)
+    expect(denials).toEqual([A6_DENY, A6_DENY])
+  })
+
+  test('reads a message file under ~ from the home directory', async ($, on) => {
+    const files: NonNullable<World['files']> = { '/home/me/msg.txt': { text: `fix\n\n${A6_AI}\n` } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -F ~/msg.txt' })).deny).toBe(A6_DENY)
+    files['/home/me/msg.txt'] = { text: 'fix\n' }
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -F ~/msg.txt' })).deny).toBeUndefined()
   })
 
   test('judges only the message fields of a git write tool', async ($, on) => {

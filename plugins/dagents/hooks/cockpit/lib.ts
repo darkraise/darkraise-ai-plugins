@@ -244,14 +244,29 @@ export function judgedCommands(src: string, depth = 0): { raw: string; words: st
 // A program word by its last path segment, so `/usr/bin/git` is git.
 const isProgram = (word: string, name: string) => word.replace(/^.*[\\/]/, '').replace(/\.exe$/i, '') === name
 
+// git's options that take the next word as their value.
+const GIT_VALUED = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env'])
+
+// The index of git's subcommand: the first word after `git` that is no option
+// and no option's value; -1 when there is none.
+function gitSubcommand(words: readonly string[], git: number): number {
+  for (let at = git + 1; at < words.length; at++) {
+    const word = words[at] ?? ''
+    if (GIT_VALUED.has(word)) at++
+    else if (!word.startsWith('-')) return at
+  }
+  return -1
+}
+
 /**
  * Whether a simple command's words write a commit, a merge or a pull request:
- * `git` then `commit`, `merge` or `commit-tree`, or `gh` then `pr` then
- * `create`, `edit` or `merge`, each at any distance.
+ * `git` with the subcommand `commit`, `merge` or `commit-tree`, or `gh` then
+ * `pr` then `create`, `edit` or `merge`, each at any distance.
  */
 export function isGitWriteCommand(words: readonly string[]): boolean {
   const git = words.findIndex(word => isProgram(word, 'git'))
-  if (git >= 0 && words.slice(git + 1).some(word => word === 'commit' || word === 'merge' || word === 'commit-tree')) return true
+  const sub = git < 0 ? '' : (words[gitSubcommand(words, git)] ?? '')
+  if (sub === 'commit' || sub === 'merge' || sub === 'commit-tree') return true
   const gh = words.findIndex(word => isProgram(word, 'gh'))
   if (gh < 0) return false
   const pr = words.indexOf('pr', gh + 1)
@@ -430,9 +445,14 @@ const LONG_OPTIONS = new Map<string, MessageKind>([
   ['file', 'file'],
   ['body-file', 'file'],
 ])
-// git takes a long option by any unambiguous prefix; three letters keep these
-// clear of the options they share a start with.
-const ABBREVIABLE = ['message', 'trailer', 'file']
+// git takes a long option by any unambiguous prefix, so each is read from the
+// shortest prefix no other commit or merge option shares: --m is --message,
+// --tr --trailer (--t is also --template), --fil --file (--fi is also --fixup).
+const ABBREVIABLE = new Map([
+  ['message', 1],
+  ['trailer', 2],
+  ['file', 3],
+])
 // The names a message file can give stdin by.
 const STDIN_PATH = /^(?:-|\/dev\/stdin|\/dev\/fd\/0|\/proc\/self\/fd\/0)$/
 // A `$(cat <<'EOF' … EOF)` message: its text is the body as written when the
@@ -458,7 +478,7 @@ function messageOption(word: string): { kind: MessageKind; value: string | undef
   const long = /^--([a-z][a-z-]*)(?:=([\s\S]*))?$/.exec(word)
   if (long !== null) {
     const given = long[1] ?? ''
-    const name = LONG_OPTIONS.has(given) ? given : ABBREVIABLE.find(one => given.length >= 3 && one.startsWith(given))
+    const name = LONG_OPTIONS.has(given) ? given : [...ABBREVIABLE].find(([one, least]) => given.length >= least && one.startsWith(given))?.[0]
     const kind = name === undefined ? undefined : LONG_OPTIONS.get(name)
     return kind === undefined ? undefined : { kind, value: long[2] }
   }
@@ -533,14 +553,20 @@ export function gitMessageTexts(command: string): { texts: string[]; isWhole: bo
 // expands, the previous directory (-) or a home directory (~).
 const isSpelled = (word: string) => word !== '-' && !/[$`]/.test(word) && !word.startsWith('~')
 
+// The shell words that may open a simple command without being its program;
+// a cd after one moves the shell as a bare cd does.
+const KEYWORDS = new Set(['{', '!', 'if', 'then', 'elif', 'else', 'do', 'while', 'until', 'time'])
+
 // The directory a cd or pushd simple command moves to; null when its words do
 // not spell it out, for a pushd rotation (+N, -N), or for a popd, which returns
 // to a directory they do not name; undefined for any other command.
 function dirChange(words: readonly string[]): string | null | undefined {
-  const name = words[0] ?? ''
+  let head = 0
+  while (KEYWORDS.has(words[head] ?? '')) head++
+  const name = words[head] ?? ''
   if (name === 'popd') return null
   if (name !== 'cd' && name !== 'pushd') return undefined
-  const operands = words.slice(1).filter(word => !/^-[LPe@]+$/.test(word))
+  const operands = words.slice(head + 1).filter(word => !/^-[LPe@]+$/.test(word))
   const target = operands[0] === '--' ? operands[1] : operands[0]
   return target === undefined || target === '' || /^[+-]\d+$/.test(target) || !isSpelled(target) ? null : target
 }
@@ -563,8 +589,9 @@ function subshellEdges(words: readonly string[], depth: number): { words: string
     all.shift()
   }
   let closes = 0
-  while (all.length > 0 && closes < depth + opens) {
-    const last = all[all.length - 1] ?? ''
+  let end = redirectionsStart(all)
+  while (end > 0 && closes < depth + opens) {
+    const last = all[end - 1] ?? ''
     let bare = last
     let unbalanced = (last.match(/\)/g)?.length ?? 0) - (last.match(/\(/g)?.length ?? 0)
     while (unbalanced > 0 && bare.endsWith(')') && closes < depth + opens) {
@@ -573,12 +600,28 @@ function subshellEdges(words: readonly string[], depth: number): { words: string
       closes++
     }
     if (bare !== '') {
-      all[all.length - 1] = bare
+      all[end - 1] = bare
       break
     }
-    all.pop()
+    all.splice(end - 1, 1)
+    end--
   }
   return { words: all, opens, closes }
+}
+
+// A redirection operator alone, and one with its target in the same word.
+const REDIRECTION_BARE = /^(?:\d*|&)(?:>>?\|?|<)$/
+const REDIRECTION_ATTACHED = /^(?:\d*|&)(?:>>?\|?|<)(?!\()\S+$/
+
+// Where a simple command's trailing redirections begin: a subshell closes
+// before them, as in `(cd sub && make) > log`.
+function redirectionsStart(words: readonly string[]): number {
+  let end = words.length
+  for (;;) {
+    if (end >= 1 && REDIRECTION_ATTACHED.test(words[end - 1] ?? '')) end -= 1
+    else if (end >= 2 && REDIRECTION_BARE.test(words[end - 2] ?? '')) end -= 2
+    else return end
+  }
 }
 
 // The -C directories a git command runs in, in order, read before its
@@ -648,9 +691,10 @@ export type GitTextSource = {
  * -F`, `gh pr create --body-file`, a `$(cat file)` message), each with the
  * directories it is read below; stdin's names are the command's own text.
  * `cwd`, the session's directory, lets an absolute and a relative spelling of
- * one written file compare equal.
+ * one written file compare equal; `home` expands a file's leading `~/`.
  */
-export function gitTextSources(command: string, cwd = ''): GitTextSource[] {
+export function gitTextSources(command: string, cwd = '', home = ''): GitTextSource[] {
+  const expand = (file: string) => (home !== '' && file.startsWith('~/') ? `${home.replace(/[\\/]+$/, '')}${file.slice(1)}` : file)
   const sources: GitTextSource[] = []
   const written: string[] = []
   // A nested command (nestedTexts) starts in the directories in force where
@@ -669,7 +713,7 @@ export function gitTextSources(command: string, cwd = ''): GitTextSource[] {
         for (const { kind, value } of messageOptions(words)) {
           const cat = kind === 'text' ? CAT_FILE.exec(value)?.[1] : undefined
           // A substitution runs where the shell is: git -C moves only git.
-          const source = kind === 'file' && value !== '' && !STDIN_PATH.test(value) ? { file: value, dirs: gitRuns } : cat === undefined ? undefined : { file: cat, dirs }
+          const source = kind === 'file' && value !== '' && !STDIN_PATH.test(value) ? { file: expand(value), dirs: gitRuns } : cat === undefined ? undefined : { file: expand(cat), dirs }
           if (source === undefined) continue
           const key = sourceKey(cwd, source.dirs, source.file)
           sources.push({ ...source, isWritten: key !== null && written.includes(key) })
