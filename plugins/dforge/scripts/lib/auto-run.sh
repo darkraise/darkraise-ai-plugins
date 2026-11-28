@@ -193,7 +193,8 @@ ar_ack_wait() {
 # ar_binding_around SID PRIMARY CMD [ARGS…] — write SID's binding, wait for
 # the cockpit to echo it (return 2 without the echo), run CMD, and when either
 # fails put the binding's earlier bytes back (or remove it when there was
-# none), so a refused start or resume leaves no trace. The rollback runs under
+# none), so a refused start or resume leaves no binding (the lock file
+# beside it stays). The rollback runs under
 # the binding's lock and only while the file still holds the nonce written
 # here: a newer binding written meanwhile stays.
 ar_binding_around() {
@@ -524,8 +525,10 @@ _ar_resume_locked() {
       found=""
       top=$(git rev-parse --show-toplevel)
       [ -z "$plan" ] || found=$(plan_ledger_any "$top" "$plan")
-      # Until Setup writes the ledger, the worktree is the checkout holding
-      # the plan; ar_guard has already refused the primary.
+      # Until Setup writes the ledger the worktree's path is not recorded, so
+      # any checkout holding the plan is taken for it: a heuristic, since
+      # another worktree with the plan resumes too. ar_guard has already
+      # refused the primary and the base.
       if [ -n "$found" ]; then [ -d "${found#*$'\t'}" ]
       else [ -n "$plan" ] && [ -f "$(dforge_resolve "$plan" "$top")" ]
       fi || { echo "auto-run: the plan's worktree is gone (plan ${plan:-none})" >&2; return 4; }
