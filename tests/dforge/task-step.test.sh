@@ -743,6 +743,7 @@ rr_git add -A && rr_git commit -qm fix
 rr_run rereview docs/plan.md 1
 check "verdict then rereview: the fix file's findings reach the prompt" \
   "$(grep -cE '^- (app\.txt:2: wrong value|other\.txt:4: stale copy)$' "$RR_WS/task-1-rereview-1-prompt.md")" "2"
+# The second verdict line copies the fix message's tagged form.
 vd_report "$RR_WS/task-1-rereview-1-report.md" <<'REPORT'
 |## Verdict
 |fix round: open
@@ -750,7 +751,7 @@ vd_report "$RR_WS/task-1-rereview-1-report.md" <<'REPORT'
 |
 |## Finding verdicts
 |- app.txt:2: wrong value — ADDRESSED — app.txt:2 reads "line 2"
-|- other.txt:4: stale copy — NOT ADDRESSED — other.txt:4 is unchanged
+|- [Important] other.txt:4 — stale copy — NOT ADDRESSED — other.txt:4 is unchanged
 |
 |## Findings
 |- [Important] other.txt:4 — stale copy
