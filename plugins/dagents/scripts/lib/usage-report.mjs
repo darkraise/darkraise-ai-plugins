@@ -792,9 +792,17 @@ const repoOf = (r) => r.repo || (r.file && /[\\/]sdd[\\/]usage-markers\.tsv$/.te
 export function report(opts) {
   const prices = loadPrices();
   const marked = readMarkers(opts.markers);
-  // A task the markers record is measured from them, not inferred again.
-  const held = new Set(marked.map((r) => `${path.basename(r.plan)}\t${r.task}`));
-  const archived = archiveRows(opts.fromArchive).filter((r) => !held.has(`${r.plan}\t${r.task}`));
+  // A task the markers record is measured from them, not inferred again; a
+  // marker of one repository leaves another repository's task of the same
+  // plan name alone. A row with no known repository matches any.
+  const held = new Map();
+  for (const r of marked) {
+    const key = `${path.basename(r.plan)}\t${r.task}`;
+    held.set(key, [...(held.get(key) || []), repoOf(r)]);
+  }
+  const sameRepo = (a, b) => !a || !b || path.resolve(a) === path.resolve(b);
+  const archived = archiveRows(opts.fromArchive)
+    .filter((r) => !(held.get(`${r.plan}\t${r.task}`) || []).some((repo) => sameRepo(repo, repoOf(r))));
   archived.forEach((r, i) => { r.order = 1e15 + i; });
   const rows = [...marked, ...archived]
     .sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : a.order - b.order));
