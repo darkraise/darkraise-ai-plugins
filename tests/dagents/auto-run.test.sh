@@ -1058,6 +1058,14 @@ check "resume_refusals: a carried path committed since the stop: exit 4 with the
 git -C "$D" rm -q c.txt; git -C "$D" commit -q -m 'revert c'
 rs_resume "$D"
 check "resume_refusals: a carried path committed then reverted: exit 4 with the reason" "$status:$(reason)" "4:said"
+D="$TMP/rs4"; rs_repo "$D"
+rs_state "$D" '.active = false | .stopped = "x" | .phase = "plan" | .carried = ["c.txt"]'
+jq --arg bb "$(git -C "$D" rev-parse HEAD)" '.branchBase = $bb' "$D/.dagents/sdd/auto-run.json" > "$TMP/st" && mv "$TMP/st" "$D/.dagents/sdd/auto-run.json"
+git -C "$D" switch -q -c side; printf 's\n' > "$D/s.txt"; git -C "$D" add s.txt; git -C "$D" commit -q -m s
+git -C "$D" switch -q b; git -C "$D" merge -q --no-ff --no-commit side
+printf 'c\n' > "$D/c.txt"; git -C "$D" add c.txt; git -C "$D" commit -q -m merge
+rs_resume "$D"
+check "resume_refusals: a carried path changed only in a merge commit: exit 4 with the reason" "$status:$(reason)" "4:said"
 D="$TMP/rs3"; rs_repo "$D"; git -C "$D" switch -q main
 git -C "$D" worktree add -q "$TMP/rs3-wt" -b w
 rs_state "$D" '.active = false | .stopped = "x" | .isolation = "worktree" | .branch = null'

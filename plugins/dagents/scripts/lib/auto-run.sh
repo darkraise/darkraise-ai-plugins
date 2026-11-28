@@ -480,7 +480,8 @@ ar_carried_hit() {
   carried=$(ar_carried) || return 2
   [ -n "$carried" ] || return 1
   tmp=$(mktemp) || return 2
-  if ! git log --no-renames --name-only -z --format= "$bb..HEAD" >"$tmp"; then
+  # -m diffs a merge against each parent: a resolution can change a path alone.
+  if ! git log -m --no-renames --name-only -z --format= "$bb..HEAD" >"$tmp"; then
     rm -f "$tmp"
     return 2
   fi
