@@ -434,6 +434,14 @@ check "auto run: a stop that fails past the cap lets the next retry through" "$c
 check "auto run: a stop that fails past the cap says to stop the run by hand" \
   "$(jq -r .systemMessage <<<"$out4" | grep -c 'could not be stopped')|$(jq -r .reason <<<"$out4" | grep -c 'scripts/auto-run" stop --reason')|$(jq -r .active "$STATE")" "1|1|true"
 (cd "$REPO" && bash "$AR" --session s-7 stop --reason "test over" >/dev/null 2>&1)
+# Both at once: a count that cannot be kept and a stop that fails.
+date +%s > "$HOME/.claude/dforge/sessions/cockpit/s-8"
+(cd "$REPO" && bash "$AR" --session s-8 start --spec docs/s.md --register docs/r.md --force >/dev/null)
+pend compact
+cap=$(HOME="$H2" DFORGE_FLOCK=false stop s-8 'Done.' | jq -r '.decision // "none"')
+cap="$cap $(decision "$(HOME="$H2" DFORGE_FLOCK=false stop s-8 'Done.' true)")"
+check "auto run: an unkept count and a failed stop: the retry passes" "$cap" "block none"
+(cd "$REPO" && bash "$AR" --session s-8 stop --reason "test over" >/dev/null 2>&1)
 
 # --- hold_books_total ---
 date +%s > "$HOME/.claude/dforge/sessions/cockpit/s-6"
@@ -599,6 +607,11 @@ sed 's/| M1 | One | \(.*\) | open |/| M1 | One | \1 | closed |/' "$DMM/dforge/ro
 out=$(stop_at s-dm "$DMR" 'M1 closed.')
 check "darkmem documents: a milestone closed since the last stop is held once" \
   "$(decision "$out")|$(jq -r .reason <<<"$out" | grep -c 'next-step" --project')" "block|1"
+sleep 1; prompt s-dm0 "$DMR"
+sleep 1
+sed 's/| M2 | Two | \(.*\) | open |/| M2 | Two | \1 | closed |/' "$DMM/dforge/roadmap.md" > "$TMP/roadmap.md" && mv "$TMP/roadmap.md" "$DMM/dforge/roadmap.md"
+out=$(stop_at s-dm0 "$DMR" 'M2 closed.' 2>"$TMP/dm0.err")
+check "darkmem documents: a milestone closed in a session's first turn is held" "$(decision "$out")|$(wc -c < "$TMP/dm0.err" | tr -d ' ')" "block|0"
 rm -f "$HOME/.dforge/config.json" "$HOME/.dforge/stores.json"
 
 # A transition turn is released by the block next-step wrote, by finishing's
@@ -790,14 +803,19 @@ out=$(PATH="$CRJQ:$PATH" stop s-cr 'Task 1 is done.')
 check "a jq that ends lines with CR: a mid-plan summary is still held" "$(decision "$(tr -d '\r' <<<"$out")")" "block"
 
 # --- a plan whose task another session opened holds only that session ---
-um_row() { # um_row <session> — the primary's usage markers: one open row for the example plan
-  printf '2026-11-27T00:00:00Z\topen\tdforge\t5.2.0\t/x\tdocs/superpowers/plans/2026-10-08-example.md\t1\t%s\t\t\t\t\t\t\n' "$1" > "$REPO/.dforge/sdd/usage-markers.tsv"
+um_row() { # um_row <session> [event] — the primary's usage markers: one row for task 1 of the example plan
+  printf '2026-11-27T00:00:00Z\t%s\tdforge\t5.2.0\t/x\tdocs/superpowers/plans/2026-10-08-example.md\t1\t%s\t\t\t\t\t\t\n' "${2:-open}" "$1" >> "$REPO/.dforge/sdd/usage-markers.tsv"
 }
+beat() { mkdir -p "$HOME/.claude/dforge/sessions/cockpit"; date +%s > "$HOME/.claude/dforge/sessions/cockpit/$1"; }
 sleep 1; prompt s-a
 write_ledger 'Task 1: complete (commits a..b, review clean)'
-um_row s-b
+rm -f "$REPO/.dforge/sdd/usage-markers.tsv"; um_row s-b; beat s-b
 check "another session's plan: its ledger does not hold this session" "$(stop s-a 'Done.')" ""
-um_row s-a
+um_row s-b close
+check "another session's closed task: this session's ledger write still holds" "$(decision "$(stop s-a 'Done.')")" "block"
+rm -f "$REPO/.dforge/sdd/usage-markers.tsv" "$HOME/.claude/dforge/sessions/cockpit/s-b"; um_row s-b
+check "a gone session's open task: this session's ledger write still holds" "$(decision "$(stop s-a 'Done.')")" "block"
+rm -f "$REPO/.dforge/sdd/usage-markers.tsv"; um_row s-a
 check "this session's plan: its ledger still holds" "$(decision "$(stop s-a 'Done.')")" "block"
 rm -f "$REPO/.dforge/sdd/usage-markers.tsv"
 

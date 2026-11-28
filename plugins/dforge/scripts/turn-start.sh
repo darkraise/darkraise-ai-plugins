@@ -38,5 +38,21 @@ elif [ -n "$cwd" ] && [ ! -d "$cwd" ] && primary=$(turn_primary "$(head -n 1 "$s
 else
   rm -f "$stamp.refs.tmp" "$stamp.refs" 2>/dev/null || true
 fi
+# A roadmap kept outside git (darkmem documents) has no start-of-turn version
+# in git: turn-end.sh compares its closed count with this one. In a subshell,
+# since roots.sh exits on a malformed store config.
+rm -f "$stamp.closed" 2>/dev/null || true
+if [ -n "$cwd" ]; then
+  (
+    lib="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
+    root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) \
+      || root=$(turn_primary "$(head -n 1 "$stamp.refs" 2>/dev/null | tr -d '\r')") || exit 0
+    . "$lib/roots.sh"
+    dforge_stores_init "$root" 2>/dev/null
+    [ "$_DFORGE_DOCS_STORE" != local ] && [ -n "$_DFORGE_DOCS_ROOT" ] && [ -f "$_DFORGE_DOCS_ROOT/roadmap.md" ] || exit 0
+    . "$lib/roadmap.sh"
+    roadmap_rows "$_DFORGE_DOCS_ROOT/roadmap.md" | awk -F'\t' '$5 == "closed"' | grep -c . > "$stamp.closed"
+  ) 2>/dev/null
+fi
 find "$turns_dir" -maxdepth 1 -type f -mtime +7 -delete 2>/dev/null || true
 exit 0
