@@ -986,6 +986,22 @@ describe('attribution guard', () => {
     expect(clean).toEqual([undefined, undefined])
   })
 
+  test('A6: judges a commit inside a subshell, a shell -c or eval operand, or a $(…) word', async ($, on) => {
+    const WEB = '/home/me/code/shop/web'
+    const files: NonNullable<World['files']> = { [`${WEB}/msg.txt`]: { text: `fix\n\n${A6_AI}\n` } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    const inline = (body: string) => [`(git commit -m "${body}")`, `bash -c "git commit -m '${body}'"`, `out=$(git commit -m "${body}" 2>&1)`]
+    const fromFile = ['(git commit -F msg.txt)', 'bash -c "git commit -F msg.txt"', 'out=$(git commit -F msg.txt 2>&1)', 'eval git commit -F msg.txt']
+    const denials: (string | undefined)[] = []
+    for (const command of [...inline(`x\n\n${A6_AI}`), ...fromFile]) denials.push((await $.tool.call({ tool: 'Bash', command })).deny)
+    expect(denials).toEqual(Array(7).fill(A6_DENY))
+    files[`${WEB}/msg.txt`] = { text: 'fix\n' }
+    const clean: (string | undefined)[] = []
+    for (const command of [...inline('x'), ...fromFile]) clean.push((await $.tool.call({ tool: 'Bash', command })).deny)
+    expect(clean).toEqual(Array(7).fill(undefined))
+  })
+
   test('judges only the message fields of a git write tool', async ($, on) => {
     world(on, { ...SIGNED_IN })
     signedIn(on, {})
