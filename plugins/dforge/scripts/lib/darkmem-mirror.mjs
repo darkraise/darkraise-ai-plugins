@@ -865,9 +865,9 @@ export function propertiesFor(roots, slug, namedPath) {
   if (uri && uri.startsWith(`${DOC_PREFIX}/plans/`)) {
     properties.plan_uri = uri;
     try {
-      // A backticked path is taken whole, spaces included; a bare one ends at
-      // the first space.
-      const spec = /^\*\*Spec:\*\*[ \t]*(?:`([^`\r\n]+)`|([^`\s]+))/m.exec(fs.readFileSync(uriToLocal(roots, uri), "utf8"));
+      // A backticked path is taken whole, spaces included; a bare one (or one
+      // whose backtick is never closed) ends at the first space.
+      const spec = /^\*\*Spec:\*\*\s*(?:`([^`\r\n]+)`|`?([^`\s]+))/m.exec(fs.readFileSync(uriToLocal(roots, uri), "utf8"));
       const specUri = spec ? pathToUri(roots, spec[1] ?? spec[2]) : null;
       if (specUri) properties.spec_uri = specUri;
     } catch (error) {

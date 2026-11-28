@@ -492,6 +492,14 @@ test("a backticked Spec path with a space names the whole path", () => {
   assert.equal(propertiesFor(roots, "p2", "docs/dforge/plans/p2.md").spec_uri, "dforge/specs/s.md");
 });
 
+test("a Spec path with an unclosed backtick or on the next line is still read", () => {
+  const { roots } = mirror();
+  write(path.join(roots.docsRoot, "plans", "p1.md"), "# P1\n\n**Spec:** `docs/dforge/specs/s.md\n");
+  write(path.join(roots.docsRoot, "plans", "p2.md"), "# P2\n\n**Spec:**\ndocs/dforge/specs/t.md\n");
+  assert.equal(propertiesFor(roots, "p1", "docs/dforge/plans/p1.md").spec_uri, "dforge/specs/s.md");
+  assert.equal(propertiesFor(roots, "p2", "docs/dforge/plans/p2.md").spec_uri, "dforge/specs/t.md");
+});
+
 test("two takeovers of one abandoned lock leave exactly one holder", () => {
   const { root } = mirror();
   const lock = path.join(root, ".sync.lock");
