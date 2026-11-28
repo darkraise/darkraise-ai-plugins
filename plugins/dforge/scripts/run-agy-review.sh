@@ -188,6 +188,8 @@ if [ -n "$prompt_dir" ] && ! [ "$prompt_dir" -ef "$(dirname "$prompt")" ]; then
 fi
 
 snapdir=$(mktemp -d) || die "cannot create a snapshot directory"
+# jq.exe reads the snapshots; it cannot open the POSIX form of this path.
+if command -v cygpath >/dev/null 2>&1; then snapdir=$(cygpath -m "$snapdir"); fi
 agy_pid=''
 cleanup() {
   [ -z "$agy_pid" ] || kill -TERM -- "-$agy_pid" 2>/dev/null
