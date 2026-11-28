@@ -1562,6 +1562,25 @@ test("a handoff note another client files during the progress move refuses the m
   assert.deepEqual(movedAside(s.repo), []);
 });
 
+test("a replaced handoff note is still named when a later put of the move is refused", async t => {
+  const s = await setup(t, "darkmem");
+  write(path.join(s.repo, ".dforge", "sdd", "p1", "handoff.md"), "# Handoff p1\n");
+  write(path.join(s.repo, ".dforge", "sdd", "p2", "handoff.md"), "# Handoff p2\n");
+  const p2 = "proj\u0000dforge/handoff/p2.md";
+  s.stub.db.documents.set(p2, storedDocument("proj", "dforge/handoff/p2.md", "# Handoff p2\n"));
+  s.stub.db.onRequest = (method, route) => {
+    if (method !== "POST" || route !== "/api/v1/documents") return;
+    s.stub.db.onRequest = null;
+    s.stub.db.documents.set("proj\u0000dforge/handoff/p1.md", storedDocument("proj", "dforge/handoff/p1.md", "# from another machine\n"));
+    Object.assign(s.stub.db.documents.get(p2), { content: "edited elsewhere\n", content_hash: sha("edited elsewhere\n") });
+  };
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /darkmem failed during the move: POST \/api\/v1\/documents answered 409/);
+  assert.ok(result.stdout.includes("  dforge/handoff/p1.md: another client filed it during the move, and this move replaced its content; darkmem's revisions keep the other version\n"), result.stdout);
+  assert.equal(s.stores().progress, "local");
+});
+
 test("a handoff note another client changes after the check is not overwritten", async t => {
   const s = await setup(t, "darkmem");
   write(path.join(s.repo, ".dforge", "sdd", "p1", "handoff.md"), "# Handoff p1\n");

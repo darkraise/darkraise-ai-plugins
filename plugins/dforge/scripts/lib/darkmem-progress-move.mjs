@@ -365,6 +365,7 @@ export async function progressToDarkmem(context) {
   const ids = new Map();
   const lastSeqs = new Map();
   const filedHandoffs = new Map();
+  const replaced = [];
   try {
     const checked = await checkProgressTargets(context, sources);
     if (checked.problems.length) return refuse("darkmem or the mirror already holds different progress", checked.problems);
@@ -377,7 +378,6 @@ export async function progressToDarkmem(context) {
     // A note is put under the hash darkmem held at the check, so one changed
     // since is a 409; one filed since, with nothing to expect, is replaced and
     // named.
-    const replaced = [];
     for (const item of sources) {
       if (item.kind === "ledger" && !ids.has(item.slug)) {
         const ledger = { slug: item.slug, text: decodeUtf8(item.buffer), mtime: fs.statSync(item.file).mtime.toISOString(), id: null };
@@ -391,7 +391,7 @@ export async function progressToDarkmem(context) {
         }
       }
     }
-    if (replaced.length) return refuse("another client filed progress on darkmem during the move; nothing was moved locally", replaced);
+    if (replaced.length) return refuse("another client filed progress on darkmem during the move; nothing was moved locally", [...replaced, ...report.failures]);
     if (report.failures.length) {
       // Every handoff note and amendments file was put (a put darkmem refuses throws), and ids
       // holds each ledger darkmem has in full.
@@ -422,7 +422,7 @@ export async function progressToDarkmem(context) {
       filedHandoffs.set(item.rel, filed);
     }
   } catch (error) {
-    return darkmemRefusal(error, report.failures);
+    return darkmemRefusal(error, [...replaced, ...report.failures]);
   }
   // A plan may have started, or a ledger grown, while darkmem was written;
   // darkmem keeps what it was sent, and nothing local changes.
