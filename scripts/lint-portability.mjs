@@ -24,7 +24,7 @@ const AWK_V_OPTION = /(?:^|\s)-v\s*[A-Za-z_]\w*=("(?:\\.|[^"\\])*"|'[^']*'|\S+)/
 const MSYS_EXPORT = /^\s*export\b.*MSYS_NO_PATHCONV/m;
 const PWD_OR_TMPDIR = /\$PWD(?![\w])|\$\{PWD\}|\$TMPDIR(?![\w])|\$\{TMPDIR\}/;
 const DYNAMIC_IMPORT = /(?<![\w$.])import\(/g;
-const BASH4 = /\bmapfile\b|\breadarray\b|\$BASHPID|\$\{[A-Za-z_]\w*(?:,,|\^\^)\}|declare -A/;
+const BASH4 = /\bmapfile\b|\breadarray\b|\$\{?BASHPID\b|\$\{[A-Za-z_]\w*(?:\[[^\]]*\])?(?:,|\^)|\b(?:declare|local|typeset)\s+-\w*A/;
 // Skill files are read for the bash 4 rule alone; the Windows rules cover
 // the scripts and tests.
 const SKILL_FILE = /^plugins\/[^/]+\/skills\//;

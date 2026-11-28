@@ -107,7 +107,8 @@ test('the tree scan reads plugin scripts and tests and the repository scripts on
 });
 
 const SHEBANG = '#!/usr/bin/env bash';
-const BASH4 = ['mapfile -t a <<<"$x"', 'readarray -t a < list', 'echo "$BASHPID"', 'echo "${v,,}"', 'echo "${v^^}"', 'declare -A seen'];
+const BASH4 = ['mapfile -t a <<<"$x"', 'readarray -t a < list', 'echo "$BASHPID"', 'echo "${v,,}"', 'echo "${v^^}"', 'declare -A seen',
+  'local -A seen', 'typeset -A seen', 'declare -gA seen', 'echo "${BASHPID}"', 'echo "${v,}"', 'echo "${v^}"', 'echo "${a[0],,}"'];
 
 test('bash 4 construct in a shipped script', () => {
   for (const construct of BASH4) {
@@ -146,6 +147,11 @@ test('bash 4 construct in a comment or a test', () => {
       ['plugins/x/skills/y/z.md', [construct]],
     ]) assert.deepEqual(found(file, lines), [], `${file}: ${construct}`);
   }
+});
+
+test('bash 3.2 forms near the bash 4 constructs pass', () => {
+  for (const line of ['local -a list', 'declare -r name=x', 'echo "${v:-a,b}"', 'echo "${a[@]}"', 'echo "${#v}"'])
+    assert.deepEqual(found('plugins/x/scripts/s', [SHEBANG, line]), [], line);
 });
 
 test('the repository has no portability hit', () => {
