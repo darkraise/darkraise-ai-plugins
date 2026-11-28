@@ -118,7 +118,9 @@ call, and end the message with the block it prints, verbatim.
 Codex sets no `CLAUDE_CODE_SESSION_ID`, so a `--project` or `--adhoc` write
 without `--key` exits 2. First run the same call with `--target`; the basename
 of the path it prints, without `.md`, is the key (`adhoc-<8 hex>`); pass
-`--key <key>` on the write. A session that resumed an `adhoc-` handoff passes
+`--key <key>` on the write. Mint the key once per session: `--target` prints
+a new key on every call, so pass that same `--key` on every later
+`--project` or `--adhoc` call of the session. A session that resumed an `adhoc-` handoff passes
 the key its first prompt names. This covers every such call, closing-a-milestone
 steps 2, 6 and 9 and finishing-a-development-branch Steps 1 and 7 included.
 
@@ -130,8 +132,8 @@ the skill in a message is still not invoking it.
 
 ## Asking your human partner
 
-`scripts/ask` with no plan argument exits 2 on Codex (`scripts/ask:35`: no
-session id), and it only releases a Claude Code Stop hook. Ask in chat and end
+`scripts/ask` with no plan argument exits 2 on Codex (no session
+id), and it only releases a Claude Code Stop hook. Ask in chat and end
 the turn on the question. This covers finishing-a-development-branch's
 `scripts/ask "<question>"` and closing-a-milestone step 6.
 

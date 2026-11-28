@@ -65,7 +65,8 @@ cleanly."
    next session needs it, and say which you left up. Exit 3 means it could
    not read this session, so list them by hand (`list_agents` on Codex, or the
    launch ids in your transcript). `scripts/next-step` runs the same check and
-   prints no block while anything is listed. For each one, either wait for it,
+   prints no block while any work is listed; services are named in the
+   block. For each one, either wait for it,
    or stop it:
    - Wait: on Claude Code, end the turn without the block; its notification
      starts the next turn, and you resume here. On Codex, `wait_agent` in

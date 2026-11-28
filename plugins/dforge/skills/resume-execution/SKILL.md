@@ -52,7 +52,8 @@ session from memory or from a summary.
    history was rewritten after the handoff. Re-verify each task: for each
    `Task N: complete (commits <a>..<b>, …)` line, compare the subjects
    `git log --format=%s <a>..<b>` prints (skip the task when `<b>` is gone)
-   with those of `git log --format=%s <merge base>..HEAD`. A task with none
+   with those of `git log --format=%s <merge base>..HEAD`; a task whose range
+   prints no subject (it made no commit) counts as found. A task with none
    of its subjects on HEAD is unverified: stop and ask, naming the tasks; in
    an auto run, run `scripts/auto-run stop --reason "Task <N>'s commits are not on HEAD after a history rewrite"`.
    Otherwise log
