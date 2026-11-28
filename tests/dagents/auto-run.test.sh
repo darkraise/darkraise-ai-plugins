@@ -14,7 +14,7 @@ check() { # check <name> <got> <want>
 }
 
 TMP="$(mktemp -d)"
-if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
+if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m -l "$TMP"); fi
 # A PATH entry takes the POSIX form: Git Bash splits a C:/ path at its colon.
 path_entry() { if command -v cygpath >/dev/null 2>&1; then cygpath -u "$1"; else printf '%s' "$1"; fi; }
 trap 'rm -rf "$TMP"' EXIT
