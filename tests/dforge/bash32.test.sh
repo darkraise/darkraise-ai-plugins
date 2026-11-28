@@ -4,7 +4,8 @@
 # image, both plugins, with the repository mounted read-only: context-size
 # with no arguments, in-flight's role read and task-step's unnamed marker.
 # Prints `skip - <reason>` and exits 0 when docker, the image or jq inside it
-# is unavailable.
+# is unavailable, when no timeout command bounds docker, or when the daemon
+# cannot mount this host's files.
 set -uo pipefail
 # The container inherits neither, but a suite that runs context-size names both.
 unset AR_SESSION CLAUDE_CODE_SESSION_ID
@@ -21,6 +22,7 @@ check() { # check <name> <got> <want>
 
 case "$(uname -s)" in MINGW* | MSYS* | CYGWIN*) skip "bash 3.2 run: no Linux containers on Windows" ;; esac
 command -v docker >/dev/null 2>&1 || skip "bash 3.2 run: docker unavailable"
+command -v timeout >/dev/null 2>&1 || skip "bash 3.2 run: no timeout command to bound docker with"
 timeout 30 docker info >/dev/null 2>&1 || skip "bash 3.2 run: the docker daemon is unavailable"
 docker image inspect bash:3.2 >/dev/null 2>&1 || timeout 300 docker pull -q bash:3.2 >/dev/null 2>&1 \
   || skip "bash 3.2 run: bash:3.2 unavailable"
@@ -54,6 +56,9 @@ timeout 300 docker run --rm --name "$NAME" -v "$ROOT":/r:ro -v "$TMP":/t bash:3.
   sh -c 'timeout 120 apk add --no-cache jq >/dev/null 2>&1 || exit 77; timeout 120 bash /t/inner.sh' >/dev/null 2>&1
 rc=$?
 [ "$rc" -eq 77 ] && skip "bash 3.2 run: jq could not be installed in bash:3.2"
+# A daemon on another host (DOCKER_HOST, or a socket shared from outside a
+# runner container) mounts its own paths: the run leaves nothing here.
+[ "$rc" -ne 0 ] || [ -e "$TMP/version" ] || skip "bash 3.2 run: the docker daemon cannot mount this host's files"
 check "the container ran bash 3.2" "$rc|$(cut -c1-4 "$TMP/version" 2>/dev/null)" "0|3.2."
 
 errors() { grep -cE 'unbound variable|command not found' "$1" 2>/dev/null; }
