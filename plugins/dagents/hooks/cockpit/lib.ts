@@ -205,8 +205,11 @@ function nestedTexts(words: readonly string[]): string[] {
   const texts: string[] = []
   const head = words.findIndex(word => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word))
   const name = head < 0 ? '' : (words[head] ?? '')
-  if (SHELLS.some(shell => isProgram(name, shell))) {
-    const flag = words.findIndex((word, at) => at > head && /^-[A-Za-z]*c[A-Za-z]*$/.test(word))
+  // At any distance, so a wrapper such as `timeout 600 bash -c …`, `env X=1
+  // bash -c …` or `sudo bash -c …` is read too.
+  const shell = words.findIndex(word => SHELLS.some(one => isProgram(word, one)))
+  if (shell >= 0) {
+    const flag = words.findIndex((word, at) => at > shell && /^-[A-Za-z]*c[A-Za-z]*$/.test(word))
     const operand = flag < 0 ? undefined : words[flag + 1]
     if (operand !== undefined) texts.push(operand)
   }
@@ -245,7 +248,7 @@ export function judgedCommands(src: string, depth = 0): { raw: string; words: st
 const isProgram = (word: string, name: string) => word.replace(/^.*[\\/]/, '').replace(/\.exe$/i, '') === name
 
 // git's options that take the next word as their value.
-const GIT_VALUED = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env'])
+const GIT_VALUED = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env', '--attr-source'])
 
 // The index of git's subcommand: the first word after `git` that is no option
 // and no option's value; -1 when there is none.
@@ -264,9 +267,12 @@ function gitSubcommand(words: readonly string[], git: number): number {
  * `pr` then `create`, `edit` or `merge`, each at any distance.
  */
 export function isGitWriteCommand(words: readonly string[]): boolean {
-  const git = words.findIndex(word => isProgram(word, 'git'))
-  const sub = git < 0 ? '' : (words[gitSubcommand(words, git)] ?? '')
-  if (sub === 'commit' || sub === 'merge' || sub === 'commit-tree') return true
+  // Every git word, so `git submodule foreach git commit …` is judged.
+  for (let git = 0; git < words.length; git++) {
+    if (!isProgram(words[git] ?? '', 'git')) continue
+    const sub = words[gitSubcommand(words, git)] ?? ''
+    if (sub === 'commit' || sub === 'merge' || sub === 'commit-tree') return true
+  }
   const gh = words.findIndex(word => isProgram(word, 'gh'))
   if (gh < 0) return false
   const pr = words.indexOf('pr', gh + 1)

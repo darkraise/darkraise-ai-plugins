@@ -1006,6 +1006,24 @@ describe('attribution guard', () => {
     expect(clean).toEqual(Array(7).fill(undefined))
   })
 
+  test('judges a commit behind a wrapper command or a later git word', async ($, on) => {
+    world(on, { ...SIGNED_IN })
+    signedIn(on, {})
+    const forms = (body: string) => [
+      `timeout 600 bash -c "git commit -m '${body}'"`,
+      `env X=1 bash -c "git commit -m '${body}'"`,
+      `sudo bash -c "git commit -m '${body}'"`,
+      `git submodule foreach git commit -m "${body}"`,
+      `git --attr-source HEAD commit -m "${body}"`,
+    ]
+    const denials: (string | undefined)[] = []
+    for (const command of forms(`x\n\n${A6_AI}`)) denials.push((await $.tool.call({ tool: 'Bash', command })).deny)
+    expect(denials).toEqual(Array(5).fill(A6_DENY))
+    const clean: (string | undefined)[] = []
+    for (const command of forms('x')) clean.push((await $.tool.call({ tool: 'Bash', command })).deny)
+    expect(clean).toEqual(Array(5).fill(undefined))
+  })
+
   test('judges git by its subcommand, and reads the whole command for a message file whose name expands', async ($, on) => {
     expect(writesGitText('git -c user.name=x -C sub commit -m y')).toBe(true)
     expect(writesGitText('git log --grep commit')).toBe(false)
