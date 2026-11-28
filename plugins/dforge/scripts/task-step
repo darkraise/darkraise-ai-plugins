@@ -737,7 +737,7 @@ do_review() {
   old_suite=$(jq -r '.suite // empty' "$state" | tr -d '\r')
   jq --arg rh "$headsha" --argjson t0 "$t0" --argjson chk "$snap" \
     --arg suite "$suite_arg" --arg sbase "$suite_base_sha_arg" \
-    '.reviewHead = $rh | .t0 = $t0
+    '.reviewHead = $rh | .t0 = $t0 | .reviewRound = (.round // 0)
      | .reviewCheck = $chk | (if $suite == "" then . else .suite = $suite end) | (if $sbase == "" then . else .suiteBase = $sbase end)' \
     "$state" > "$TMP/state.new" && dr_replace "$state" "$TMP/state.new" || die "cannot update $state"
   drop_base_cache "$state" "$first" "$old_base" "$old_suite"
@@ -1174,14 +1174,19 @@ suite_check() {
 
 do_verdict() {
   local n vstate rpath mode check_line recs rc rec tag rest sev task file line one r fix l nv i room nc budget
-  local k is_req used nx fix_line=none
+  local k is_req used nx reviewed fix_line=none
   local vlines=() flines=() cvs=() minors=() req=() vals=() extras=()
   local crit=0 imp=0 minor=0 ns=0 suite_more=0 suite_fix= suite_log=
   vstate=$state
   [ -f "$vstate" ] && [ -n "$(jq -r '.reviewHead // empty' "$vstate" | tr -d '\r')" ] \
     || die "run task-step review for task $first first" 6
   r=$(jq -r '.round // 0' "$vstate" | tr -d '\r')
-  if [ -z "$rereview_arg" ]; then
+  # A review run again at the round the step file is at wrote the report
+  # the verdict reads; the round's re-review report is older.
+  reviewed=$(jq -r '.reviewRound // empty' "$vstate" | tr -d '\r')
+  if [ "${r:-0}" -ge 1 ] && [ "$reviewed" = "${r:-0}" ]; then
+    [ -z "$rereview_arg" ] || die "Task $first was reviewed again at round $r: run verdict without --rereview" 6
+  elif [ -z "$rereview_arg" ]; then
     [ "${r:-0}" -lt 1 ] || die "Task $first is at re-review round $r: run verdict with --rereview $r" 6
   elif [ "$rereview_arg" != "${r:-0}" ]; then
     die "Task $first's step file is at round ${r:-0}, not $rereview_arg" 6
