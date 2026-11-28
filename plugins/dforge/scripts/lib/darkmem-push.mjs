@@ -507,7 +507,7 @@ export async function push(context) {
   const families = familiesOf(context.roots);
   if (only !== undefined && !families.progress) throw new UsageError("--handoff needs progress applied darkmem; the handoffs are local");
   const dir = path.join(context.roots.workRoot, "handoff");
-  if (only !== undefined && (path.dirname(path.resolve(only)) !== dir || !only.endsWith(".md") || !fs.existsSync(path.resolve(only)))) {
+  if (only !== undefined && (path.dirname(path.resolve(only)) !== dir || !only.endsWith(".md") || !fs.statSync(path.resolve(only), { throwIfNoEntry: false })?.isFile())) {
     throw new UsageError(`--handoff ${JSON.stringify(only)} is not a handoff in ${dir}`);
   }
   Object.assign(context.report.counts, { documents: 0, "ledger entries": 0, checkpoints: 0 });

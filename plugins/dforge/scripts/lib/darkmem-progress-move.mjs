@@ -10,7 +10,7 @@ import { dforgeDir } from "./darkmem-config.mjs";
 import { importLedger } from "./darkmem-import.mjs";
 import {
   DOC_PREFIX, checkpointFiledSince, checkpointTarget, decodeUtf8, handoffKey, handoffMarker, ledgerPieces, listDocumentFiles, propertiesFor,
-  recordCheckpointAt, sha256, unsupportedPlanDirs, uriFamily, utcStamp, validKey, worktreeList, writeFileAtomic,
+  readRegular, recordCheckpointAt, sha256, unsupportedPlanDirs, uriFamily, utcStamp, validKey, worktreeList, writeFileAtomic,
 } from "./darkmem-mirror.mjs";
 import { pullCheckpoints, pullDocuments, pullLedgers, remoteLedger } from "./darkmem-pull.mjs";
 import { inProgressReason, planFinished } from "./darkmem-reconcile.mjs";
@@ -33,39 +33,11 @@ function handoffFiles(dir, problems) {
   return names.filter(name => name.endsWith(".md")).sort().map(name => ({ name, file: path.join(dir, name), rel: `handoff/${name}` }));
 }
 
-// `file`'s bytes, read without blocking on a FIFO or device: it throws an
-// error whose code is EISDIR for a directory, EFTYPE for any other file that
-// is not regular, or the open's or read's own (ENOENT, EACCES, ENOTDIR); each
-// carries a syscall, so a caller's per-file catch reports it as a file error.
-// Without `follow`, a symbolic link at the last component (a dangling one
-// too) throws ELOOP; links earlier in the path are always followed. Function
-// declarations, since darkmem-reconcile.mjs and darkmem-pull.mjs import them
-// across their import cycles with this module. Without O_NOFOLLOW or O_NONBLOCK (Windows,
-// which has no FIFOs) a link is refused by lstat before the read, which
-// leaves a window between the two. fs.constants cannot be stubbed, so a test
-// passes a copy without them as `constants`.
-export function readRegular(file, { follow = false } = {}, constants = fs.constants) {
-  if (constants.O_NOFOLLOW === undefined || constants.O_NONBLOCK === undefined) {
-    if (!follow && fs.lstatSync(file, { throwIfNoEntry: false })?.isSymbolicLink()) throw Object.assign(new Error(`${file} is a symbolic link`), { code: "ELOOP", syscall: "lstat" });
-    return fs.readFileSync(file);
-  }
-  let fd;
-  try {
-    fd = fs.openSync(file, constants.O_RDONLY | constants.O_NONBLOCK | (follow ? 0 : constants.O_NOFOLLOW));
-  } catch (error) {
-    // A socket cannot be opened for reading: open(2) fails with ENXIO.
-    if (error.code === "ENXIO") throw Object.assign(new Error(`${file} is not a regular file`), { code: "EFTYPE", syscall: "open" });
-    throw error;
-  }
-  try {
-    const stat = fs.fstatSync(fd);
-    if (!stat.isFile()) throw Object.assign(new Error(`${file} is not a regular file`), { code: stat.isDirectory() ? "EISDIR" : "EFTYPE", syscall: "fstat" });
-    return fs.readFileSync(fd);
-  } finally {
-    fs.closeSync(fd);
-  }
-}
+export { readRegular };
 
+// readRegular without following a last-component link. A function
+// declaration, since darkmem-reconcile.mjs imports it across its import
+// cycle with this module.
 export function readNoFollow(file, constants = fs.constants) {
   return readRegular(file, { follow: false }, constants);
 }

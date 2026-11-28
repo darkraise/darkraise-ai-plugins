@@ -378,6 +378,16 @@ test("workstream flag needs handoff", async t => {
   assert.match(outside.stderr, /is not a handoff in /);
 });
 
+test("--handoff naming a named pipe is refused and never blocks the push", { skip: process.platform === "win32" && "no FIFOs" }, async t => {
+  const s = await setup(t);
+  markMigrated(s.mirror);
+  const pipe = namedPipe(path.join(s.workRoot, "handoff", "p1.md"));
+  const result = await s.push("--handoff", pipe);
+  assert.equal(result.code, 2, result.stdout + result.stderr);
+  assert.match(result.stderr, /is not a handoff in /);
+  assert.equal(s.stub.db.workstreams.length, 0);
+});
+
 test("a push from a linked worktree says its handoff stays local (spec A11)", async t => {
   const s = await setup(t);
   write(path.join(s.workRoot, "handoff", "stored.md"), "# Handoff\n\n## State\n- Plan: `docs/superpowers/plans/p1.md`\n");

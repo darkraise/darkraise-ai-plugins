@@ -4,7 +4,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import test from "node:test";
-import { SCRIPT, makeHome, makeRepo, read, run, scratch, write } from "./helpers.mjs";
+import { SCRIPT, makeHome, makeRepo, markMigrated, namedPipe, read, run, scratch, write } from "./helpers.mjs";
 import { startStub } from "./stub-server.mjs";
 
 test("no command, an unknown command or an unknown flag is a usage error", async () => {
@@ -50,6 +50,16 @@ test("a malformed config is exit 2 naming the file", async () => {
   const result = await run(["status"], { cwd: repo, env });
   assert.equal(result.code, 2);
   assert.match(result.stderr, /config\.json is not valid JSON/);
+});
+
+test("status names a named pipe where a ledger belongs and never blocks on it", { skip: process.platform === "win32" && "no FIFOs" }, async () => {
+  const repo = makeRepo();
+  const { env, mirror, workRoot } = makeHome({ repo });
+  markMigrated(mirror);
+  namedPipe(path.join(workRoot, "sdd", "p1", "progress.md"));
+  const result = await run(["status"], { cwd: repo, env });
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^unreadable: sdd\/p1\/progress\.md \(EFTYPE\)$/m);
 });
 
 test("status in darkmem mode names the mirror and its local changes", async () => {
