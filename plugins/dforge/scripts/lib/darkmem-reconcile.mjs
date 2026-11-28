@@ -164,7 +164,7 @@ function rootedName(cfg, checkout, name, tops) {
     [checkout, null],
     [dforgeDir("docs", cfg.repoRoot), DOCS],
     [cfg.repoRoot, null],
-    ...tops.flatMap(tree => [[dforgeDir("docs", tree), DOCS], [tree, null]]),
+    ...(tops ?? worktreeTops(cfg).tops).flatMap(tree => [[dforgeDir("docs", tree), DOCS], [tree, null]]),
   ];
   if (cfg.documents.applied === "darkmem") bases.unshift([path.join(cfg.mirror, DOC_PREFIX), DOCS]);
   for (const resolve of [file => path.resolve(file), realOr]) {
@@ -187,8 +187,9 @@ function rootedName(cfg, checkout, name, tops) {
 // that is a substring of another's cannot claim its outcome. An absolute
 // identity is mapped first and completed.md is found from the mapped name: the
 // directory the absolute path names is gone once the documents have moved. An
-// identity no root maps is never finished, whatever lies beside it.
-export function planFinished(cfg, checkout, identity, tops = worktreeTops(cfg).tops) {
+// identity no root maps is never finished, whatever lies beside it. Without
+// `tops`, the worktrees are listed only for an absolute identity.
+export function planFinished(cfg, checkout, identity, tops) {
   const name = rootedName(cfg, checkout, identity, tops);
   if (path.isAbsolute(name)) return false;
   let text;
