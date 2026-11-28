@@ -248,13 +248,18 @@ count_in() { # count_in TEXT NEEDLE — how many times NEEDLE occurs in TEXT
   echo "$n"
 }
 # --- a worktree whose path holds a newline ---
-NLWT="$TMP/wt-nl"$'\n'"x"
-git worktree add -q --detach "$NLWT" main
-(cd "$NLWT" && bash "$WAVE" enter "$REPO/docs/plan.md" 1 "$BASE" >/dev/null)
-printf 'nl\n' > "$NLWT/n.txt"
-git -C "$NLWT" add -A && git -C "$NLWT" commit -qm nl
-git -C "$NLWT" branch -f sdd/plan/task-1 HEAD
-run status docs/plan.md 1 "$BASE"
-check "worktree list: a path with a newline names its worktree whole" "$(count_in "$out" "worktree $GTMP/wt-nl"$'\n'"x")" "1"
+case "$(uname -s)" in
+  MINGW* | MSYS* | CYGWIN*) printf 'skip - worktree list: a path with a newline names its worktree whole (Windows file names cannot hold a newline)\n' ;;
+  *)
+    NLWT="$TMP/wt-nl"$'\n'"x"
+    git worktree add -q --detach "$NLWT" main
+    (cd "$NLWT" && bash "$WAVE" enter "$REPO/docs/plan.md" 1 "$BASE" >/dev/null)
+    printf 'nl\n' > "$NLWT/n.txt"
+    git -C "$NLWT" add -A && git -C "$NLWT" commit -qm nl
+    git -C "$NLWT" branch -f sdd/plan/task-1 HEAD
+    run status docs/plan.md 1 "$BASE"
+    check "worktree list: a path with a newline names its worktree whole" "$(count_in "$out" "worktree $GTMP/wt-nl"$'\n'"x")" "1"
+    ;;
+esac
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
