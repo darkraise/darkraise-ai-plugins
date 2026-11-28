@@ -572,20 +572,23 @@ test("migrateHome keeps a config.json another session writes before it holds the
   write(path.join(dforge, "other.txt"), "other\n");
   write(path.join(forge, "config.json"), JSON.stringify({ handoffTokens: 325000 }));
   const exists = fs.existsSync;
+  const lock = path.join(dforge, ".lock", ".sync.lock");
   let wrote = false;
+  // The other session writes as the home lock is first looked at, before
+  // migrateHome holds it.
   t.mock.method(fs, "existsSync", file => {
-    if (String(file) !== config || exists(path.join(dforge, ".lock", ".sync.lock"))) return exists(file);
-    if (!wrote) {
+    if (!wrote && String(file) === lock) {
       fs.writeFileSync(config, JSON.stringify({ layout: "auto" }));
       wrote = true;
     }
-    return false;
+    return exists(file);
   });
   const { lines, refused } = migrateHome({ HOME: home });
   assert.equal(refused, 0, lines.join("\n"));
+  assert.equal(wrote, true, "the other session's write ran");
   const final = JSON.parse(read(config));
   assert.equal(final.handoffTokens, 325000);
-  if (wrote) assert.equal(final.layout, "auto");
+  assert.equal(final.layout, "auto");
 });
 
 test("migrateHome merges a directory both homes hold file by file", () => {
