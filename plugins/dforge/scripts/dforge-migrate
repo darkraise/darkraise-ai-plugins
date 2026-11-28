@@ -429,22 +429,19 @@ older_spellings() {
   esac
 }
 
-# rewrite_moved FILE OLD NEW — FILE, a handoff to be renamed NEW, written to a
-# temporary file beside it made to name itself: each OLD (paths, one per line)
-# in its text becomes NEW, and a first prompt without a claim step gets the
-# one next-step writes now. A draft, adhoc or kept handoff's stored block is
-# replayed as it stands, so its prompt would otherwise send the next session
-# to OLD with nothing to claim. The temporary file's name is left in
-# $rewritten.
-rewrite_moved() {
-  local file=$1 old=$2 new=$3 key clause="" tmp
-  rewritten=""
+# rewrite_text FILE OLD NEW — FILE, a handoff to be renamed NEW, on stdout
+# made to name itself: each OLD (paths, one per line) in its text becomes NEW,
+# and a first prompt without a claim step gets the one next-step writes now.
+# A draft, adhoc or kept handoff's stored block is replayed as it stands, so
+# its prompt would otherwise send the next session to OLD with nothing to
+# claim.
+rewrite_text() {
+  local file=$1 old=$2 new=$3 key clause=""
   key=${new##*/}; key=${key%.md}
   case " $(marker_of "$file") " in
     *" host=codex "*) case $key in adhoc-*) clause="When you hand off, pass \`--key $key\` to next-step. " ;; esac ;;
     *) clause="Before anything else, claim it with dforge's \`scripts/handoff claim\` on that file. " ;;
   esac
-  tmp=$(temp_beside "$file") || return 1
   OLD=$old NEW=$new CLAUSE=$clause awk '
     BEGIN { n = split(ENVIRON["OLD"], olds, "\n") }
     {
@@ -459,7 +456,16 @@ rewrite_moved() {
       i = index($0, "enter it first. ")
       if (i > 0) $0 = substr($0, 1, i + 15) ENVIRON["CLAUSE"] substr($0, i + 16)
     }
-    { print }' "$file" > "$tmp" || { rm -f -- "$tmp"; return 1; }
+    { print }' "$file"
+}
+
+# rewrite_moved FILE OLD NEW — rewrite_text into a temporary file beside FILE,
+# whose name is left in $rewritten.
+rewrite_moved() {
+  local tmp
+  rewritten=""
+  tmp=$(temp_beside "$1") || return 1
+  rewrite_text "$@" > "$tmp" || { rm -f -- "$tmp"; return 1; }
   rewritten=$tmp
 }
 
@@ -471,12 +477,9 @@ rewrite_moved() {
 # FILE would write: a run killed between the link and the removal below
 # leaves both names, and the rerun only has to remove FILE.
 killed_after_link() {
-  local same=1
   [ -f "$2" ] && [ ! -L "$2" ] || return 1
-  rewrite_moved "$1" "$(older_spellings "$1")" "$2" || return 1
-  cmp -s -- "$rewritten" "$2" && same=0
-  rm -f -- "$rewritten"
-  return "$same"
+  # Compared as a stream, so a dry run writes nothing beside FILE.
+  rewrite_text "$1" "$(older_spellings "$1")" "$2" | cmp -s -- - "$2"
 }
 
 # copy_new SRC DST — SRC's bytes and mode to DST, for a file system without
@@ -520,8 +523,8 @@ migrate_latest() {
   # nothing is renamed through a link out of its checkout or mirror.
   if ! writable "${f%/*/*/*}" "$f"; then
     refuse "$f is reached through a symbolic link; rename it to $key.md by hand"
-  elif [ "$dry" -eq 0 ] && [ "$as" = "$f" ] && killed_after_link "$f" "$target"; then
-    if rm -f -- "$f"; then done_move "$as" "$target"
+  elif [ "$as" = "$f" ] && killed_after_link "$f" "$target"; then
+    if [ "$dry" -eq 1 ] || rm -f -- "$f"; then done_move "$as" "$target"
     else refuse "could not remove $f once it was linked to $target; remove it by hand"; fi
   elif [ -e "$target" ] || [ -L "$target" ] \
     || { [ "$as" != "$f" ] && { [ -e "${f%/*}/$key.md" ] || [ -L "${f%/*}/$key.md" ]; }; }; then
