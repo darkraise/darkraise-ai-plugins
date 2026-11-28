@@ -312,8 +312,10 @@ _ar_resume_locked() {
       found=""
       top=$(git rev-parse --show-toplevel)
       [ -z "$plan" ] || found=$(plan_ledger_any "$top" "$plan")
-      # Until Setup writes the ledger, the worktree is the checkout holding
-      # the plan; ar_guard has already refused the primary.
+      # Until Setup writes the ledger the worktree's path is not recorded, so
+      # any checkout holding the plan is taken for it: a heuristic, since
+      # another worktree with the plan resumes too. ar_guard has already
+      # refused the primary and the base.
       if [ -n "$found" ]; then [ -d "${found#*$'\t'}" ]
       else [ -n "$plan" ] && [ -f "$(dagents_resolve "$plan" "$top")" ]
       fi || { echo "auto-run: the plan's worktree is gone (plan ${plan:-none})" >&2; return 4; }
