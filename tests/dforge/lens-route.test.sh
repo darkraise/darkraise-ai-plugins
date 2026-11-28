@@ -233,6 +233,12 @@ out=$(bash "$TMP/plug/scripts/lens-route" standard-plan.md --final "$BASE" "$HEA
 check "final: a new lang-* lens joins code-quality, sorted first" "$(parts <<<"$out" | cut -d' ' -f1-2)" "lang-awk.md lang-bash.md"
 check "final: and routes no line of its own" "$(grep -c '^lens[^ ]* lang-awk' <<<"$out")" "0"
 rm "$TMP/plug/criteria/lenses/lang-awk.md"
+# Three lenses that are not parts make six to route, past the fallback cap of
+# 5, so a two-digit cap is seen.
+for id in extra-a extra-b extra-c; do printf '# %s\n\nApplies: always\n' "$id" > "$TMP/plug/criteria/lenses/$id.md"; done
+out=$(DFORGE_LENS_CAP=12 bash "$TMP/plug/scripts/lens-route" full-plan.md --final "$BASE" "$HEAD2")
+check "cap 12: every applying lens runs" "$(grep -c '^lens ' <<<"$out") $(grep -c 'reason=cap' <<<"$out")" "6 0"
+rm "$TMP/plug/criteria/lenses"/extra-[abc].md
 { cat light-plan.md; printf '**Lenses:** lang-bash\n'; } > light-lenses.md
 out=$(bash "$ROUTE" light-lenses.md --task 1); status=$?
 check "light: --task names its lenses as before" "$status:$(sed -E 's/ criteria=[^ ]*//' <<<"$out")" "0:lens lang-bash"
