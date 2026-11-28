@@ -108,7 +108,8 @@ test('the tree scan reads plugin scripts and tests and the repository scripts on
 
 const SHEBANG = '#!/usr/bin/env bash';
 const BASH4 = ['mapfile -t a <<<"$x"', 'readarray -t a < list', 'echo "$BASHPID"', 'echo "${v,,}"', 'echo "${v^^}"', 'declare -A seen',
-  'local -A seen', 'typeset -A seen', 'declare -gA seen', 'echo "${BASHPID}"', 'echo "${v,}"', 'echo "${v^}"', 'echo "${a[0],,}"'];
+  'local -A seen', 'typeset -A seen', 'declare -gA seen', 'declare -g -A seen', 'declare -r -A seen', 'echo "${BASHPID}"', 'echo "${v,}"',
+  'echo "${v^}"', 'echo "${a[0],,}"'];
 
 test('bash 4 construct in a shipped script', () => {
   for (const construct of BASH4) {
