@@ -607,13 +607,19 @@ function subshellEdges(words: readonly string[], depth: number): { words: string
 const REDIRECTION_BARE = /^(?:\d*|&)(?:>>?\|?|<)$/
 const REDIRECTION_ATTACHED = /^(?:\d*|&)(?:>>?\|?|<)(?!\()\S+$/
 
+// Whether a word holds more closing parentheses than opening ones.
+const closesMore = (word: string) => (word.match(/\)/g)?.length ?? 0) > (word.match(/\(/g)?.length ?? 0)
+
 // Where a simple command's trailing redirections begin: a subshell closes
-// before them, as in `(cd sub && make) > log`.
+// before them, as in `(cd sub && make) > log`. A target that closes a
+// parenthesis, as in `(cd sub && make > log)`, is inside the subshell and
+// ends the scan.
 function redirectionsStart(words: readonly string[]): number {
   let end = words.length
   for (;;) {
-    if (end >= 1 && REDIRECTION_ATTACHED.test(words[end - 1] ?? '')) end -= 1
-    else if (end >= 2 && REDIRECTION_BARE.test(words[end - 2] ?? '')) end -= 2
+    const last = words[end - 1] ?? ''
+    if (end >= 1 && REDIRECTION_ATTACHED.test(last) && !closesMore(last)) end -= 1
+    else if (end >= 2 && REDIRECTION_BARE.test(words[end - 2] ?? '') && !closesMore(last)) end -= 2
     else return end
   }
 }

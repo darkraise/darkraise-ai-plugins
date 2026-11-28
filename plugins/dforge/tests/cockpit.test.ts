@@ -1120,10 +1120,17 @@ describe('attribution guard', () => {
     const files: NonNullable<World['files']> = { [`${WEB}/msg.txt`]: { text: `fix\n\n${A6_AI}\n` }, [`${WEB}/sub/msg.txt`]: { text: 'fix\n' } }
     world(on, { ...SIGNED_IN, files })
     signedIn(on, files)
-    const after = ['(cd sub && make) && git commit -F msg.txt', '( cd sub ) ; git commit -F msg.txt']
+    const after = [
+      '(cd sub && make) && git commit -F msg.txt',
+      '( cd sub ) ; git commit -F msg.txt',
+      '(cd sub && make > log) && git commit -F msg.txt',
+      '(cd sub && make >/dev/null) && git commit -F msg.txt',
+      '(cd sub && make 2>&1) && git commit -F msg.txt',
+      '(cd sub && make > log) 2>&1 && git commit -F msg.txt',
+    ]
     const denials: (string | undefined)[] = []
     for (const command of after) denials.push((await $.tool.call({ tool: 'Bash', command })).deny)
-    expect(denials).toEqual([A6_DENY, A6_DENY])
+    expect(denials).toEqual(Array(6).fill(A6_DENY))
     files[`${WEB}/msg.txt`] = { text: 'fix\n' }
     files[`${WEB}/sub/msg.txt`] = { text: `fix\n\n${A6_AI}\n` }
     expect((await $.tool.call({ tool: 'Bash', command: '(cd sub && git commit -F msg.txt)' })).deny).toBe(A6_DENY)
