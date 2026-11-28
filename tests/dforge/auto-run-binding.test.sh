@@ -16,7 +16,7 @@ has() { # has <name> <text> <needle>
 }
 
 TMP="$(mktemp -d)"
-if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
+if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m -l "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"

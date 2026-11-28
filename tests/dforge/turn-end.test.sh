@@ -10,7 +10,7 @@ END="$HERE/../../plugins/dforge/scripts/turn-end.sh"
 HOOKS="$HERE/../../plugins/dforge/hooks/hooks.json"
 # The plugin root as turn-end.sh shows it in a hold reason.
 SHOWN="$(cd "$HERE/../../plugins/dforge" && pwd)"
-if command -v cygpath >/dev/null 2>&1; then SHOWN=$(cygpath -m "$SHOWN"); fi
+if command -v cygpath >/dev/null 2>&1; then SHOWN=$(cygpath -m -l "$SHOWN"); fi
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
