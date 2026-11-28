@@ -32,7 +32,9 @@ _darkmem_watchdog() {
   wait "$pid" 2>/dev/null
   status=$?
   # A member of CMD's group that outlived it keeps the watchdog, so its
-  # SIGTERM and SIGKILL still reach the survivor at the bound.
+  # SIGTERM and SIGKILL still reach the survivor at the bound. The caller then
+  # waits the full bound plus the grace, where GNU timeout returns when CMD
+  # exits and leaves the survivor running; no darkmem-sync run leaves one.
   if ! kill -0 -- "-$pid" 2>/dev/null; then
     kill -TERM -- "-$watchdog" 2>/dev/null
   fi
